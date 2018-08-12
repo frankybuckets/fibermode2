@@ -351,7 +351,7 @@ class Fiber:
 
         elif case == 'empty':
             L = 10
-            rcore = 0.5
+            rcore = 0.25
             rclad = 1
             k0 = 100
             nclad = 1.0
