@@ -340,6 +340,21 @@ class Fiber:
 
             L = 0.1   # to be varied for each simulation
 
+        elif case == 'Thulium':
+
+            # ** (25/400?) Thulium-Doped (LMA Double Clad Fiber?) **
+            # From Spec sheet provided by Grosek:
+
+            rcore = 1.25e-5         # assumed same as Nufern
+            rclad = 2e-4            # assumed same as Nufern
+            wavelen = 2.110e-6
+            ncore = 1.439994
+            k0 = 2 * pi / wavelen
+            NA = 0.06               # assumed same as Nufern
+            nclad = sqrt(ncore*ncore - NA*NA)
+
+            L = 0.1   # to be varied for each simulation ?
+
         elif case == 'book':
             L = 0.1
             rcore = 3e-6
