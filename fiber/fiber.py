@@ -218,37 +218,39 @@ class Fiber:
         V, f1, f2, g1, g2, f, g = self.VJKfun(l)
 
         fig, axes = plt.subplots(nrows=2, ncols=2)
-        plt.grid('on')
+        plt.grid(True)
         plt.rc('text', usetex=True)
-        fig.suptitle('Mode index $l=$%1d:' % l +
-                     '$\beta$ found by roots of $f$ or $g$',
+        fig.suptitle(r'Mode index $l=$%1d:' % l +
+                     r'$\beta$ found by roots of $f$ or $g$',
                      fontsize=14)
         xx = np.arange(0, V, V/500.0)
 
         axes[0, 0].plot(xx, [f(x) for x in xx])
-        axes[0, 0].grid('on')
+        axes[0, 0].grid(True)
         axes[0, 0].plot(xx, [0]*len(xx), 'b--')
         axes[0, 0].set_ylim(-V, V)
         axes[0, 0].set_title('$f = f_1 - f_2$')
 
         axes[1, 0].plot(xx, [f1(x) for x in xx])
-        axes[1, 0].grid('on')
+        axes[1, 0].grid(True)
         axes[1, 0].plot(xx, [f2(x) for x in xx])
         axes[1, 0].set_ylim(-2*V, 2*V)
         axes[1, 0].legend(['$f_1$', '$f_2$'])
 
         axes[0, 1].plot(xx, [g(x) for x in xx])
-        axes[0, 1].grid('on')
+        axes[0, 1].grid(True)
         axes[0, 1].plot(xx, [0]*len(xx), 'b--')
         axes[0, 1].set_ylim(-V, V)
         axes[0, 1].set_title('$g = g_1 - g_2$')
 
         axes[1, 1].plot(xx, [g1(x) for x in xx])
-        axes[1, 1].grid('on')
+        axes[1, 1].grid(True)
         axes[1, 1].plot(xx, [g2(x) for x in xx])
         axes[1, 1].set_ylim(-V, V)
         axes[1, 1].legend(['$g_1$', '$g_2$'])
 
+        plt.ion()
+        plt.show()
         plt.show(block=False)
 
     def VJKfun(self, l):
