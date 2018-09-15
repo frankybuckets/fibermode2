@@ -327,7 +327,7 @@ class Fiber:
             ncore = 1
             nclad = sqrt(ncore*ncore - NA*NA)
 
-        elif case == 'Nufern':
+        elif case == 'Nufern_Yb':
 
             # ** 25/400 Ytterbium-Doped LMA Double Clad Fiber **
             # From Spec sheet provided by Grosek:
