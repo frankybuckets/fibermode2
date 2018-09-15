@@ -347,12 +347,12 @@ class Fiber:
             # ** (25/400) Thulium-Doped LMA Double Clad Fiber **
             # From Spec sheet provided by Grosek:
 
-            rcore = 1.25e-5 
-            rclad = 2e-4   
+            rcore = 1.25e-5
+            rclad = 2e-4
             wavelen = 2.110e-6
             ncore = 1.439994
             k0 = 2 * pi / wavelen
-            NA = 0.1  
+            NA = 0.1
             nclad = sqrt(ncore*ncore - NA*NA)
 
             L = 0.1   # to be varied for each simulation ?
