@@ -342,7 +342,7 @@ class Fiber:
 
             L = 0.1   # to be varied for each simulation
 
-        elif case == 'Thulium':
+        elif case == 'Nufern_Tm':
 
             # ** (25/400) Thulium-Doped LMA Double Clad Fiber **
             # From Spec sheet provided by Grosek:
