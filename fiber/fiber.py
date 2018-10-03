@@ -355,7 +355,7 @@ class Fiber:
             NA = 0.1
             nclad = sqrt(ncore*ncore - NA*NA)
 
-            L = 0.1   # to be varied for each simulation ?
+            L = 0.1   # to be varied for each simulation
 
         elif case == 'book':
             L = 0.1
