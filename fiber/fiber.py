@@ -109,19 +109,22 @@ class Fiber:
 
     def propagation_constants(self, l, maxnroots=50):
         """
-        Given mode index "l", and fiber parameters "fprms", attempt to
-        find all propagation constants by bisection or other nonlinear
-        root finders. (Circulalry symmetric modes are obtained with l=0.
-        Modes with higher l have angular variations.)
+        Given mode index "l", attempt to find all propagation constants by
+        bisection or other nonlinear root finders. (Circularly
+        symmetric modes are obtained with l=0.  Modes with higher l
+        have angular variations.)
         """
 
-        # If NA is 0, then this is an empty fiber (with V=0) whose
-        # propagation constants are given by
-        #         beta = sqrt( ks^2 - (jz/rclad)^2 )
-        # where jz are roots of l-th Bessel function. Below we reverse
-        # engineer X so that this beta is produced by later formulae.
+        # Case of empty fibers:
 
         if abs(self.numerical_aperture()) < 1.e-15:
+
+            # If NA is 0, then this is an empty fiber (with V=0) whose
+            # propagation constants are given by
+            #         beta = sqrt( ks^2 - (jz/rclad)^2 )
+            # where jz are roots of l-th Bessel function. Below we reverse
+            # engineer X so that this beta is produced by later formulae.
+
             jz = scf.jn_zeros(l, maxnroots)
             jz = jz[np.where(jz < self.ks*self.rclad)[0]]
             if len(jz) == 0:
@@ -321,9 +324,9 @@ class Fiber:
 
             L = 10
             rcore = 1
-            rclad = 10
-            k0 = 20
-            NA = 0.5
+            rclad = 5
+            k0 = 100
+            NA = 0.05
             ncore = 1
             nclad = sqrt(ncore*ncore - NA*NA)
 
