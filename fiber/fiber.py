@@ -4,13 +4,14 @@ fibers into a class. Methods are provided to calculate propagation
 constants and fiber modes.
 """
 
-import scipy.special as scf
 from math import pi, sqrt, atan2
+
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
+from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 from scipy.optimize import fsolve, bisect
+import scipy.special as scf
 
 
 class Fiber:
