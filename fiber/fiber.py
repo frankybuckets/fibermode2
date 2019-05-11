@@ -361,6 +361,18 @@ class Fiber:
 
             L = 0.1   # to be varied for each simulation
 
+        elif case == 'schermer_col'e:
+            
+            rcore = 1.25e-5
+            rclad = 16 * rcore
+            wavelen = 1.064e-6
+            nclad = 1.52
+            NA = 0.1
+            ncore = sqrt(NA*NA + nclad*nclad)
+            k0 = 2 * pi / wavelen
+
+            L = 0.1   # to be varied for each fiberamp simulation
+
         elif case == 'book':
             L = 0.1
             rcore = 3e-6
