@@ -361,7 +361,7 @@ class Fiber:
 
             L = 0.1   # to be varied for each simulation
 
-        elif case == 'schermer_col'e:
+        elif case == 'schermer_cole':
             
             rcore = 1.25e-5
             rclad = 16 * rcore
