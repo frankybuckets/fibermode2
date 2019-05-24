@@ -1,17 +1,19 @@
 """
-This file collects the often used data members of step-index optical
-fibers into a class. Methods are provided to calculate propagation
-constants and fiber modes.
+This class models step-index optical fibers.  Methods are provided
+to calculate propagation constants, fiber's transverse guided modes,
+and leaky modes/resonances using (semi)analytic calculations.
 """
 
 from math import pi, sqrt, atan2
-
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 from scipy.optimize import fsolve, bisect
 import scipy.special as scf
+from scipy.special import hankel1, jv, kv, jn_zeros
+from cxroots import Rectangle
+import sympy as sm
 
 
 class Fiber:
@@ -63,6 +65,23 @@ class Fiber:
 
     # PROPAGATION CHARACTERISTICS
 
+    def XtoBeta(self, X):
+        """
+        Convert nondimensionalized roots X to actual propagation
+        constants Beta of guided modes.
+        """
+        kappas = [x/self.rcore for x in X]
+        betas = [sqrt(self.ncore*self.ncore*self.ks*self.ks - kappa*kappa)
+                 for kappa in kappas]
+        return betas
+
+    def ZtoBeta(self, Z):
+        """
+        Convert nondimensional Z in the complex plan to complex propagation
+        constants Beta of leaky modes.
+        """
+        return np.sqrt((self.ks*self.ncore)**2-(Z/self.rcore)**2)
+
     def visualize_mode(self, l, m):
         """
         Plot the LP(l,m) mode. Also return the mode as a function of
@@ -79,16 +98,16 @@ class Fiber:
         k0 = self.ks
         beta = sqrt(self.ncore*self.ncore*k0*k0 - kappa*kappa)
         gamma = sqrt(beta*beta - self.nclad*self.nclad*k0*k0)
-        Jkrcr = scf.jv(l, kappa*self.rcore)
-        Kgrcr = scf.kv(l, gamma*self.rcore)
+        Jkrcr = jv(l, kappa*self.rcore)
+        Kgrcr = kv(l, gamma*self.rcore)
 
         def mode(x, y):
             r = sqrt(x*x + y*y)
             theta = atan2(y, x)
             if r < self.rcore:
-                u = Kgrcr * scf.jv(l, kappa*r)
+                u = Kgrcr * jv(l, kappa*r)
             else:
-                u = Jkrcr * scf.kv(l, gamma*r)
+                u = Jkrcr * kv(l, gamma*r)
 
             u = u*np.cos(l*theta)
             return u
@@ -126,7 +145,7 @@ class Fiber:
             # where jz are roots of l-th Bessel function. Below we reverse
             # engineer X so that this beta is produced by later formulae.
 
-            jz = scf.jn_zeros(l, maxnroots)
+            jz = jn_zeros(l, maxnroots)
             jz = jz[np.where(jz < self.ks*self.rclad)[0]]
             if len(jz) == 0:
                 print('There are no propagating modes for wavenumber ks!')
@@ -144,7 +163,7 @@ class Fiber:
 
         # Collect Bessel roots appended with 0 and V:
 
-        jz = scf.jn_zeros(l, maxnroots)
+        jz = jn_zeros(l, maxnroots)
         jz = jz[np.where(jz < V)[0]]
         jz = np.insert(jz, 0, 0)
         jz = np.append(jz, V)
@@ -264,8 +283,8 @@ class Fiber:
         """
 
         V = self.fiberV()
-        J = scf.jv
-        K = scf.kv
+        J = jv
+        K = kv
 
         def jl(X):
             Jlx = J(l, X)
@@ -307,7 +326,109 @@ class Fiber:
 
         return V, f1, f2, g1, g2, f, g
 
-    # PREPROGRAMMED FIBER CASES:
+    def VJHfuns(self, l):
+        """
+        For the "l"-th mode index, return a nonlinear function of a
+        nondimensional variable Z whose nondimensionalized roots give
+        leaky modes.  The function is returned as a string (with letter Z)
+        which can be evaluated for specific Z values later.
+        """
+        z, nu = sm.symbols('z nu')
+        V = self.fiberV()
+        x = sm.sqrt(V*V + z*z)
+        g = z*sm.besselj(l, x)*sm.hankel1(l+1, z) - \
+            x*sm.besselj(l+1, x)*sm.hankel1(l, z)
+        dg = g.diff(z).expand()
+
+        dgstr = str(dg).replace('z', 'Z').     \
+            replace('besselj', 'jv').          \
+            replace('nu', 'l').                \
+            replace('sqrt', 'np.sqrt')
+        gstr = str(g).replace('z', 'Z').       \
+            replace('besselj', 'jv').          \
+            replace('nu', 'l').                \
+            replace('sqrt', 'np.sqrt')
+        return gstr, dgstr
+
+    def leaky_propagation_constants(self, l, xran=None, yran=None):
+        """
+        Given a mode index "l" indicating angular variation (the
+        radially symmetric case being l=0), search the following
+        rectangular region (given by tuples xran, yran)
+              [xran[0], xran[1]]  x  [yran[0], yran[1]]
+        of the complex plane for roots that yield leaky outgoing modes.
+        (Be warned that the root finder is not as robust as the real
+        line root searching algorithm for guided modes.)
+        """
+
+        if xran is None:
+            xran = (0.01, 3*self.fiberV())
+        if yran is None:
+            yran = (-2, 0)
+        print('Searching region (%g, %g) x (%g, %g) in complex plane'
+              % (xran[0], xran[1], yran[0], yran[1]))
+        gstr, dgstr = self.VJHfuns(l)
+        try:
+            rect = Rectangle(xran, yran)
+            r = rect.roots(lambda Z: eval(gstr),
+                           lambda Z: eval(dgstr),
+                           rootErrTol=1.e-13, newtonStepTol=1.e-15)
+        except RuntimeError as err:
+            print('Root search failed:\n', err.__str__())
+            dx = xran[1]-xran[0]
+            dy = yran[1]-yran[0]
+            xran2 = (xran[0] + 0.01 * dx, xran[1] - 0.01 * dx)
+            yran2 = (yran[0] + 0.01 * dy, yran[1] - 0.01 * dy)
+            print('Retrying in adjusted search region (%g, %g) x (%g, %g)'
+                  % (xran2[0], xran2[1], yran2[0], yran2[1]))
+            r = self.leaky_propagation_constants(l, xran=xran2, yran=yran2)
+        return r.roots
+
+    def visualize_leaky_mode(self, Z, l, corelim=2):
+        """
+        Given a complex propagation constant Z obtained from
+        self.leaky_propagation_constants(l),  compute the corresponding
+        leaky mode. Return its values F at a meshgrid of points (X, Y) and
+        plot it. If "corelim" is given, this grid discretizes the xy region
+        [-lim, lim] x [-lim, lim] where lim is corelim x core radius.
+        """
+
+        V = self.fiberV()
+        X = np.sqrt(Z*Z+V*V)
+        a = self.rcore
+        alpha0 = Z/a
+        alpha1 = X/a
+        B = jv(l, X)
+        A = hankel1(l, Z)
+
+        def modefun(x, y):
+            r = np.sqrt(x*x + y*y)
+            theta = atan2(y, x)
+            if r < a:
+                u = A * jv(l, alpha1*r)
+            else:
+                u = B * hankel1(l, alpha0*r)
+            u = u*np.cos(l*theta)
+            return u
+
+        lim = a * corelim
+        X = np.arange(-lim, lim, 2*lim/300)
+        Y = np.arange(-lim, lim, 2*lim/300)
+        X, Y = np.meshgrid(X, Y)
+        vmode = np.vectorize(modefun)
+        F = vmode(X, Y)
+
+        fig = plt.figure()
+        ax = Axes3D(fig)
+        ax.contour3D(X, Y, F.real, 30)
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_title('Real part of the mode)')
+        plt.show(block=False)
+
+        return X, Y, F, modefun, ax
+
+    # PREPROGRAMMED FIBER CASES & OTHER UTILITIES:
 
     def set(self, case):
 
@@ -362,7 +483,7 @@ class Fiber:
             L = 0.1   # to be varied for each simulation
 
         elif case == 'schermer_cole':
-            
+
             rcore = 1.25e-5
             rclad = 16 * rcore
             wavelen = 1.064e-6
