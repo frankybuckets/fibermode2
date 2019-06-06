@@ -482,6 +482,37 @@ class Fiber:
 
             L = 0.1   # to be varied for each simulation
 
+        elif case == 'LLMA_Yb':
+
+            # ** Variation of Nufern Ytterbium-Doped LMA Double Clad Fiber **
+            # with large rcore for faster full fiber simulation 
+
+            rcore = 3.7e-5
+            rclad = 2e-4
+            wavelen = 1.064e-6
+            ncore = 1.450971
+            k0 = 2 * pi / wavelen
+            NA = 0.06
+            nclad = sqrt(ncore*ncore - NA*NA)
+
+            L = 0.1   # to be varied for each simulation
+
+        elif case == 'LLMA_Tm':
+
+            # ** Variation of Nufern Thulium-Doped LMA Double Clad Fiber **
+            # with large rcore for faster full fiber simulation 
+
+            rcore = 3.7e-5
+            rclad = 2e-4
+            wavelen = 2.110e-6
+            ncore = 1.439994
+            k0 = 2 * pi / wavelen
+            NA = 0.1
+            nclad = sqrt(ncore*ncore - NA*NA)
+
+            L = 0.1   # to be varied for each simulation
+
+
         elif case == 'schermer_cole':
 
             rcore = 1.25e-5
