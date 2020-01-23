@@ -525,6 +525,62 @@ class Fiber:
 
             L = 0.1   # to be varied for each fiberamp simulation
 
+        elif case == 'corning_smf_28_1':
+
+            # Single mode fiber from Schermer and Cole paper,
+            # as well as BYU specs document from April 2002.
+            L = 0.1
+            rcore = 4.1e-6
+            rclad = 125e-6
+            wavelen = 1.320e-6
+            k0 = 2 * pi / wavelen
+            NA = 0.117
+            nclad = 1.447
+            ncore = sqrt(nclad*nclad + NA*NA)
+
+        elif case == 'corning_smf_28_2':
+
+            # Single mode fiber from Schermer and Cole paper,
+            # as well as BYU specs document from April 2002.
+            L = 0.1
+            rcore = 4.1e-6
+            rclad = 125e-6
+            wavelen = 1.550e-6
+            k0 = 2 * pi / wavelen
+            NA = 0.117
+            nclad = 1.440
+            ncore = sqrt(nclad*nclad + NA*NA)
+
+        elif case == 'liekki_1':
+
+            # Multi-mode mode fiber from Schermer and Cole paper,
+            # with cladding radius obtained from nLight spec sheet
+            # on Liekki passive 25/250DC fibers (slightly different
+            # specs than the specified 25/240DC in Schermer and Cole).
+            L = 0.1
+            rcore = 1.25e-5
+            rclad = 1.25e-4
+            wavelen = 6.33e-7
+            k0 = 2 * pi / wavelen
+            NA = 0.06
+            nclad = 1.46
+            ncore = sqrt(nclad*nclad + NA*NA)
+
+        elif case == 'liekki_2':
+
+            # Multi-mode mode fiber from Schermer and Cole paper,
+            # with cladding radius obtained from nLight spec sheet
+            # on Liekki passive 25/250DC fibers (slightly different
+            # specs than the specified 25/240DC in Schermer and Cole).
+            L = 0.1
+            rcore = 1.25e-5
+            rclad = 1.25e-4
+            wavelen = 8.30e-7
+            k0 = 2 * pi / wavelen
+            NA = 0.06
+            nclad = 1.46
+            ncore = sqrt(nclad*nclad + NA*NA)
+
         elif case == 'book':
             L = 0.1
             rcore = 3e-6
