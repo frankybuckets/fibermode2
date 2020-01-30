@@ -1,7 +1,10 @@
 """
-This class models step-index optical fibers.  Methods are provided
+This class models STEP-INDEX optical fibers.  Methods are provided
 to calculate propagation constants, fiber's transverse guided modes,
-and leaky modes/resonances using (semi)analytic calculations.
+and leaky modes/resonances using (semi)ANALYTIC calculations.
+
+(Numerical mode computation routines using feast are in a different
+class FiberModeNonDim.)
 """
 
 from math import pi, sqrt, atan2
@@ -10,7 +13,6 @@ from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 from scipy.optimize import fsolve, bisect
-import scipy.special as scf
 from scipy.special import hankel1, jv, kv, jn_zeros
 from cxroots import Rectangle
 import sympy as sm
@@ -25,8 +27,8 @@ class Fiber:
                  ks=None):
         """
         A step-index fiber object F can be made using a preprogrammed case
-        name (such as 'artifical_singlemode', 'Nufern', etc) by
-           F = Fiber(case).
+        name (such as 'Nufern_Yb', 'liekki_1', 'corning_smf_28_1', etc), e.g.,
+           F = Fiber('Nufern_Yb').
         Alternately, a fiber object can be made by providing these kwargs:
            L:      total fiber length
            rcore:  core cross-section radius
@@ -485,7 +487,7 @@ class Fiber:
         elif case == 'LLMA_Yb':
 
             # ** Variation of Nufern Ytterbium-Doped LMA Double Clad Fiber **
-            # with large rcore for faster full fiber simulation 
+            # with large rcore
 
             rcore = 3.7e-5
             rclad = 2e-4
@@ -500,7 +502,7 @@ class Fiber:
         elif case == 'LLMA_Tm':
 
             # ** Variation of Nufern Thulium-Doped LMA Double Clad Fiber **
-            # with large rcore for faster full fiber simulation 
+            # with large rcore
 
             rcore = 3.7e-5
             rclad = 2e-4
@@ -512,7 +514,6 @@ class Fiber:
 
             L = 0.1   # to be varied for each simulation
 
-
         elif case == 'schermer_cole':
 
             rcore = 1.25e-5
@@ -523,7 +524,63 @@ class Fiber:
             ncore = sqrt(NA*NA + nclad*nclad)
             k0 = 2 * pi / wavelen
 
-            L = 0.1   # to be varied for each fiberamp simulation
+            L = 0.1
+
+        elif case == 'corning_smf_28_1':
+
+            # Single mode fiber from Schermer and Cole paper,
+            # as well as BYU specs document from April 2002.
+            L = 0.1
+            rcore = 4.1e-6
+            rclad = 125e-6
+            wavelen = 1.320e-6
+            k0 = 2 * pi / wavelen
+            NA = 0.117
+            nclad = 1.447
+            ncore = sqrt(nclad*nclad + NA*NA)
+
+        elif case == 'corning_smf_28_2':
+
+            # Single mode fiber from Schermer and Cole paper,
+            # as well as BYU specs document from April 2002.
+            L = 0.1
+            rcore = 4.1e-6
+            rclad = 125e-6
+            wavelen = 1.550e-6
+            k0 = 2 * pi / wavelen
+            NA = 0.117
+            nclad = 1.440
+            ncore = sqrt(nclad*nclad + NA*NA)
+
+        elif case == 'liekki_1':
+
+            # Multi-mode mode fiber from Schermer and Cole paper,
+            # with cladding radius obtained from nLight spec sheet
+            # on Liekki passive 25/250DC fibers (slightly different
+            # specs than the specified 25/240DC in Schermer and Cole).
+            L = 0.1
+            rcore = 1.25e-5
+            rclad = 1.25e-4
+            wavelen = 6.33e-7
+            k0 = 2 * pi / wavelen
+            NA = 0.06
+            nclad = 1.46
+            ncore = sqrt(nclad*nclad + NA*NA)
+
+        elif case == 'liekki_2':
+
+            # Multi-mode mode fiber from Schermer and Cole paper,
+            # with cladding radius obtained from nLight spec sheet
+            # on Liekki passive 25/250DC fibers (slightly different
+            # specs than the specified 25/240DC in Schermer and Cole).
+            L = 0.1
+            rcore = 1.25e-5
+            rclad = 1.25e-4
+            wavelen = 8.30e-7
+            k0 = 2 * pi / wavelen
+            NA = 0.06
+            nclad = 1.46
+            ncore = sqrt(nclad*nclad + NA*NA)
 
         elif case == 'book':
             L = 0.1
