@@ -320,9 +320,9 @@ class FiberMode:
                 name2ind['LP' + str(l) + str(m+1)+'_b'] = i2beta_b
                 exact[i2beta_a] = LPl[m]
                 exact[i2beta_b] = LPl[m]
-                activemultiple = np.delete(activemultiple,
-                                           [i2beta_a, i2beta_b])
-
+                activemultiple = np.delete(activemultiple, ind)
+                if len(activemultiple) == 0:
+                    return name2ind, exact
         return name2ind, exact
 
     def leakymode_auto(self, p, radiusZ2, centerZ2,
