@@ -8,6 +8,7 @@ import numpy as np
 from netgen.geom2d import SplineGeometry
 from ngsolve import dx, BilinearForm, H1, CoefficientFunction, grad, IfPos
 from fiberamp.fiber import Fiber
+import fiberamp
 from pyeigfeast.spectralproj.ngs import SpectralProjNG, NGvecs
 from pyeigfeast.spectralproj import splitzoom
 import sympy as sm
@@ -45,6 +46,8 @@ class FiberMode:
           * degree "p" finite element space is set on the mesh.
         """
 
+        self.outfolder = os.path.abspath(fiberamp.__path__[0]+'/outputs/')
+
         if fromfile is None:
 
             if fibername is None:
@@ -76,7 +79,7 @@ class FiberMode:
 
         else:
 
-            fbmfilename = os.path.abspath('../../outputs/'+fromfile+'_fbm.npz')
+            fbmfilename = self.outfolder+'/'+fromfile+'_fbm.npz'
             print('Loading FiberMode object from file ', fbmfilename)
             f = np.load(fbmfilename)
             self.fibername = str(f['fibername'])
@@ -89,8 +92,7 @@ class FiberMode:
             self.fiber = Fiber(self.fibername)
             self.setstepindexgeom()  # sets self.geo
 
-            meshfname = os.path.abspath(
-                '../../outputs/'+fromfile+'_msh.vol.gz')
+            meshfname = self.outfolder+'/'+fromfile+'_msh.vol.gz'
             print('Loading mesh from file ', meshfname)
             self.mesh = ng.Mesh(meshfname)
             self.mesh.ngmesh.SetGeometry(self.geo)
@@ -646,9 +648,9 @@ class FiberMode:
     def savefbm(self, fileprefix):
         """ Save this object so it can be loaded later """
 
-        if os.path.isdir('../../outputs') is not True:
-            os.mkdir('../../outputs')
-        fbmfilename = os.path.abspath('../../outputs/'+fileprefix+'_fbm.npz')
+        if os.path.isdir(self.outfolder) is not True:
+            os.mkdir(self.outfolder)
+        fbmfilename = self.outfolder+'/'+fileprefix+'_fbm.npz'
         print('Writing FiberMode object into:\n', fbmfilename)
         np.savez(fbmfilename,
                  fibername=self.fibername,
@@ -657,7 +659,7 @@ class FiberMode:
 
     def savemesh(self, fileprefix):
 
-        meshfname = os.path.abspath('../../outputs/'+fileprefix+'_msh.vol.gz')
+        meshfname = self.outfolder+'/'+fileprefix+'_msh.vol.gz'
         print('Writing mesh into:\n', meshfname)
         self.mesh.ngmesh.Save(meshfname)
 
@@ -670,9 +672,9 @@ class FiberMode:
             self.savemesh(fileprefix)
 
         y = Y.tonumpy()
-        if os.path.isdir('../../outputs') is not True:
-            os.mkdir('../../outputs')
-        fullname = os.path.abspath('../../outputs/'+fileprefix+'_mde.npz')
+        if os.path.isdir(self.outfolder) is not True:
+            os.mkdir(self.outfolder)
+        fullname = self.outfolder+'/'+fileprefix+'_mde.npz'
         print('Writing modes into:\n', fullname)
         np.savez(fullname, fibername=self.fibername,
                  hcore=self.hcore, hclad=self.hclad, hpml=self.hpml,
@@ -692,7 +694,7 @@ class FiberMode:
     def loadmodes(self, modefile):
         """Load modes from "outputs/modefile" (filename with extension)"""
 
-        fname = os.path.abspath('../../outputs/'+modefile)
+        fname = self.outfolder+'/'+modefile
         print('Loading modes from:\n ', fname)
         f = np.load(fname)
         self.checkload(f)
