@@ -10,6 +10,7 @@ from ngsolve import dx, BilinearForm, H1, CoefficientFunction, grad, IfPos
 from fiberamp.fiber import Fiber
 import fiberamp
 from pyeigfeast.spectralproj.ngs import SpectralProjNG, NGvecs
+from pyeigfeast.spectralproj.ngs import SpectralProjNGGeneral
 from pyeigfeast.spectralproj import splitzoom
 import sympy as sm
 import os
@@ -329,7 +330,7 @@ class FiberMode:
 
     def leakymode_auto(self, p, radiusZ2, centerZ2,
                        alpha=1, includeclad=False,
-                       npts=10, niter=50):
+                       stop_tol=1e-10, npts=10, niter=50):
         """Compute leaky modes by solving a linear eigenproblem using
         the frequency-independent automatic PML mesh map of NGSolve
         and using non-selfadjoint FEAST.
@@ -374,7 +375,9 @@ class FiberMode:
             pmlbegin = 1
         print(' PML (automatic, frequency-independent) starts at r=', pmlbegin)
 
-        self.setrefractiveindex(curvature=0)
+        if self.m is None:
+            self.setrefractiveindex(curvature=0)
+
         self.p = p
         self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
 
@@ -389,21 +392,21 @@ class FiberMode:
         self.a = a
         self.b = b
 
-        P = SpectralProjNG(self.X, self.a.mat, self.b.mat,
-                           radiusZ2, centerZ2, npts, verbose=True)
+        P = SpectralProjNGGeneral(self.X, self.a.mat, self.b.mat,
+                                  radiusZ2, centerZ2, npts, verbose=True)
         Y = NGvecs(self.X, 10)
         Yl = NGvecs(self.X, 10)
         Y.setrandom()
         Yl.setrandom()
         zsqr, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                       stop_tol=1e-8,
+                                       stop_tol=stop_tol,
                                        check_contour=2,
                                        niterations=niter, nrestarts=1)
         return zsqr, Yl, Y, P
 
     def leakymode_smooth(self, p, radiusZ2, centerZ2,
                          alpha=1, pmlbegin=None, pmlend=None,
-                         npts=10, niter=50):
+                         stop_tol=1e-10, npts=10, niter=50):
         """Compute leaky modes by solving a linear eigenproblem using
         the frequency-independent C²  PML map
            mapped_x = x * (1 + 1j * α * φ(r))
@@ -486,7 +489,8 @@ class FiberMode:
         print(' PML (smooth, k-independent) starts at r=', pmlbegin)
 
         # Make linear eigensystem
-        self.setrefractiveindex(curvature=0)
+        if self.m is None:
+            self.setrefractiveindex(curvature=0)
         self.p = p
         self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
         u, v = self.X.TnT()
@@ -502,21 +506,21 @@ class FiberMode:
         self.b = b
 
         # Use spectral projector to find the resonance values squared
-        P = SpectralProjNG(self.X, self.a.mat, self.b.mat,
-                           radiusZ2, centerZ2, npts, verbose=True)
+        P = SpectralProjNGGeneral(self.X, self.a.mat, self.b.mat,
+                                  radiusZ2, centerZ2, npts, verbose=True)
         Y = NGvecs(self.X, 10)
         Yl = NGvecs(self.X, 10)
         Y.setrandom()
         Yl.setrandom()
         zsqr, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                       stop_tol=1e-8,
+                                       stop_tol=stop_tol,
                                        check_contour=2,
                                        niterations=niter, nrestarts=1)
         return zsqr, Yl, Y, P
 
     def leakymode_poly(self, p, radius, center,
                        alpha=1, includeclad=False,
-                       npts=10, niter=50):
+                       stop_tol=1e-10, npts=10, niter=50):
         """Compute leaky modes by solving a nonlinear polynomial eigenproblem
         using a frequency-dependent PML formulated by [Nannen+Wess]:
            mapped_x = x * η(r) / r,                   where
@@ -546,7 +550,8 @@ class FiberMode:
         * P: spectral projector approximation
         """
 
-        self.setrefractiveindex(curvature=0)
+        if self.m is None:
+            self.setrefractiveindex(curvature=0)
         self.p = p
         self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
 
@@ -604,6 +609,8 @@ class FiberMode:
             A.Assemble()
             B.Assemble()
 
+        # Since B is selfadjoint, we do not use SpectralProjNGGeneral here:
+
         P = SpectralProjNG(X3, A.mat, B.mat,
                            radius, center, npts, verbose=True)
         Y = NGvecs(X3, 10, M=B.mat)
@@ -612,7 +619,7 @@ class FiberMode:
         Yl.setrandom()
 
         z, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                    stop_tol=1e-10,
+                                    stop_tol=stop_tol,
                                     check_contour=2,
                                     niterations=niter, nrestarts=1)
         return z, Yl, Y, P
