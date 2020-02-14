@@ -8,7 +8,9 @@ import numpy as np
 from netgen.geom2d import SplineGeometry
 from ngsolve import dx, BilinearForm, H1, CoefficientFunction, grad, IfPos
 from fiberamp.fiber import Fiber
+import fiberamp
 from pyeigfeast.spectralproj.ngs import SpectralProjNG, NGvecs
+from pyeigfeast.spectralproj.ngs import SpectralProjNGGeneral
 from pyeigfeast.spectralproj import splitzoom
 import sympy as sm
 import os
@@ -45,6 +47,8 @@ class FiberMode:
           * degree "p" finite element space is set on the mesh.
         """
 
+        self.outfolder = os.path.abspath(fiberamp.__path__[0]+'/outputs/')
+
         if fromfile is None:
 
             if fibername is None:
@@ -76,7 +80,7 @@ class FiberMode:
 
         else:
 
-            fbmfilename = os.path.abspath('../../outputs/'+fromfile+'_fbm.npz')
+            fbmfilename = self.outfolder+'/'+fromfile+'_fbm.npz'
             print('Loading FiberMode object from file ', fbmfilename)
             f = np.load(fbmfilename)
             self.fibername = str(f['fibername'])
@@ -89,8 +93,7 @@ class FiberMode:
             self.fiber = Fiber(self.fibername)
             self.setstepindexgeom()  # sets self.geo
 
-            meshfname = os.path.abspath(
-                '../../outputs/'+fromfile+'_msh.vol.gz')
+            meshfname = self.outfolder+'/'+fromfile+'_msh.vol.gz'
             print('Loading mesh from file ', meshfname)
             self.mesh = ng.Mesh(meshfname)
             self.mesh.ngmesh.SetGeometry(self.geo)
@@ -325,9 +328,12 @@ class FiberMode:
                     return name2ind, exact
         return name2ind, exact
 
+    # LEAKY MODES ###########################################################
+
     def leakymode_auto(self, p, radiusZ2, centerZ2,
                        alpha=1, includeclad=False,
-                       npts=10, niter=50):
+                       stop_tol=1e-10, npts=10, niter=50,
+                       verbose=True, inverse='umfpack'):
         """Compute leaky modes by solving a linear eigenproblem using
         the frequency-independent automatic PML mesh map of NGSolve
         and using non-selfadjoint FEAST.
@@ -370,9 +376,13 @@ class FiberMode:
             radial = ng.pml.Radial(rad=1, alpha=alpha*1j, origin=(0, 0))
             self.mesh.SetPML(radial, 'pml|clad')
             pmlbegin = 1
-        print(' PML (automatic, frequency-independent) starts at r=', pmlbegin)
 
-        self.setrefractiveindex(curvature=0)
+        if self.m is None:
+            self.setrefractiveindex(curvature=0)
+
+        print(' PML (automatic, frequency-independent) starts at r=', pmlbegin)
+        print(' Degree p = ', p, ' Curvature =', self.curvature)
+
         self.p = p
         self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
 
@@ -387,21 +397,23 @@ class FiberMode:
         self.a = a
         self.b = b
 
-        P = SpectralProjNG(self.X, self.a.mat, self.b.mat,
-                           radiusZ2, centerZ2, npts, verbose=True)
+        P = SpectralProjNGGeneral(self.X, self.a.mat, self.b.mat,
+                                  radiusZ2, centerZ2, npts,
+                                  verbose=verbose, inverse=inverse)
         Y = NGvecs(self.X, 10)
         Yl = NGvecs(self.X, 10)
         Y.setrandom()
         Yl.setrandom()
         zsqr, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                       stop_tol=1e-8,
+                                       stop_tol=stop_tol,
                                        check_contour=2,
                                        niterations=niter, nrestarts=1)
         return zsqr, Yl, Y, P
 
     def leakymode_smooth(self, p, radiusZ2, centerZ2,
                          alpha=1, pmlbegin=None, pmlend=None,
-                         npts=10, niter=50):
+                         stop_tol=1e-10, npts=10, niter=50,
+                         verbose=True, inverse='umfpack'):
         """Compute leaky modes by solving a linear eigenproblem using
         the frequency-independent C²  PML map
            mapped_x = x * (1 + 1j * α * φ(r))
@@ -481,11 +493,14 @@ class FiberMode:
                                  A01, A11), dims=(2, 2))
         self.pml_A = A
         self.pml_tt = tt
-        print(' PML (smooth, k-independent) starts at r=', pmlbegin)
 
         # Make linear eigensystem
-        self.setrefractiveindex(curvature=0)
+        if self.m is None:
+            self.setrefractiveindex(curvature=0)
         self.p = p
+        print(' PML (smooth, k-independent) starts at r=', pmlbegin)
+        print(' Degree p = ', p, ' Curvature =', self.curvature)
+
         self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
         u, v = self.X.TnT()
         a = BilinearForm(self.X)
@@ -500,21 +515,23 @@ class FiberMode:
         self.b = b
 
         # Use spectral projector to find the resonance values squared
-        P = SpectralProjNG(self.X, self.a.mat, self.b.mat,
-                           radiusZ2, centerZ2, npts, verbose=True)
+        P = SpectralProjNGGeneral(self.X, self.a.mat, self.b.mat,
+                                  radiusZ2, centerZ2, npts,
+                                  verbose=verbose, inverse=inverse)
         Y = NGvecs(self.X, 10)
         Yl = NGvecs(self.X, 10)
         Y.setrandom()
         Yl.setrandom()
         zsqr, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                       stop_tol=1e-8,
+                                       stop_tol=stop_tol,
                                        check_contour=2,
                                        niterations=niter, nrestarts=1)
         return zsqr, Yl, Y, P
 
     def leakymode_poly(self, p, radius, center,
                        alpha=1, includeclad=False,
-                       npts=10, niter=50):
+                       stop_tol=1e-10, npts=10, niter=50,
+                       verbose=True, inverse='umfpack'):
         """Compute leaky modes by solving a nonlinear polynomial eigenproblem
         using a frequency-dependent PML formulated by [Nannen+Wess]:
            mapped_x = x * η(r) / r,                   where
@@ -544,8 +561,12 @@ class FiberMode:
         * P: spectral projector approximation
         """
 
-        self.setrefractiveindex(curvature=0)
+        if self.m is None:
+            self.setrefractiveindex(curvature=0)
         self.p = p
+        print(' PML (poly, k-dependent), includeclad =', includeclad)
+        print(' Degree p = ', p, ' Curvature =', self.curvature)
+
         self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
 
         # Our implementation of [Nannen+Wess]'s frequency-dependent PML is
@@ -602,18 +623,69 @@ class FiberMode:
             A.Assemble()
             B.Assemble()
 
+        # Since B is selfadjoint, we do not use SpectralProjNGGeneral here:
+
         P = SpectralProjNG(X3, A.mat, B.mat,
-                           radius, center, npts, verbose=True)
+                           radius, center, npts,
+                           verbose=verbose, inverse=inverse)
         Y = NGvecs(X3, 10, M=B.mat)
         Yl = NGvecs(X3, 10, M=B.mat)
         Y.setrandom()
         Yl.setrandom()
 
         z, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                    stop_tol=1e-10,
+                                    stop_tol=stop_tol,
                                     check_contour=2,
                                     niterations=niter, nrestarts=1)
         return z, Yl, Y, P
+
+    # BENT MODES ############################################################
+
+    def bentmode(self, curvature, radiusZ, centerZ, p,
+                 method='poly',
+                 bendfactor=1.28,
+                 includeclad=False, pmlbegin=None, pmlend=None, alpha=1,
+                 npts=10, niter=50, stop_tol=1.e-10):
+
+        self.setrefractiveindex(curvature=curvature, bendfactor=bendfactor)
+        radiusZ2 = radiusZ ** 2
+        centerZ2 = centerZ ** 2
+
+        if method == 'poly':
+
+            z, Yl, Y, P = self.leakymode_poly(p, radiusZ, centerZ,
+                                              stop_tol=stop_tol, npts=npts,
+                                              niter=niter, alpha=alpha)
+            z2 = z ** 2
+            ng.Draw(Y.gfun.components[0])
+
+        elif method == 'auto':
+
+            z2, Yl, Y, P = self.leakymode_auto(p, radiusZ2, centerZ2,
+                                               alpha=alpha,
+                                               includeclad=False,
+                                               stop_tol=stop_tol,
+                                               npts=npts, niter=niter)
+            Y.draw()
+
+        elif method == 'smooth':
+
+            z2, Yl, Y, P = self.leakymode_smooth(p, radiusZ2, centerZ2,
+                                                 alpha=alpha,
+                                                 pmlbegin=pmlbegin,
+                                                 pmlend=pmlend,
+                                                 stop_tol=stop_tol,
+                                                 npts=npts, niter=niter)
+            Y.draw()
+
+        else:
+            raise ValueError('Unknown method')
+
+        print('Nonlinear eigenvalues in nondimensional Z-squared plane:\n', z2)
+        print('Physical propagation constants:\n', self.Z2toBeta(z2))
+        return z2, Y, P
+
+    # CONVENIENCE & DEBUGGING ###############################################
 
     def scipymats(self):
         """ Return scipy versions of matrices FiberMode.a and FiberMode.b,
@@ -632,7 +704,7 @@ class FiberMode:
         A = A.tocsr()[freedofs, :]
         B = B.tocsc()[:, freedofs]
         B = B.tocsr()[freedofs, :]
-        return A, B
+        return A, B, freedofs
 
     # SAVING & LOADING ######################################################
     #
@@ -646,9 +718,9 @@ class FiberMode:
     def savefbm(self, fileprefix):
         """ Save this object so it can be loaded later """
 
-        if os.path.isdir('../../outputs') is not True:
-            os.mkdir('../../outputs')
-        fbmfilename = os.path.abspath('../../outputs/'+fileprefix+'_fbm.npz')
+        if os.path.isdir(self.outfolder) is not True:
+            os.mkdir(self.outfolder)
+        fbmfilename = self.outfolder+'/'+fileprefix+'_fbm.npz'
         print('Writing FiberMode object into:\n', fbmfilename)
         np.savez(fbmfilename,
                  fibername=self.fibername,
@@ -657,7 +729,7 @@ class FiberMode:
 
     def savemesh(self, fileprefix):
 
-        meshfname = os.path.abspath('../../outputs/'+fileprefix+'_msh.vol.gz')
+        meshfname = self.outfolder+'/'+fileprefix+'_msh.vol.gz'
         print('Writing mesh into:\n', meshfname)
         self.mesh.ngmesh.Save(meshfname)
 
@@ -670,9 +742,9 @@ class FiberMode:
             self.savemesh(fileprefix)
 
         y = Y.tonumpy()
-        if os.path.isdir('../../outputs') is not True:
-            os.mkdir('../../outputs')
-        fullname = os.path.abspath('../../outputs/'+fileprefix+'_mde.npz')
+        if os.path.isdir(self.outfolder) is not True:
+            os.mkdir(self.outfolder)
+        fullname = self.outfolder+'/'+fileprefix+'_mde.npz'
         print('Writing modes into:\n', fullname)
         np.savez(fullname, fibername=self.fibername,
                  hcore=self.hcore, hclad=self.hclad, hpml=self.hpml,
@@ -692,19 +764,20 @@ class FiberMode:
     def loadmodes(self, modefile):
         """Load modes from "outputs/modefile" (filename with extension)"""
 
-        fname = os.path.abspath('../../outputs/'+modefile)
+        fname = self.outfolder+'/'+modefile
         print('Loading modes from:\n ', fname)
-        f = np.load(fname)
+        f = np.load(fname, allow_pickle=True)
         self.checkload(f)
         self.p = int(f['p'])
         print('  Degree %d modes found in file' % self.p)
         self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
         y = f['y']
         betas = f['betas']
+        n2i = f['name2ind'].item()
         m = y.shape[0]
         Y = NGvecs(self.X, m)
         Y.fromnumpy(y)
-        return betas, Y
+        return betas, Y, n2i
 
     def makeguidedmodelibrary(self, maxp=5,
                               maxl=9, delta=None):
