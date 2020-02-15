@@ -24,7 +24,7 @@ class FiberMode:
     set to have radius one. """
 
     def __init__(self, fibername=None, fromfile=None,
-                 rpml=None, rout=None, geom=None,
+                 Rpml=None, Rout=None, geom=None,
                  h=4, hcore=None):
         """
         EITHER provide a prefix "filename" of a collection of files, e.g.,
@@ -36,15 +36,19 @@ class FiberMode:
         OR construct a new fiber geometry and mesh so that
 
           * region r < 1, in polar coords, is called "core",
-          * region 1 < r < rpml   is called "clad",
-          * region rpml < r < rout   is called "pml",
-          * when "rpml" is unspecified, it is set to rpml = (rout+1)/2,
+          * region 1 < r < Rpml   is called "clad",
+          * region Rpml < r < Rout   is called "pml",
+          * when "Rpml" is unspecified, it is set to Rpml = (Rout+1)/2,
           * index of refraction is set using Fiber("fibername")
-          * when "rout" is unspecified, it is taken to match the ratio
+          * when "Rout" is unspecified, it is taken to match the ratio
             of cladding radius to core radius from Fiber("fibername"),
           * cladding and pml meshsize is "h", while core mesh size
             is "hcore" (set to a default of hcore = h/10),
           * degree "p" finite element space is set on the mesh.
+
+        (Variables beginning with capital R such as "Rpml", "Rout" are
+        nondimensional lengths -- in contrast, "rout" found in other classes
+        is length in meters.)
         """
 
         self.outfolder = os.path.abspath(fiberamp.__path__[0]+'/outputs/')
@@ -57,14 +61,14 @@ class FiberMode:
             self.fibername = fibername
             self.fiber = Fiber(fibername)
 
-            if rout is None:
-                rout = self.fiber.rclad / self.fiber.rcore
-            if rpml is None:
-                rpml = (rout+1)/2
-            if rpml < 1 or rpml > rout:
-                raise ValueError('Set rpml between 1 and rout')
-            self.rpml = rpml
-            self.rout = rout
+            if Rout is None:
+                Rout = self.fiber.rclad / self.fiber.rcore
+            if Rpml is None:
+                Rpml = (Rout+1)/2
+            if Rpml < 1 or Rpml > Rout:
+                raise ValueError('Set Rpml between 1 and Rout')
+            self.Rpml = Rpml
+            self.Rout = Rout
 
             if hcore is None:
                 hcore = h/10
@@ -87,8 +91,8 @@ class FiberMode:
             self.hcore = float(f['hcore'])
             self.hclad = float(f['hclad'])
             self.hpml = float(f['hpml'])
-            self.rpml = float(f['rpml'])
-            self.rout = float(f['rout'])
+            self.Rpml = float(f['Rpml'])
+            self.Rout = float(f['Rout'])
 
             self.fiber = Fiber(self.fibername)
             self.setstepindexgeom()  # sets self.geo
@@ -112,9 +116,9 @@ class FiberMode:
     def setstepindexgeom(self):
 
         geo = SplineGeometry()
-        geo.AddCircle((0, 0), r=self.rout,
+        geo.AddCircle((0, 0), r=self.Rout,
                       leftdomain=1, rightdomain=0, bc='outer')
-        geo.AddCircle((0, 0), r=self.rpml,
+        geo.AddCircle((0, 0), r=self.Rpml,
                       leftdomain=2, rightdomain=1, bc='cladbdry')
         geo.AddCircle((0, 0), r=1,
                       leftdomain=3, rightdomain=2, bc='corebdry')
@@ -368,10 +372,10 @@ class FiberMode:
         self.pml_ngs = True
 
         if includeclad:
-            radial = ng.pml.Radial(rad=self.rpml,
+            radial = ng.pml.Radial(rad=self.Rpml,
                                    alpha=alpha*1j, origin=(0, 0))
             self.mesh.SetPML(radial, 'pml')
-            pmlbegin = self.rpml
+            pmlbegin = self.Rpml
         else:
             radial = ng.pml.Radial(rad=1, alpha=alpha*1j, origin=(0, 0))
             self.mesh.SetPML(radial, 'pml|clad')
@@ -448,12 +452,12 @@ class FiberMode:
         if pmlbegin is None:
             pmlbegin = 1
         else:
-            if pmlbegin > self.rout or pmlbegin < 1:
+            if pmlbegin > self.Rout or pmlbegin < 1:
                 raise ValueError('Select pmlbegin in interval [1, %g]'
-                                 % self.rout)
+                                 % self.Rout)
             self.pml_ngs = False
         if pmlend is None:
-            pmlend = (self.rout+pmlbegin) * 0.5
+            pmlend = (self.Rout+pmlbegin) * 0.5
 
         # symbolically derive the radial PML functions
         s, t, R0, R1 = sm.symbols('s t R_0 R_1')
@@ -725,7 +729,7 @@ class FiberMode:
         np.savez(fbmfilename,
                  fibername=self.fibername,
                  hcore=self.hcore, hclad=self.hclad, hpml=self.hpml,
-                 rpml=self.rpml, rout=self.rout)
+                 Rpml=self.Rpml, Rout=self.Rout)
 
     def savemesh(self, fileprefix):
 
@@ -748,7 +752,7 @@ class FiberMode:
         print('Writing modes into:\n', fullname)
         np.savez(fullname, fibername=self.fibername,
                  hcore=self.hcore, hclad=self.hclad, hpml=self.hpml,
-                 p=self.p, rpml=self.rpml, rout=self.rout,
+                 p=self.p, Rpml=self.Rpml, Rout=self.Rout,
                  betas=betas, y=y,
                  exactbetas=exact, name2ind=name2ind)
 
@@ -756,7 +760,7 @@ class FiberMode:
         """Check if the loaded file has expected values of certain data"""
 
         for member in {'fibername', 'hcore', 'hclad', 'hpml',
-                       'rpml', 'rout'}:
+                       'Rpml', 'Rout'}:
             print('  From file:', member, '=', f[member])
             assert self.__dict__[member] == f[member], \
                 'Load error! Data member %s does not match!' % member
