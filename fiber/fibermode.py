@@ -197,7 +197,7 @@ class FiberMode:
                        - (Z/self.fiber.rcore)**2)
 
     def guidedmodes(self, interval=None, p=3, nquadpts=20,
-                    numvecs=25, stop_tol=1e-10, check_contour=2,
+                    numvecs=15, stop_tol=1e-10, check_contour=2,
                     niterations=50, verbose=True):
         """
         Search for guided modes in a given "interval" - which is to be
@@ -561,7 +561,7 @@ class FiberMode:
         OUTPUTS:
 
         * z: computed resonance values
-        * Yl, Y: computed left and right eigenspans
+        * yl, y: computed left and right eigenspans
         * P: spectral projector approximation
         """
 
@@ -641,7 +641,15 @@ class FiberMode:
                                     stop_tol=stop_tol,
                                     check_contour=2,
                                     niterations=niter, nrestarts=1)
-        return z, Yl, Y, P
+        Yg = Y.gridfun()
+        Ylg = Y.gridfun()
+        y = NGvecs(self.X, Y.m)
+        yl = NGvecs(self.X, Y.m)
+        for i in range(Y.m):
+            y.data[i].data = Yg.components[0].vecs[i]
+            yl.data[i].data = Ylg.components[0].vecs[i]
+
+        return z, yl, y, P
 
     # BENT MODES ############################################################
 
