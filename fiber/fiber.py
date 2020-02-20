@@ -599,6 +599,14 @@ class Fiber:
             nclad = 1.0
             ncore = 1.0
 
+        elif case == 'empty_2':
+            L = 10
+            rcore = 0.5
+            rclad = 1
+            k0 = 100
+            nclad = 1.0
+            ncore = 1.0
+
         else:
             raise ValueError('Unknown fiber parameter case %s' % case)
 
