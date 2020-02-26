@@ -197,7 +197,7 @@ class FiberMode:
                        - (Z/self.fiber.rcore)**2)
 
     def guidedmodes(self, interval=None, p=3, nquadpts=20,
-                    numvecs=15, stop_tol=1e-10, check_contour=2,
+                    nspan=15, stop_tol=1e-10, check_contour=2,
                     niterations=50, verbose=True):
         """
         Search for guided modes in a given "interval" - which is to be
@@ -205,7 +205,7 @@ class FiberMode:
         then an automatic choice will be made to include all guided modes.
 
         The computation is done using Lagrangre finite elements of degree "p",
-        with no PML, using selfadjoint FEAST with a random span of "numvecs"
+        with no PML, using selfadjoint FEAST with a random span of "nspan"
         vectors (and using the remaining parameters, which are simply
         passed to feast).
 
@@ -257,13 +257,13 @@ class FiberMode:
 
         print('Running selfadjoint FEAST to capture guided modes in (%g,%g)'
               % (left, right))
-        print('assuming not more than %d modes in this interval' % numvecs)
+        print('assuming not more than %d modes in this interval' % nspan)
 
         ctr = (right+left)/2
         rad = (right-left)/2
         P = SpectralProjNG(self.X, a.mat, b.mat, rad, ctr, nquadpts,
                            reduce_sym=True, verbose=verbose)
-        Y = NGvecs(self.X, numvecs)
+        Y = NGvecs(self.X, nspan)
         Y.setrandom()
         Zsqrs, Y, history, _ = P.feast(Y, stop_tol=stop_tol,
                                        check_contour=check_contour,
@@ -313,6 +313,8 @@ class FiberMode:
             name2ind['LP0' + str(m+1)] = i2beta
             exact[i2beta] = LP0[m]
             activesimple = np.delete(activesimple, [ind])
+            if len(activesimple) == 0:
+                break
 
         # l>0 cases should have multiplicity 2:
         activemultiple = np.arange(len(ml['index']))
@@ -336,7 +338,7 @@ class FiberMode:
 
     def leakymode_auto(self, p, radiusZ2, centerZ2,
                        alpha=1, includeclad=False,
-                       stop_tol=1e-10, npts=10, niter=50,
+                       stop_tol=1e-10, npts=10, niter=50, nspan=10,
                        verbose=True, inverse='umfpack'):
         """Compute leaky modes by solving a linear eigenproblem using
         the frequency-independent automatic PML mesh map of NGSolve
@@ -357,6 +359,7 @@ class FiberMode:
             If False, then PML is set in the union 'pml|clad'.
         * npts: number of quadrature points in the contour for FEAST.
         * niter: number of FEAST iterations before restart.
+        * nspan: intial number of random vectors to start FEAST.
 
         OUTPUTS:
 
@@ -404,8 +407,8 @@ class FiberMode:
         P = SpectralProjNGGeneral(self.X, self.a.mat, self.b.mat,
                                   radiusZ2, centerZ2, npts,
                                   verbose=verbose, inverse=inverse)
-        Y = NGvecs(self.X, 10)
-        Yl = NGvecs(self.X, 10)
+        Y = NGvecs(self.X, nspan)
+        Yl = Y.create()
         Y.setrandom()
         Yl.setrandom()
         zsqr, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
@@ -520,7 +523,7 @@ class FiberMode:
 
         # Use spectral projector to find the resonance values squared
         P = SpectralProjNGGeneral(self.X, self.a.mat, self.b.mat,
-                                  radiusZ2, centerZ2, npts,
+                                  radiusZ2, centerZ2, npts=npts,
                                   verbose=verbose, inverse=inverse)
         Y = NGvecs(self.X, 10)
         Yl = NGvecs(self.X, 10)
@@ -534,13 +537,14 @@ class FiberMode:
 
     def leakymode_poly(self, p, radius, center,
                        alpha=1, includeclad=False,
-                       stop_tol=1e-10, npts=10, niter=50,
+                       stop_tol=1e-10, npts=10, niter=50, nspan=10,
                        verbose=True, inverse='umfpack'):
         """Compute leaky modes by solving a nonlinear polynomial eigenproblem
         using a frequency-dependent PML formulated by [Nannen+Wess]:
            mapped_x = x * η(r) / r,                   where
-           η(r) = R + (r - R) * (1 + 1j * α) / ω
-        and R is the radius wehere PML starts (the variable pmlbegin below).
+           η(r) = R + (r - R) * (1 + 1j * α) / Z
+        and R is the radius where PML starts (the variable pmlbegin below).
+        (Note that Z takes the role of frequency, called ω in [Nannen+Wess].)
         The polynomial eigenproblem is converted to a larger linear
         eigenproblem which is solved using non-selfadjoint FEAST.
 
@@ -632,8 +636,8 @@ class FiberMode:
         P = SpectralProjNG(X3, A.mat, B.mat,
                            radius, center, npts,
                            verbose=verbose, inverse=inverse)
-        Y = NGvecs(X3, 10, M=B.mat)
-        Yl = NGvecs(X3, 10, M=B.mat)
+        Y = NGvecs(X3, nspan, M=B.mat)
+        Yl = Y.create()
         Y.setrandom()
         Yl.setrandom()
 
@@ -649,7 +653,7 @@ class FiberMode:
             y.data[i].data = Yg.components[0].vecs[i]
             yl.data[i].data = Ylg.components[0].vecs[i]
 
-        return z, yl, y, P
+        return z, yl, y, P, Yl, Y
 
     # BENT MODES ############################################################
 
@@ -669,7 +673,7 @@ class FiberMode:
                                               stop_tol=stop_tol, npts=npts,
                                               niter=niter, alpha=alpha)
             z2 = z ** 2
-            ng.Draw(Y.gfun.components[0])
+            Y.draw()
 
         elif method == 'auto':
 
@@ -792,7 +796,7 @@ class FiberMode:
         return betas, Y, n2i
 
     def makeguidedmodelibrary(self, maxp=5,
-                              maxl=9, delta=None):
+                              maxl=9, delta=None, nspan=15):
         """Save full sets of guided modes computed using the same mesh, using
         polynomial degrees p from 1 to "maxp", together with their LP
         names. One modefile per p is written and all output filenames
@@ -805,7 +809,7 @@ class FiberMode:
         self.savemesh(fprefix)       # save mesh
 
         for p in range(1, maxp+1):   # save modes, one file per degree
-            betas, zsqrs, Y = self.guidedmodes(p=p)
+            betas, zsqrs, Y = self.guidedmodes(p=p, nspan=nspan)
             print('Physical propagation constants:\n', betas)
             print('Computed non-dimensional Z-squared values:\n', zsqrs)
             n2i, exbeta = self.name2indices(betas, maxl=maxl, delta=delta)
