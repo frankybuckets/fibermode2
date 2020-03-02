@@ -15,6 +15,7 @@ from pyeigfeast.spectralproj import splitzoom
 import sympy as sm
 import os
 from scipy.sparse import coo_matrix
+from .spectralprojpoly import SpectralProjNGPoly
 
 
 class FiberMode:
@@ -346,22 +347,14 @@ class FiberMode:
 
         INPUTS:
 
-        * p: degree of finite element to be used to compute modes.
         * radiusZ2, centerZ2:
             Capture modes whose non-dimensional resonance value Z²
             is such that Z*Z is contained within the circular contour
             centered at "centerZ2" of radius "radiusZ2" in the complex
             plane.
-        * alpha:  PML strength
-        * includeclad:
-            If True, then cladding is included in the domain, so PML
-            is set in 'pml' region only.
-            If False, then PML is set in the union 'pml|clad'.
-        * npts: number of quadrature points in the contour for FEAST.
-        * niter: number of FEAST iterations before restart.
-        * nspan: intial number of random vectors to start FEAST.
+        * Remaining inputs are the as documented in leakymode(..).
 
-        OUTPUTS:
+        OUTPUTS:   zsqr, Yl, Y, P
 
         * zsqr: computed resonance values Z²
         * Yl, Y: left and right eigenspans
@@ -430,20 +423,17 @@ class FiberMode:
 
         INPUTS:
 
-        * p: degree of finite element to be used to compute modes.
         * radiusZ2, centerZ2:
             Capture modes whose non-dimensional resonance value Z²
             is such that Z*Z is contained within the circular contour
             centered at "centerZ2" of radius "radiusZ2" in the complex
             plane.
-        * alpha:  PML strength α
         * pmlbegin, pmlend:  starting radius of the PML and ending radius
             of the transitional PML region, respectively. (The subdomains
             'pml', 'clad' in the mesh are not used for this PML.)
-        * npts: number of quadrature points in the contour for FEAST.
-        * niter: number of FEAST iterations before restart.
+        * Remaining inputs are the as documented in leakymode(..).
 
-        OUTPUTS:
+        OUTPUTS:   zsqr, Yl, Y, P
 
         * zsqr: computed resonance values Z²
         * Yl, Y: left and right eigenspans
@@ -539,35 +529,7 @@ class FiberMode:
                        alpha=1, includeclad=False,
                        stop_tol=1e-10, npts=10, niter=50, nspan=10,
                        verbose=True, inverse='umfpack'):
-        """Compute leaky modes by solving a nonlinear polynomial eigenproblem
-        using a frequency-dependent PML formulated by [Nannen+Wess]:
-           mapped_x = x * η(r) / r,                   where
-           η(r) = R + (r - R) * (1 + 1j * α) / Z
-        and R is the radius where PML starts (the variable pmlbegin below).
-        (Note that Z takes the role of frequency, called ω in [Nannen+Wess].)
-        The polynomial eigenproblem is converted to a larger linear
-        eigenproblem which is solved using non-selfadjoint FEAST.
-
-        INPUTS:
-
-        * p: degree of finite element to be used to compute modes.
-        * radius, center: Capture modes whose non-dimensional resonance
-            value Z (not Z²) is contained within the circular contour
-            centered at "center" of radius "radius" in the complex plane.
-        * alpha: The quantity α in the above mapping formula (PML strength).
-        * includeclad:
-            If True, then cladding is included in the domain, so PML
-            is set in 'pml' region only.
-            If False, then PML is set in the union 'pml|clad'.
-        * npts: number of quadrature points in the contour for FEAST.
-        * niter: number of FEAST iterations before restart.
-
-        OUTPUTS:
-
-        * z: computed resonance values
-        * yl, y: computed left and right eigenspans
-        * P: spectral projector approximation
-        """
+        """See docstring of leakymode(...)"""
 
         if self.m is None:
             self.setrefractiveindex(curvature=0)
@@ -655,51 +617,141 @@ class FiberMode:
 
         return z, yl, y, P, Yl, Y
 
+    def leakymode(self, p, radius, center,
+                  alpha=1, includeclad=False,
+                  stop_tol=1e-10, npts=10, niter=50, nspan=10,
+                  verbose=True, inverse='umfpack'):
+        """
+        Compute leaky modes by solving a nonlinear eigenproblem derived
+        from a frequency-dependent PML formulated by [Nannen+Wess].
+
+        INPUTS:
+
+        * p: degree of finite element to be used to compute modes.
+        * radius, center: Capture modes whose non-dimensional resonance
+            value Z (not Z²) is contained within the circular contour
+            centered at "center" of radius "radius" in the complex plane.
+        * alpha: Quantity α (PML strength) in the mapping formula below.
+        * includeclad:
+            If True, then cladding is included in the domain, so PML
+            is set in 'pml' region only.
+            If False, then PML is set in the union 'pml|clad'.
+        * npts: number of quadrature points in the contour for FEAST.
+        * niter: number of FEAST iterations before restart.
+        * nspan: intial number of random vectors to start FEAST.
+        * verbose: when true, prints FEAST iteration details
+        * inverse: type of sparse inverse to use (if more than one installed)
+
+        OUTPUTS:    z, yl, yr, P, Yl, Y
+
+        * z: computed resonance values
+        * yl, yr: left and right eigenspans of nonlinear eigenproblem
+        * P: spectral projector approximation
+        * Yl, Y: left & right eigenspans of large linear eigenproblem
+
+        METHOD:
+
+        [Nannen+Wess]'s method performs the complex coordinate transformation
+           mapped_x = x * η(r) / r,                   where
+           η(r) = R + (r - R) * (1 + 1j * α) / Z
+        and R is the radius where PML starts (the variable pmlbegin below).
+        (Note that Z takes the role of frequency, called ω in [Nannen+Wess].)
+        This then leads to a cubic eigenproblem. We solve it using our own
+        spectral projector facility for polynomial eigenproblems.
+        """
+
+        if self.m is None:
+            self.setrefractiveindex(curvature=0)
+        self.p = p
+        print(' PML (poly, k-dependent), includeclad =', includeclad)
+        print(' Degree p = ', p, ' Curvature =', self.curvature)
+
+        if includeclad:
+            pmlbegin = self.rclad
+            dx_pml = dx(definedon=self.mesh.Materials('pml'))
+            dx_int = dx(definedon=self.mesh.Materials('core|clad'))
+        else:
+            pmlbegin = 1
+            dx_pml = dx(definedon=self.mesh.Materials('pml|clad'))
+            dx_int = dx(definedon=self.mesh.Materials('core'))
+
+        R = pmlbegin
+        s = 1 + 1j * alpha
+        x = ng.x
+        y = ng.y
+        r = ng.sqrt(x*x+y*y) + 0j
+
+        self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
+
+        u, v = self.X.TnT()
+        ux, uy = grad(u)
+        vx, vy = grad(v)
+
+        AA = [BilinearForm(self.X, check_unused=False)]
+        AA[0] += (s*r/R) * grad(u) * grad(v) * dx_pml
+        AA[0] += s * (r-R)/(R*r*r) * (x*ux+y*uy) * v * dx_pml
+        AA[0] += s * (R-2*r)/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
+        AA[0] += -s**3 * (r-R)**2/(R*r) * u * v * dx_pml
+
+        AA += [BilinearForm(self.X)]
+        AA[1] += grad(u) * grad(v) * dx_int
+        AA[1] += -self.m * u * v * dx_int
+        AA[1] += 2 * (r-R)/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
+        AA[1] += 1/r**2 * (x*ux+y*uy) * v * dx_pml
+        AA[1] += -2*s*s*(r-R)/r * u * v * dx_pml
+
+        AA += [BilinearForm(self.X, check_unused=False)]
+        AA[2] += R/s/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
+        AA[2] += -R*s/r * u * v * dx_pml
+
+        AA += [BilinearForm(self.X, check_unused=False)]
+        AA[3] += -u * v * dx_int
+
+        with ng.TaskManager():
+            for i in range(4):
+                AA[i].Assemble()
+
+        P = SpectralProjNGPoly(AA, self.X,
+                               radius, center, npts,
+                               verbose=verbose, inverse=inverse)
+
+        # A mass matrix for compound space  X x X x X
+        X3 = ng.FESpace([self.X, self.X, self.X])
+        u0, u1, u2 = X3.TrialFunction()
+        v0, v1, v2 = X3.TestFunction()
+        B = BilinearForm(X3)
+        B += (u0 * v0 + u1 * v1 + u2 * v2) * dx
+        with ng.TaskManager():
+            B.Assemble()
+
+        Y = NGvecs(X3, 10, M=B.mat)
+        Yl = Y.create()
+        Y.setrandom()
+        Yl.setrandom()
+
+        z, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
+                                    stop_tol=stop_tol,
+                                    check_contour=2,
+                                    niterations=niter, nrestarts=1)
+
+        yl = P.first(Yl)
+        yr = P.first(Y)
+
+        return z, yl, yr, P, Yl, Y
+
     # BENT MODES ############################################################
 
     def bentmode(self, curvature, radiusZ, centerZ, p,
-                 method='poly',
-                 bendfactor=1.28,
-                 includeclad=False, pmlbegin=None, pmlend=None, alpha=1,
-                 npts=10, niter=50, stop_tol=1.e-10):
+                 bendfactor=1.28, **kwargs):
 
         self.setrefractiveindex(curvature=curvature, bendfactor=bendfactor)
-        radiusZ2 = radiusZ ** 2
-        centerZ2 = centerZ ** 2
 
-        if method == 'poly':
+        z, _, y, P, _, _ = self.leakymode(p, radiusZ, centerZ, **kwargs)
 
-            z, Yl, Y, P = self.leakymode_poly(p, radiusZ, centerZ,
-                                              stop_tol=stop_tol, npts=npts,
-                                              niter=niter, alpha=alpha)
-            z2 = z ** 2
-            Y.draw()
-
-        elif method == 'auto':
-
-            z2, Yl, Y, P = self.leakymode_auto(p, radiusZ2, centerZ2,
-                                               alpha=alpha,
-                                               includeclad=False,
-                                               stop_tol=stop_tol,
-                                               npts=npts, niter=niter)
-            Y.draw()
-
-        elif method == 'smooth':
-
-            z2, Yl, Y, P = self.leakymode_smooth(p, radiusZ2, centerZ2,
-                                                 alpha=alpha,
-                                                 pmlbegin=pmlbegin,
-                                                 pmlend=pmlend,
-                                                 stop_tol=stop_tol,
-                                                 npts=npts, niter=niter)
-            Y.draw()
-
-        else:
-            raise ValueError('Unknown method')
-
-        print('Nonlinear eigenvalues in nondimensional Z-squared plane:\n', z2)
-        print('Physical propagation constants:\n', self.Z2toBeta(z2))
-        return z2, Y, P
+        print('Nonlinear eigenvalues in nondimensional Z-plane:\n', z)
+        betas = self.ZtoBeta(z)
+        print('Physical propagation constants:\n', betas)
+        return betas, z, y, P
 
     # CONVENIENCE & DEBUGGING ###############################################
 
