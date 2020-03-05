@@ -55,55 +55,27 @@ class FiberMode:
         self.outfolder = os.path.abspath(fiberamp.__path__[0]+'/outputs/')
 
         if fromfile is None:
-
             if fibername is None:
                 raise ValueError('Need either a file or a fiber name')
-
-            self.fibername = fibername
-            self.fiber = Fiber(fibername)
-
-            if Rout is None:
-                Rout = self.fiber.rclad / self.fiber.rcore
-            if Rpml is None:
-                Rpml = (Rout+1)/2
-            if Rpml < 1 or Rpml > Rout:
-                raise ValueError('Set Rpml between 1 and Rout')
-            self.Rpml = Rpml
-            self.Rout = Rout
-
-            if hcore is None:
-                hcore = h/10
-            self.hcore = hcore
-            self.hclad = h
-            self.hpml = h
-
-            self.setstepindexgeom()  # sets self.geo
-            mesh = ng.Mesh(self.geo.GenerateMesh())
-            mesh.Curve(3)
-            ng.Draw(mesh)
-            self.mesh = mesh
-
+            self.makefibermode(fibername, Rpml=Rpml, Rout=Rout, geom=geom,
+                               h=h, hcore=hcore)
+            self.makemesh()
         else:
-
             fbmfilename = self.outfolder+'/'+fromfile+'_fbm.npz'
-            print('Loading FiberMode object from file ', fbmfilename)
-            f = np.load(fbmfilename)
-            self.fibername = str(f['fibername'])
-            self.hcore = float(f['hcore'])
-            self.hclad = float(f['hclad'])
-            self.hpml = float(f['hpml'])
-            self.Rpml = float(f['Rpml'])
-            self.Rout = float(f['Rout'])
-
-            self.fiber = Fiber(self.fibername)
-            self.setstepindexgeom()  # sets self.geo
+            if os.path.isfile(fbmfilename):
+                self.loadfibermode(fbmfilename)
+            else:
+                print('Specified fibermode file not found -- creating it')
+                self.makefibermode(fromfile)
+                self.savefbm(fromfile)
 
             meshfname = self.outfolder+'/'+fromfile+'_msh.vol.gz'
-            print('Loading mesh from file ', meshfname)
-            self.mesh = ng.Mesh(meshfname)
-            self.mesh.ngmesh.SetGeometry(self.geo)
-            self.mesh.Curve(3)
-            ng.Draw(self.mesh)
+            if os.path.isfile(meshfname):
+                self.loadmesh(meshfname)
+            else:
+                print('Specified mesh file not found -- creating it')
+                self.makemesh()
+                self.savemesh(fromfile)
 
         self.p = None        # degree of finite elements used in mode calc
         self.a = None
@@ -114,8 +86,55 @@ class FiberMode:
 
     # FURTHER INITIALIZATIONS & SETTERS #####################################
 
-    def setstepindexgeom(self):
+    def makefibermode(self, fibername=None, Rpml=None, Rout=None,
+                      geom=None, h=4, hcore=None):
 
+        self.fibername = fibername
+        self.fiber = Fiber(fibername)
+
+        if Rout is None:
+            Rout = self.fiber.rclad / self.fiber.rcore
+        if Rpml is None:
+            Rpml = (Rout+1)/2
+        if Rpml < 1 or Rpml > Rout:
+            raise ValueError('Set Rpml between 1 and Rout')
+        self.Rpml = Rpml
+        self.Rout = Rout
+
+        if hcore is None:
+            hcore = h/10
+        self.hcore = hcore
+        self.hclad = h
+        self.hpml = h
+
+    def makemesh(self):
+        self.setstepindexgeom()  # sets self.geo
+        mesh = ng.Mesh(self.geo.GenerateMesh())
+        mesh.Curve(3)
+        ng.Draw(mesh)
+        self.mesh = mesh
+
+    def loadfibermode(self, fbmfilename):
+        print('Loading FiberMode object from file ', fbmfilename)
+        f = np.load(fbmfilename)
+        self.fibername = str(f['fibername'])
+        self.hcore = float(f['hcore'])
+        self.hclad = float(f['hclad'])
+        self.hpml = float(f['hpml'])
+        self.Rpml = float(f['Rpml'])
+        self.Rout = float(f['Rout'])
+
+        self.fiber = Fiber(self.fibername)
+        self.setstepindexgeom()  # sets self.geo
+
+    def loadmesh(self, meshfname):
+        print('Loading mesh from file ', meshfname)
+        self.mesh = ng.Mesh(meshfname)
+        self.mesh.ngmesh.SetGeometry(self.geo)
+        self.mesh.Curve(3)
+        ng.Draw(self.mesh)
+
+    def setstepindexgeom(self):
         geo = SplineGeometry()
         geo.AddCircle((0, 0), r=self.Rout,
                       leftdomain=1, rightdomain=0, bc='outer')
@@ -833,18 +852,27 @@ class FiberMode:
         """Load modes from "outputs/modefile" (filename with extension)"""
 
         fname = self.outfolder+'/'+modefile
-        print('Loading modes from:\n ', fname)
-        f = np.load(fname, allow_pickle=True)
-        self.checkload(f)
-        self.p = int(f['p'])
-        print('  Degree %d modes found in file' % self.p)
-        self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
-        y = f['y']
-        betas = f['betas']
-        n2i = f['name2ind'].item()
-        m = y.shape[0]
-        Y = NGvecs(self.X, m)
-        Y.fromnumpy(y)
+        if os.path.isfile(fname):
+            print('Loading modes from:\n ', fname)
+            f = np.load(fname, allow_pickle=True)
+            self.checkload(f)
+            self.p = int(f['p'])
+            print('  Degree %d modes found in file' % self.p)
+            self.X = H1(self.mesh, order=self.p, dirichlet='outer',
+                        complex=True)
+            y = f['y']
+            betas = f['betas']
+            n2i = f['name2ind'].item()
+            m = y.shape[0]
+            Y = NGvecs(self.X, m)
+            Y.fromnumpy(y)
+        else:
+            print('Specified modes file not found -- creating it')
+            fibername, p = _extract_fbname_and_p(modefile)
+            betas, zsqrs, Y = self.guidedmodes(p=p, nspan=50)
+            n2i, exbeta = self.name2indices(betas, maxl=9)
+            self.savemodes(fibername+'_p' + str(p), betas, Y,
+                           saveallagain=False, name2ind=n2i, exact=exbeta)
         return betas, Y, n2i
 
     def makeguidedmodelibrary(self, maxp=5,
@@ -867,3 +895,23 @@ class FiberMode:
             n2i, exbeta = self.name2indices(betas, maxl=maxl, delta=delta)
             self.savemodes(fprefix+'_p' + str(p), betas, Y,
                            saveallagain=False, name2ind=n2i, exact=exbeta)
+
+# END OF CLASS DEFINITION ###################################################
+
+# Helper methods
+
+
+def _extract_fbname_and_p(fn):
+    """
+    Extract the fibername and polynomial order from a mode filename
+    """
+    sfx = '_mde.npz'
+    if sfx in fn:
+        pfx = fn[:fn.find(sfx)]
+        parts = pfx.split('_')
+        fibername = '_'.join(parts[:-1])
+        p = int(parts[-1][1:])
+        return fibername, p
+    return None
+
+# MODULE END #############################################################
