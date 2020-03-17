@@ -44,7 +44,11 @@ class Fiber:
             self.rclad = rclad     # cladding cross-section radius
             self.nclad = nclad     # cladding refractive index
             self.ncore = ncore     # core refractive index
-            self.ks = ks           # signal wavenumber
+            if type(ks) == list:   # the situation occurs in multitone case
+                self.ks = ks[0]    # signal wavenumber
+                self.kt = ks[1:]   # tone wavenumbers
+            else:
+                self.ks = ks       # signal wavenumber
         else:
             self.set(case)
 
@@ -59,10 +63,17 @@ class Fiber:
         """  Return signal wavelength """
         return 2 * pi / self.ks
 
-    def fiberV(self):
-        """ Return the V number of the fiber """
+    def fiberV(self, tone=False):
+        """ 
+        Returns the V number of the fiber.
+        If multitone, returns a list 'V' where
+        V[0] is the V-number coresponding to signal
+        and tone V-numbers afterwards.
+        """
         NA = self.numerical_aperture()
         V = NA * self.ks * self.rcore
+        if tone:
+            V = [V] + [NA * kt * self.rcore for kt in self.kt]
         return V
 
     # PROPAGATION CHARACTERISTICS
@@ -484,6 +495,20 @@ class Fiber:
 
             L = 0.1   # to be varied for each simulation
 
+        elif case == 'Toned_Tm':
+
+            rcore = 1e-5
+            rclad = 2e-4
+            # specify signal wavelength first,
+            # then specify tones
+            wavelen = [2.110e-6, 1.9305876e-6]
+            ncore = 1.439994
+            k0 = [2*pi/lam for lam in wavelen]
+            NA = 0.099
+            nclad = sqrt(ncore*ncore - NA*NA)
+
+            L = 0.1  # to be varied for each simulation
+
         elif case == 'LLMA_Yb':
 
             # ** Variation of Nufern Ytterbium-Doped LMA Double Clad Fiber **
@@ -616,7 +641,7 @@ class Fiber:
     def print_params(self):
         print('\nFIBER PARAMETERS: ' + '-'*54)
         print('ks:         %20g' % self.ks +
-              '{:>40}'.format('signal frequency'))
+              '{:>40}'.format('signal wavenumber'))
         print('wavelength: %20g' % (2*pi/self.ks) +
               '{:>40}'.format('signal wavelength'))
         print('L:          %20g' % (self.L) +
@@ -643,4 +668,9 @@ class Fiber:
               '{:>40}'.format('core radius'))
         print('rclad:      %20g' % (self.rclad) +
               '{:>40}'.format('cladding radius'))
+        if 'kt' in self.__dir__():
+            print('kt:         {}'.format(self.kt) +
+                  '{:>40}'.format('tone wave numbers'))
+            print('Vt:         {}'.format(self.fiberV(tone=True)) +
+                  '{}'.format('tone V-numbers'))
         print('-'*72)
