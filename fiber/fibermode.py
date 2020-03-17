@@ -351,8 +351,8 @@ class FiberMode:
                 name2ind, exact: see self.name2indices docstring.
             """
             
-            lft = self.Z2toBeta(0)  # βs must be in (lft, rgt)
-            rgt = self.Z2toBeta(-vnum*vnum)
+            lft = self.Z2toBeta(0, v=vnum)  # βs must be in (lft, rgt)
+            rgt = self.Z2toBeta(-vnum*vnum, v=vnum)
             # roughly identify simple and multiple ew approximants
             sm, ml = splitzoom.simple_multiple_zoom(lft, rgt, β,
                                                     delta=delta)
@@ -362,7 +362,8 @@ class FiberMode:
 
             # l=0 case should be simple eigenvalues:
             activesimple = np.arange(len(sm['index']))
-            LP0 = self.fiber.XtoBeta(self.fiber.propagation_constants(0))
+            LP0 = self.fiber.XtoBeta(self.fiber.propagation_constants(0, v=vnum),
+                                     v=vnum)
             b = β[sm['index']]
             for m in range(len(LP0)):
                 ind = np.argmin(abs(LP0[m]-b[activesimple]))
@@ -377,7 +378,8 @@ class FiberMode:
             activemultiple = np.arange(len(ml['index']))
             ctrs = np.array(ml['center'])
             for l in range(1, maxl):
-                LPl = self.fiber.XtoBeta(self.fiber.propagation_constants(l))
+                LPl = self.fiber.XtoBeta(self.fiber.propagation_constants(l, v=vnum),
+                                         v=vnum)
                 for m in range(len(LPl)):
                     ind = np.argmin(abs(LPl[m]-ctrs[activemultiple]))
                     i2beta_a = ml['index'][activemultiple[ind]][0]
