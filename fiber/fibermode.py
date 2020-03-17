@@ -218,7 +218,7 @@ class FiberMode:
 
     def guidedmodes(self, interval=None, p=3, nquadpts=20,
                     nspan=15, stop_tol=1e-10, check_contour=2,
-                    niterations=50, verbose=True):
+                    niterations=50, verbose=True, tone=False):
         """
         Search for guided modes in a given "interval" - which is to be
         input as a tuple: interval=(left, right).  If interval is None,
@@ -235,64 +235,90 @@ class FiberMode:
         constant and Zsqrs[i] gives the feast-computed i-th nondimensional
         Z² value in "interval". The corresponding eigenmode is i-th component
         of the span object Y.
+        
+        In case of multitone, data for each tone wavelength is stored as
+        nested lists in the order specified in 'self.fibername'.
+        As an example, betas[k][i] give the i-th real-valued
+        propagation constant for k-th tone wavelength.
         """
+
+        def compute(vnum):
+            """
+            solves the non-dimensional eigenproblem using FEAST
+            for a given V-number
+            INPUT:
+                vnum = V-number in float
+            OUTPUT:
+                betas, Zsqrs, Y: Same as guidemodes docstring
+            """
+            
+            u, v = self.X.TnT()
+            m = CoefficientFunction([0, 0, vnum*vnum])
+            a = BilinearForm(self.X)
+            a += (grad(u) * grad(v) - m * u * v) * dx
+            
+            b = BilinearForm(self.X)
+            b += u * v * dx
+            
+            with ng.TaskManager():
+                a.Assemble()
+                b.Assemble()
+            self.a = a
+            self.b = b
+
+            if interval is None:
+                # We choose the interval for the nondimensional Z² variable
+                # recalling that  (a k₀ nclad)² < (β a)² < (a k₀ ncore)²,
+                # where a is any scaling factor - and here it is rcore.
+                # It follows that Z² = (a α₀)² = (a k₀ nclad)² - (a β)²
+                # satisfies 0 > Z² > (a k₀ nclad)² - (a k₀ ncore)² = -V².
+
+                left = -vnum*vnum
+                right = 0
+            else:
+                left, right = interval
+            print('Running selfadjoint FEAST to capture guided modes in (%g,%g)'
+                  % (left, right))
+            print('assuming not more than %d modes in this interval' % nspan)
+            
+            ctr = (right+left)/2
+            rad = (right-left)/2
+            P = SpectralProjNG(self.X, a.mat, b.mat, rad, ctr, nquadpts,
+                               reduce_sym=True, verbose=verbose)
+            Y = NGvecs(self.X, nspan)
+            Y.setrandom()
+            Zsqrs, Y, history, _ = P.feast(Y, stop_tol=stop_tol,
+                                           check_contour=check_contour,
+                                           niterations=niterations)
+            betas = np.array(self.Z2toBeta(Zsqrs))
+            return betas, Zsqrs, Y
 
         self.p = p
         self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
 
+        V = self.fiber.fiberV(tone=tone)
         if self.m is None:
             self.curvature = 0
-            V = self.fiber.fiberV()
-            self.m = CoefficientFunction([0, 0, V*V])
+            if tone:
+                self.m = CoefficientFunction([0, 0, V[0]*V[0]])
+            else:
+                self.m = CoefficientFunction([0, 0, V*V])
         if self.pml_ngs is True:
             raise RuntimeError('Mesh pml trafo is set')
 
-        V = self.fiber.fiberV()
-        if interval is None:
-
-            # We choose the interval for the nondimensional Z² variable
-            # recalling that  (a k₀ nclad)² < (β a)² < (a k₀ ncore)²,
-            # where a is any scaling factor - and here it is rcore.
-            # It follows that Z² = (a α₀)² = (a k₀ nclad)² - (a β)²
-            # satisfies 0 > Z² > (a k₀ nclad)² - (a k₀ ncore)² = -V².
-
-            left = -V*V
-            right = 0
+        if tone:
+            betas, Zsqrs, Y = [], [], []
+            for VV in V:
+                betas_, Zsqrs_, Y_ = compute(VV)
+                betas.append(betas_)
+                Zsqrs.append(Zsqrs_)
+                Y.append(Y_)
         else:
-            left, right = interval
-
-        u, v = self.X.TnT()
-
-        a = BilinearForm(self.X)
-        a += (grad(u) * grad(v) - self.m * u * v) * dx
-
-        b = BilinearForm(self.X)
-        b += u * v * dx
-
-        with ng.TaskManager():
-            a.Assemble()
-            b.Assemble()
-        self.a = a
-        self.b = b
-
-        print('Running selfadjoint FEAST to capture guided modes in (%g,%g)'
-              % (left, right))
-        print('assuming not more than %d modes in this interval' % nspan)
-
-        ctr = (right+left)/2
-        rad = (right-left)/2
-        P = SpectralProjNG(self.X, a.mat, b.mat, rad, ctr, nquadpts,
-                           reduce_sym=True, verbose=verbose)
-        Y = NGvecs(self.X, nspan)
-        Y.setrandom()
-        Zsqrs, Y, history, _ = P.feast(Y, stop_tol=stop_tol,
-                                       check_contour=check_contour,
-                                       niterations=niterations)
-        betas = np.array(self.Z2toBeta(Zsqrs))
+            betas, Zsqrs, Y = compute(V)
 
         return betas, Zsqrs, Y
 
-    def name2indices(self, betas, maxl=9, delta=None):
+    def name2indices(self, betas, maxl=9, delta=None, tone=False):
         """Given a numpy 1D array "betas" of approximations to
         propagation constants, produce a dictionary of mode names and
         corresponding exact propagation constants.
@@ -314,44 +340,65 @@ class FiberMode:
             less than maxl.
         """
 
-        V = self.fiber.fiberV()
-        lft = self.Z2toBeta(0)  # betas must be in (lft, rgt)
-        rgt = self.Z2toBeta(-V*V)
-        # roughly identify simple and multiple ew approximants
-        sm, ml = splitzoom.simple_multiple_zoom(lft, rgt, betas, delta=delta)
+        def construct_names(vnum, β):
+            """
+            constructs and saves LP names of propagation constants in β
+            INPUTS:
+                vnum: V-number in float
+                β   : a numpy array containing propagation constants
+            OUTPUTS:
+                name2ind, exact: see self.name2indices docstring.
+            """
+            
+            lft = self.Z2toBeta(0)  # βs must be in (lft, rgt)
+            rgt = self.Z2toBeta(-vnum*vnum)
+            # roughly identify simple and multiple ew approximants
+            sm, ml = splitzoom.simple_multiple_zoom(lft, rgt, β,
+                                                    delta=delta)
 
-        name2ind = {}
-        exact = -np.ones_like(betas)
+            name2ind = {}
+            exact = -np.ones_like(β)
 
-        # l=0 case should be simple eigenvalues:
-        activesimple = np.arange(len(sm['index']))
-        LP0 = self.fiber.XtoBeta(self.fiber.propagation_constants(0))
-        b = betas[sm['index']]
-        for m in range(len(LP0)):
-            ind = np.argmin(abs(LP0[m]-b[activesimple]))
-            i2beta = sm['index'][activesimple[ind]]
-            name2ind['LP0' + str(m+1)] = i2beta
-            exact[i2beta] = LP0[m]
-            activesimple = np.delete(activesimple, [ind])
-            if len(activesimple) == 0:
-                break
-
-        # l>0 cases should have multiplicity 2:
-        activemultiple = np.arange(len(ml['index']))
-        ctrs = np.array(ml['center'])
-        for l in range(1, maxl):
-            LPl = self.fiber.XtoBeta(self.fiber.propagation_constants(l))
-            for m in range(len(LPl)):
-                ind = np.argmin(abs(LPl[m]-ctrs[activemultiple]))
-                i2beta_a = ml['index'][activemultiple[ind]][0]
-                i2beta_b = ml['index'][activemultiple[ind]][1]
-                name2ind['LP' + str(l) + str(m+1)+'_a'] = i2beta_a
-                name2ind['LP' + str(l) + str(m+1)+'_b'] = i2beta_b
-                exact[i2beta_a] = LPl[m]
-                exact[i2beta_b] = LPl[m]
-                activemultiple = np.delete(activemultiple, ind)
-                if len(activemultiple) == 0:
-                    return name2ind, exact
+            # l=0 case should be simple eigenvalues:
+            activesimple = np.arange(len(sm['index']))
+            LP0 = self.fiber.XtoBeta(self.fiber.propagation_constants(0))
+            b = β[sm['index']]
+            for m in range(len(LP0)):
+                ind = np.argmin(abs(LP0[m]-b[activesimple]))
+                i2beta = sm['index'][activesimple[ind]]
+                name2ind['LP0' + str(m+1)] = i2beta
+                exact[i2beta] = LP0[m]
+                activesimple = np.delete(activesimple, [ind])
+                if len(activesimple) == 0:
+                    break
+                
+            # l>0 cases should have multiplicity 2:
+            activemultiple = np.arange(len(ml['index']))
+            ctrs = np.array(ml['center'])
+            for l in range(1, maxl):
+                LPl = self.fiber.XtoBeta(self.fiber.propagation_constants(l))
+                for m in range(len(LPl)):
+                    ind = np.argmin(abs(LPl[m]-ctrs[activemultiple]))
+                    i2beta_a = ml['index'][activemultiple[ind]][0]
+                    i2beta_b = ml['index'][activemultiple[ind]][1]
+                    name2ind['LP' + str(l) + str(m+1)+'_a'] = i2beta_a
+                    name2ind['LP' + str(l) + str(m+1)+'_b'] = i2beta_b
+                    exact[i2beta_a] = LPl[m]
+                    exact[i2beta_b] = LPl[m]
+                    activemultiple = np.delete(activemultiple, ind)
+                    if len(activemultiple) == 0:
+                        return name2ind, exact
+            return name2ind, exact
+        
+        V = self.fiber.fiberV(tone=tone)
+        if tone:
+            name2ind, exact = [], []
+            for i, v in enumerate(V):
+                n2i, ex = construct_names(v, betas[i])
+                name2ind.append(n2i)
+                exact.append(ex)
+        else:
+            name2ind, exact = construct_names(V, betas)
         return name2ind, exact
 
     # LEAKY MODES ###########################################################
