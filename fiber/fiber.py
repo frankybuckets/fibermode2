@@ -78,22 +78,28 @@ class Fiber:
 
     # PROPAGATION CHARACTERISTICS
 
-    def XtoBeta(self, X):
+    def XtoBeta(self, X, v=None):
         """
         Convert nondimensionalized roots X to actual propagation
         constants Beta of guided modes.
         """
-        kappas = [x/self.rcore for x in X]
-        betas = [sqrt(self.ncore*self.ncore*self.ks*self.ks - kappa*kappa)
+        V = self.fiberV() if v is None else v
+        a = self.rcore
+        ks = V / (self.numerical_aperture() * a)
+        kappas = [x/a for x in X]
+        betas = [sqrt(self.ncore*self.ncore*ks*ks - kappa*kappa)
                  for kappa in kappas]
         return betas
 
-    def ZtoBeta(self, Z):
+    def ZtoBeta(self, Z, v=None):
         """
         Convert nondimensional Z in the complex plan to complex propagation
         constants Beta of leaky modes.
         """
-        return np.sqrt((self.ks*self.ncore)**2-(Z/self.rcore)**2)
+        V = self.fiberV() if v is None else v
+        a = self.rcore
+        ks = V / (self.numerical_aperture() * a)
+        return np.sqrt((ks*self.ncore)**2-(Z/a)**2)
 
     def visualize_mode(self, l, m):
         """
@@ -140,13 +146,19 @@ class Fiber:
 
         return mode
 
-    def propagation_constants(self, l, maxnroots=50):
+    def propagation_constants(self, l, maxnroots=50, v=None):
         """
         Given mode index "l", attempt to find all propagation constants by
         bisection or other nonlinear root finders. (Circularly
         symmetric modes are obtained with l=0.  Modes with higher l
         have angular variations.)
         """
+        if v is None:
+            ks = self.ks
+            V = self.fiberV()
+        else:
+            ks = v / (self.numerical_aperture() * self.rcore)
+            V = v
 
         # Case of empty fibers:
 
@@ -159,10 +171,10 @@ class Fiber:
             # engineer X so that this beta is produced by later formulae.
 
             jz = jn_zeros(l, maxnroots)
-            jz = jz[np.where(jz < self.ks*self.rclad)[0]]
+            jz = jz[np.where(jz < ks*self.rclad)[0]]
             if len(jz) == 0:
                 print('There are no propagating modes for wavenumber ks!')
-                print('   ks = ', self.ks)
+                print('   ks = ', ks)
             # Return X adjusted so that later formulas
             # like kappa = X[m] / rcore   are still valid.
             X = jz * (self.rcore / self.rclad)
@@ -172,7 +184,7 @@ class Fiber:
 
         # Case of non-empty fibers (V>0):
 
-        V, f1, f2, g1, g2, f, g = self.VJKfun(l)
+        _, f1, f2, g1, g2, f, g = self.VJKfun(l, v=V)
 
         # Collect Bessel roots appended with 0 and V:
 
@@ -289,13 +301,14 @@ class Fiber:
         plt.show()
         plt.show(block=False)
 
-    def VJKfun(self, l):
+    def VJKfun(self, l, v=None):
         """
         For the "l"-th mode index of the fiber, return the nonlinear
         functions whose roots give propagation constants.
+        v: V-number of the fiber
         """
 
-        V = self.fiberV()
+        V = self.fiberV() if v is None else v
         J = jv
         K = kv
 

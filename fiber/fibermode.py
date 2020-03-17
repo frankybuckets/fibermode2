@@ -186,35 +186,41 @@ class FiberMode:
 
     # MODE CALCULATORS AND RELATED FUNCTIONALITIES  #########################
 
-    def Z2toX2(self, Z2):
+    def Z2toX2(self, Z2, v=None):
         """Convert non-dimensional Z² values to non-dimensional X² values
         through the relation X² - Z² = V². """
 
+        V = self.fiber.fiberV() if v is None else v
         Zsqr = np.array(Z2)
-        Vsqr = self.fiber.fiberV()**2
+        Vsqr = V**2
         return Zsqr + Vsqr
 
-    def X2toBeta(self, X2):
+    def X2toBeta(self, X2, v=None):
         """Convert non-dimensional X² values to dimensional propagation
         constants beta through the relation (ncore*k)² - X² = beta². """
 
-        Xsqr = np.array(X2)
+        V = self.fiber.fiberV() if v is None else v
         a = self.fiber.rcore
-        return np.sqrt((self.fiber.ks*self.fiber.ncore)**2 - Xsqr/a**2)
+        ks = V / (self.fiber.numerical_aperture() * a)
+        Xsqr = np.array(X2)
+        
+        return np.sqrt((ks*self.fiber.ncore)**2 - Xsqr/a**2)
 
-    def Z2toBeta(self, Z2):
+    def Z2toBeta(self, Z2, v=None):
         """Convert nondimensional Z² (input as "Z2") in the complex plane to
         complex propagation constant Beta. """
 
-        return self.X2toBeta(self.Z2toX2(Z2))
+        return self.X2toBeta(self.Z2toX2(Z2, v=v), v=v)
 
-    def ZtoBeta(self, Z):
+    def ZtoBeta(self, Z, v=None):
         """Convert nondimensional Z in the complex plane to complex
         propagation constant Beta. """
 
+        V = self.fiber.fiberV() if v is None else v
+        a = self.fiber.rcore
+        ks = V / (self.fiber.numerical_aperture() * a)
         Z = np.array(Z)
-        return np.sqrt((self.fiber.ks*self.fiber.ncore)**2
-                       - (Z/self.fiber.rcore)**2)
+        return np.sqrt((ks*self.fiber.ncore)**2 - (Z/a)**2)
 
     def guidedmodes(self, interval=None, p=3, nquadpts=20,
                     nspan=15, stop_tol=1e-10, check_contour=2,
@@ -290,7 +296,7 @@ class FiberMode:
             Zsqrs, Y, history, _ = P.feast(Y, stop_tol=stop_tol,
                                            check_contour=check_contour,
                                            niterations=niterations)
-            betas = np.array(self.Z2toBeta(Zsqrs))
+            betas = np.array(self.Z2toBeta(Zsqrs, v=vnum))
             return betas, Zsqrs, Y
 
         self.p = p
@@ -351,8 +357,8 @@ class FiberMode:
                 name2ind, exact: see self.name2indices docstring.
             """
             
-            lft = self.Z2toBeta(0)  # βs must be in (lft, rgt)
-            rgt = self.Z2toBeta(-vnum*vnum)
+            lft = self.Z2toBeta(0, v=vnum)  # βs must be in (lft, rgt)
+            rgt = self.Z2toBeta(-vnum*vnum, v=vnum)
             # roughly identify simple and multiple ew approximants
             sm, ml = splitzoom.simple_multiple_zoom(lft, rgt, β,
                                                     delta=delta)
@@ -362,7 +368,8 @@ class FiberMode:
 
             # l=0 case should be simple eigenvalues:
             activesimple = np.arange(len(sm['index']))
-            LP0 = self.fiber.XtoBeta(self.fiber.propagation_constants(0))
+            LP0 = self.fiber.XtoBeta(self.fiber.propagation_constants(0, v=vnum),
+                                     v=vnum)
             b = β[sm['index']]
             for m in range(len(LP0)):
                 ind = np.argmin(abs(LP0[m]-b[activesimple]))
@@ -377,7 +384,8 @@ class FiberMode:
             activemultiple = np.arange(len(ml['index']))
             ctrs = np.array(ml['center'])
             for l in range(1, maxl):
-                LPl = self.fiber.XtoBeta(self.fiber.propagation_constants(l))
+                LPl = self.fiber.XtoBeta(self.fiber.propagation_constants(l, v=vnum),
+                                         v=vnum)
                 for m in range(len(LPl)):
                     ind = np.argmin(abs(LPl[m]-ctrs[activemultiple]))
                     i2beta_a = ml['index'][activemultiple[ind]][0]
