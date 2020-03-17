@@ -290,7 +290,7 @@ class FiberMode:
             Zsqrs, Y, history, _ = P.feast(Y, stop_tol=stop_tol,
                                            check_contour=check_contour,
                                            niterations=niterations)
-            betas = np.array(self.Z2toBeta(Zsqrs))
+            betas = np.array(self.Z2toBeta(Zsqrs, v=vnum))
             return betas, Zsqrs, Y
 
         self.p = p
