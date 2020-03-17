@@ -44,11 +44,11 @@ class Fiber:
             self.rclad = rclad     # cladding cross-section radius
             self.nclad = nclad     # cladding refractive index
             self.ncore = ncore     # core refractive index
-            if type(ks) == list:
+            if type(ks) == list:   # the situation occurs in multitone case
                 self.ks = ks[0]    # signal wavenumber
                 self.kt = ks[1:]   # tone wavenumbers
             else:
-                self.ks = ks           # signal wavenumber
+                self.ks = ks       # signal wavenumber
         else:
             self.set(case)
 
@@ -64,7 +64,12 @@ class Fiber:
         return 2 * pi / self.ks
 
     def fiberV(self, tone=False):
-        """ Return the V number of the fiber """
+        """ 
+        Returns the V number of the fiber.
+        If multitone, returns a list 'V' where
+        V[0] is the V-number coresponding to signal
+        and tone V-numbers afterwards.
+        """
         NA = self.numerical_aperture()
         V = NA * self.ks * self.rcore
         if tone:
@@ -636,7 +641,7 @@ class Fiber:
     def print_params(self):
         print('\nFIBER PARAMETERS: ' + '-'*54)
         print('ks:         %20g' % self.ks +
-              '{:>40}'.format('signal frequency'))
+              '{:>40}'.format('signal wavenumber'))
         print('wavelength: %20g' % (2*pi/self.ks) +
               '{:>40}'.format('signal wavelength'))
         print('L:          %20g' % (self.L) +
@@ -665,7 +670,7 @@ class Fiber:
               '{:>40}'.format('cladding radius'))
         if 'kt' in self.__dir__():
             print('kt:         {}'.format(self.kt) +
-                  '{:>40}'.format('tone frequencies'))
+                  '{:>40}'.format('tone wave numbers'))
             print('Vt:         {}'.format(self.fiberV(tone=True)) +
-                  '{}'.format('tone V-numbers of fiber'))
+                  '{}'.format('tone V-numbers'))
         print('-'*72)

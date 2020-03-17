@@ -307,6 +307,7 @@ class FiberMode:
             raise RuntimeError('Mesh pml trafo is set')
 
         if tone:
+            # in multitone, data will be stored in a list:
             betas, Zsqrs, Y = [], [], []
             for VV in V:
                 betas_, Zsqrs_, Y_ = compute(VV)
@@ -392,6 +393,7 @@ class FiberMode:
         
         V = self.fiber.fiberV(tone=tone)
         if tone:
+            # in multitone, data will be stored in a list
             name2ind, exact = [], []
             for i, v in enumerate(V):
                 n2i, ex = construct_names(v, betas[i])
