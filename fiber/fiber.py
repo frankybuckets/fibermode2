@@ -24,7 +24,7 @@ class Fiber:
 
     def __init__(self, case=None,
                  L=None, rcore=None, rclad=None, nclad=None, ncore=None,
-                 ks=None):
+                 ks=None, tone_wavelens=None):
         """
         A step-index fiber object F can be made using a preprogrammed case
         name (such as 'Nufern_Yb', 'liekki_1', 'corning_smf_28_1', etc), e.g.,
@@ -36,6 +36,7 @@ class Fiber:
            nclad:  cladding refractive index
            ncore:  core refractive index
            ks:     signal wavenumber.
+           tone_wavelens: tone wavelengths in toned case
         """
 
         if case is None:
@@ -44,11 +45,10 @@ class Fiber:
             self.rclad = rclad     # cladding cross-section radius
             self.nclad = nclad     # cladding refractive index
             self.ncore = ncore     # core refractive index
-            if type(ks) == list:   # the situation occurs in multitone case
-                self.ks = ks[0]    # signal wavenumber
-                self.kt = ks[1:]   # tone wavenumbers
-            else:
-                self.ks = ks       # signal wavenumber
+            self.ks = ks           # signal wavenumber
+            if tone_wavelens:
+                # tone wavenumbers
+                self.kt = [2*pi/lam for lam in tone_wavelens]
         else:
             self.set(case)
 
@@ -59,9 +59,12 @@ class Fiber:
         # (nclad, ncore) -> NA:
         return sqrt(abs(self.ncore)**2 - abs(self.nclad)**2)
 
-    def wavelength(self):
+    def wavelength(self, tone=False):
         """  Return signal wavelength """
-        return 2 * pi / self.ks
+        if tone:
+            return [2 * pi / self.ks] + [2 * pi / k for k in self.kt]
+        else:
+            return 2 * pi / self.ks
 
     def fiberV(self, tone=False):
         """ 
@@ -514,14 +517,30 @@ class Fiber:
             rclad = 2e-4
             # specify signal wavelength first,
             # then specify tones
-            wavelen = [2.110e-6, 1.9305876e-6]
+            wavelen = 2.110e-6
             ncore = 1.439994
-            k0 = [2*pi/lam for lam in wavelen]
+            k0 = 2 * pi / wavelen
             NA = 0.099
             nclad = sqrt(ncore*ncore - NA*NA)
 
+            tone_wavelens = [1.9305876e-6]
+
             L = 0.1  # to be varied for each simulation
 
+        elif case == 'Toned_Yb':
+            rcore = 1.25e-5
+            rclad = 2e-4
+            ncore = 1.450971
+            NA = 0.06
+            nclad = sqrt(ncore*ncore - NA*NA)
+            L = 0.1   # to be varied for each simulation
+            # specify signal wavelength first,
+            # then specify tones
+            wavelen = 1.064e-6
+            k0 = 2 * pi / wavelen
+            
+            tone_wavelens = [1.040e-6]
+  
         elif case == 'LLMA_Yb':
 
             # ** Variation of Nufern Ytterbium-Doped LMA Double Clad Fiber **
@@ -648,8 +667,14 @@ class Fiber:
         else:
             raise ValueError('Unknown fiber parameter case %s' % case)
 
-        self.__init__(None, L=L, rcore=rcore, rclad=rclad,
-                      nclad=nclad, ncore=ncore, ks=k0)
+        if case.startswith('Toned'):
+            self.__init__(None, L=L, rcore=rcore, rclad=rclad,
+                          nclad=nclad, ncore=ncore, ks=k0,
+                          tone_wavelens=tone_wavelens)
+        else:
+            self.__init__(None, L=L, rcore=rcore, rclad=rclad,
+                          nclad=nclad, ncore=ncore, ks=k0,
+                          tone_wavelens=None)
 
     def print_params(self):
         print('\nFIBER PARAMETERS: ' + '-'*54)
