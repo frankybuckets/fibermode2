@@ -285,8 +285,9 @@ class FiberMode:
                 right = 0
             else:
                 left, right = interval
-            print('Running selfadjoint FEAST to capture guided modes in (%g,%g)'
-                  % (left, right))
+            print("Running selfadjoint FEAST to capture guided modes in \
+            ({},{})".format(left, right))
+
             print('assuming not more than %d modes in this interval' % nspan)
 
             ctr = (right+left)/2
@@ -315,13 +316,17 @@ class FiberMode:
             raise RuntimeError('Mesh pml trafo is set')
 
         if tone:
-            # in multitone, data will be stored in a list:
-            betas, Zsqrs, Y = [], [], []
-            for VV in V:
+            betas, Zsqrs, Y = compute(V[0])
+            fmind = [0]
+            for VV in V[1:]:
                 betas_, Zsqrs_, Y_ = compute(VV)
-                betas.append(betas_)
-                Zsqrs.append(Zsqrs_)
-                Y.append(Y_)
+                betas = np.append(betas, betas_)
+                Zsqrs = np.append(Zsqrs, Zsqrs_)
+                Y.data += Y_.data
+                Y.m += len(betas_)
+                fmind.append(fmind[-1] + len(betas_))
+            fmind.append(len(betas))
+            self.firstmodeindex = fmind
         else:
             betas, Zsqrs, Y = compute(V)
 
@@ -406,7 +411,9 @@ class FiberMode:
             # in multitone, data will be stored in a list
             name2ind, exact = [], []
             for i, v in enumerate(V):
-                n2i, ex = construct_names(v, betas[i])
+                betaslice = betas[self.firstmodeindex[i]:
+                                  self.firstmodeindex[i+1]]
+                n2i, ex = construct_names(v, betaslice)
                 name2ind.append(n2i)
                 exact.append(ex)
         else:
@@ -1010,7 +1017,7 @@ class FiberMode:
 
     def savemodes(self, fileprefix, betas, Y,
                   saveallagain=True, name2ind=None, exact=None,
-                  interp=False):
+                  interp=False, tone=False):
         """ Convert Y to numpy and save in npz format. """
 
         if saveallagain:
@@ -1023,11 +1030,19 @@ class FiberMode:
         suffix = '_imde.npz' if interp else '_mde.npz'
         fullname = self.outfolder+'/'+fileprefix+suffix
         print('Writing modes into:\n', fullname)
-        np.savez(fullname, fibername=self.fibername,
-                 hcore=self.hcore, hclad=self.hclad, hpml=self.hpml,
-                 p=self.p, Rpml=self.Rpml, Rout=self.Rout,
-                 betas=betas, y=y,
-                 exactbetas=exact, name2ind=name2ind)
+        if tone:
+            np.savez(fullname, fibername=self.fibername,
+                     hcore=self.hcore, hclad=self.hclad, hpml=self.hpml,
+                     p=self.p, Rpml=self.Rpml, Rout=self.Rout,
+                     betas=betas, y=y,
+                     exactbetas=exact, name2ind=name2ind,
+                     firstmodeindex=self.firstmodeindex)
+        else:
+            np.savez(fullname, fibername=self.fibername,
+                     hcore=self.hcore, hclad=self.hclad, hpml=self.hpml,
+                     p=self.p, Rpml=self.Rpml, Rout=self.Rout,
+                     betas=betas, y=y,
+                     exactbetas=exact, name2ind=name2ind)
 
     def checkload(self, f):
         """Check if the loaded file has expected values of certain data"""
@@ -1038,7 +1053,7 @@ class FiberMode:
             assert self.__dict__[member] == f[member], \
                 'Load error! Data member %s does not match!' % member
 
-    def loadmodes(self, modefile):
+    def loadmodes(self, modefile, tone=False):
         """Load modes from "outputs/modefile" (filename with extension)"""
 
         fname = self.outfolder+'/'+modefile
@@ -1052,7 +1067,11 @@ class FiberMode:
                         complex=True)
             y = f['y']
             betas = f['betas']
-            n2i = f['name2ind'].item()
+            if tone:
+                n2i = f['name2ind'].tolist()
+                self.firstmodeindex = f['firstmodeindex'].tolist()
+            else:
+                n2i = f['name2ind'].item()
             m = y.shape[0]
             Y = NGvecs(self.X, m)
             Y.fromnumpy(y)
@@ -1065,15 +1084,15 @@ class FiberMode:
                                saveallagain=False, name2ind=n2i,
                                exact=betas, interp=True)
             else:
-                betas, zsqrs, Y = self.guidedmodes(p=p, nspan=50)
-                n2i, exbeta = self.name2indices(betas, maxl=9)
+                betas, zsqrs, Y = self.guidedmodes(p=p, nspan=50, tone=tone)
+                n2i, exbeta = self.name2indices(betas, maxl=9, tone=tone)
                 self.savemodes(fibername+'_p' + str(p), betas, Y,
                                saveallagain=False, name2ind=n2i,
                                exact=exbeta)
         return betas, Y, n2i
 
     def makeguidedmodelibrary(self, maxp=5, maxl=9, delta=None,
-                              nspan=15, interp=False):
+                              nspan=15, interp=False, tone=False):
         """Save full sets of guided modes computed using the same mesh, using
         polynomial degrees p from 1 to "maxp", together with their LP
         names. One modefile per p is written and all output filenames
@@ -1093,12 +1112,14 @@ class FiberMode:
                                saveallagain=False, name2ind=n2i,
                                exact=betas, interp=True)
             else:
-                betas, zsqrs, Y = self.guidedmodes(p=p, nspan=nspan)
+                betas, zsqrs, Y = self.guidedmodes(p=p, nspan=nspan, tone=tone)
                 print('Physical propagation constants:\n', betas)
                 print('Computed non-dimensional Z-squared values:\n', zsqrs)
-                n2i, exbeta = self.name2indices(betas, maxl=maxl, delta=delta)
+                n2i, exbeta = self.name2indices(betas, maxl=maxl, delta=delta,
+                                                tone=tone)
                 self.savemodes(fprefix+'_p' + str(p), betas, Y,
-                               saveallagain=False, name2ind=n2i, exact=exbeta)
+                               saveallagain=False, name2ind=n2i, exact=exbeta,
+                               tone=tone)
 
 
 # END OF CLASS DEFINITION ###################################################
