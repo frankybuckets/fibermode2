@@ -1088,7 +1088,7 @@ class FiberMode:
                 n2i, exbeta = self.name2indices(betas, maxl=9, tone=tone)
                 self.savemodes(fibername+'_p' + str(p), betas, Y,
                                saveallagain=False, name2ind=n2i,
-                               exact=exbeta)
+                               exact=exbeta, tone=tone)
         return betas, Y, n2i
 
     def makeguidedmodelibrary(self, maxp=5, maxl=9, delta=None,
