@@ -7,6 +7,7 @@ an HC ARF, or ARF as called in the paper.
 
 import netgen.geom2d as geom2d
 import ngsolve as ng
+from ngsolve import grad, dx
 import numpy as np
 
 
@@ -17,10 +18,12 @@ class ARF:
         PARAMETERS:
 
            freecapil: If True, capillary tubes in the microstructure will
-                      be modeled as free standing in the hollow region.
-                      Otherwise, they will be embedded into the glass sheath.
+                be modeled as free standing in the hollow region.
+                Otherwise, they will be embedded into the glass sheath.
 
-           kwargs: Overwrite default attribute values.
+           kwargs: Overwrite default attribute values set in the class.
+                A keyword argument 'scaling', if given, will also divide
+                the updatable length attributes by the 'scaling' value.
         """
 
         # DEFAULT ATTRIBUTE VALUES
@@ -30,9 +33,10 @@ class ARF:
 
         # Primary geometrical parameters (geometry shown in tex folder)
 
-        self.Rc = 15.0   # radius of inner part of hollow core
-        self.tclad = 20  # thickness of the glass jacket/sheath
-        self.t = 0.55    # thickness of the capillary tubes
+        self.Rc = 15.0    # radius of inner part of hollow core
+        self.tclad = 2    # thickness of the glass jacket/sheath
+        self.touter = 10  # thickness of final outer annular layer
+        self.t = 0.42     # thickness of the capillary tubes
 
         # Attributes for tuning mesh sizes
 
@@ -40,10 +44,12 @@ class ARF:
         self.air_maxh = 8.0
         self.inner_core_maxh = 2
         self.glass_maxh = 10.0
+        self.outer_maxh = 10.0
 
-        # Updatable length dimensions, usually given in micrometers
-        self.updatablelengths = ['Rc', 'tclad', 't', 'capillary_maxh',
-                                 'air_maxh', 'inner_core_maxh', 'glass_maxh']
+        # Updatable length attributes. All lengths are in micrometers.
+        self.updatablelengths = ['Rc', 'tclad', 't', 'touter',
+                                 'capillary_maxh', 'air_maxh',
+                                 'inner_core_maxh', 'glass_maxh', 'outer_maxh']
 
         # Attributes specific to the embedded capillary case:
         #
@@ -55,7 +61,7 @@ class ARF:
         #        tube is tangential to the circular boundary (and
         #        the outer circle is embedded). Value of embed must be
         #        strictly greater than 0 and less than or equal to 1.
-        self.e = 0.017 / self.t    # nondimensional fraction
+        self.e = 0.025 / self.t    # nondimensional fraction
 
         # Attributes used only in the freestanding capillary case:
         #
@@ -64,6 +70,12 @@ class ARF:
         #        the fiber to the center of capillary tubes (which
         #        would be tangential to the outer glass jacket when s=0).
         self.s = 0.05              # nondimensional fraction
+
+        # Physical parameters
+
+        self.n_air = 1.00027717    # refractive index of air
+        self.n_si = 1.4545         # refractive index of glass
+        self.wavelength = 1.8e-6   # fiber's operating wavelength
 
         # UPDATE (any of the above) attributes using given inputs
 
@@ -90,27 +102,34 @@ class ARF:
         else:
             # radius where glass sheath (cladding) begins
             self.Rcladi = self.Rc + self.t + 2*self.Rti + self.t*(1-self.e)
-            # outer radius of glass sheath, where the geometry ends
+            # outer radius of glass sheath
             self.Rclado = self.Rcladi + self.tclad
+
+        # final radius where geometry ends
+        self.Rout = self.Rclado + self.touter
 
         # BOUNDARY & MATERIAL NAMES
 
         self.material = {
-            'Si': 1,             # outer cladding & capillaries are glass
-            'CapillaryEncl': 2,  # air regions enclosed by capillaries
-            'InnerCore': 3,      # inner hollow core (air) region r < Rc
-            'FillAir': 4,        # remaining intervening spaces (air)
+            'Outer': 1,          # outer most annular layer
+            'Si': 2,             # cladding & capillaries are glass
+            'CapillaryEncl': 3,  # air regions enclosed by capillaries
+            'InnerCore': 4,      # inner hollow core (air) region r < Rc
+            'FillAir': 5,        # remaining intervening spaces (air)
         }
         mat = self.material
         self.boundary = {
-            #             [left domain, right domain]    while going ccw
-            'Outer':      [mat['Si'], 0],
+            #              [left domain, right domain]    while going ccw
+            'OuterCircle': [mat['Outer'], 0],
+
+            # circle  separating outer most layer from cladding
+            'OuterClad':   [mat['Si'], mat['Outer']],
 
             # inner circular boundary of capillary tubes
-            'CapilInner': [mat['CapillaryEncl'], mat['Si']],
+            'CapilInner':  [mat['CapillaryEncl'], mat['Si']],
 
             # artificial inner circular core boundary
-            'Inner':      [mat['InnerCore'], mat['FillAir']],
+            'Inner':       [mat['InnerCore'], mat['FillAir']],
 
             # outer boundary of capillaries and the inner boundary of
             # sheath/cladding together forms one curve in the case
@@ -124,7 +143,6 @@ class ARF:
             # exist in the embedded capillary case).
             'CladInner':  [mat['FillAir'], mat['Si']],
             'CapilOuter': [mat['Si'], mat['FillAir']],
-
         }
 
         # CREATE GEOMETRY & MESH
@@ -141,6 +159,7 @@ class ARF:
             self.geo.SetMaterial(domain, material)
 
         # Set the maximum mesh sizes in subdomains
+        self.geo.SetDomainMaxH(mat['Outer'], self.outer_maxh)
         self.geo.SetDomainMaxH(mat['Si'], self.glass_maxh)
         self.geo.SetDomainMaxH(mat['CapillaryEncl'], self.air_maxh)
         self.geo.SetDomainMaxH(mat['InnerCore'], self.inner_core_maxh)
@@ -151,15 +170,22 @@ class ARF:
         self.mesh = ng.Mesh(ngmesh)
         self.mesh.Curve(3)
 
+    # GEOMETRY ########################################################
+
     def geom_freestand_capillaries(self):
 
         geo = geom2d.SplineGeometry()
         bdr = self.boundary
 
+        # The outermost circle
+        geo.AddCircle(c=(0, 0), r=self.Rout,
+                      leftdomain=bdr['OuterCircle'][0], rightdomain=0,
+                      bc='OuterCircle')
+
         # The glass sheath
         geo.AddCircle(c=(0, 0), r=self.Rclado,
-                      leftdomain=bdr['Outer'][0],
-                      rightdomain=0, bc='Outer')
+                      leftdomain=bdr['OuterClad'][0],
+                      rightdomain=bdr['OuterClad'][1], bc='OuterClad')
         geo.AddCircle(c=(0, 0), r=self.Rcladi,
                       leftdomain=bdr['CladInner'][0],
                       rightdomain=bdr['CladInner'][1],
@@ -212,10 +238,15 @@ class ARF:
         bdr = self.boundary
         geo = geom2d.SplineGeometry()
 
-        # Create the outermost circle.
-        geo.AddCircle(c=origin, r=self.Rclado,
-                      leftdomain=bdr['Outer'][0],
-                      rightdomain=bdr['Outer'][1], bc='Outer')
+        # The outermost circle
+        geo.AddCircle(c=(0, 0), r=self.Rout,
+                      leftdomain=bdr['OuterCircle'][0], rightdomain=0,
+                      bc='OuterCircle')
+
+        # Cladding begins here
+        geo.AddCircle(c=(0, 0), r=self.Rclado,
+                      leftdomain=bdr['OuterClad'][0],
+                      rightdomain=bdr['OuterClad'][1], bc='OuterClad')
 
         # Inner portion:
 
@@ -229,8 +260,7 @@ class ARF:
                          (self.Rc + self.Rto)**2 - self.Rto**2)
                         / (2 * (self.Rc + self.Rto) * self.Rcladi))
 
-        # Obtain the angle of the corresponding arc that sits between two
-        # capillaries.
+        # Obtain the angle of the arc between two  capillaries.
         psi = 2 * (phi - np.pi / 3)
 
         # Get the distance to the middle control pt for the aforementioned arc.
@@ -381,9 +411,71 @@ class ARF:
 
         return capillary_points
 
+    # EIGENPROBLEM ####################################################
 
-if __name__ == '__main__':
+    def wavenum(self):
+        """ Return wavenumber, otherwise known as k."""
 
-    a = ARF(freecapil=True, scaling=15)
+        return 2 * np.pi / self.wavelength
 
-    ng.Draw(a.mesh)
+    def betafrom(self, Z):
+        """ Return physical propagation constants (beta), given
+        nondimensional Z values, β = sqrt(k²n₀² - (Z/a)²). """
+
+        # account for micrometer lengths & any additional scaling in geometry
+        a = self.scaling * 1e-6
+        k = self.wavenum()
+        n0 = self.n_si
+        akn0 = a * k * n0   # a number less whacky in size
+        return np.sqrt(akn0**2 - Z**2) / a
+
+    def sqrZfrom(self, betas):
+        """ Return values of nondimensional Z squared, given physical
+        propagation constants betas, Z² = a² (k²n₀² - β²). """
+
+        a = self.scaling * 1e-6
+        k = self.wavenum()
+        n0 = self.n_si
+        return (a*k*n0)**2 - (a*betas)**2
+
+    def indx(self):
+        """ Return index of refraction as a coefficient function. """
+
+        index = {'Outer':         self.n_si,
+                 'Si':            self.n_si,
+                 'CapillaryEncl': self.n_air,
+                 'InnerCore':     self.n_air,
+                 'FillAir':       self.n_air}
+        return ng.CoefficientFunction([index[mat]
+                                       for mat in self.mesh.GetMaterials()])
+
+    def m2(self):
+        """ Return the (squared) nondimensional coefficient function
+        m2 = a² k² (n² - n₀²).
+        """
+
+        a = self.scaling * 1e-6
+        k = self.wavenum()
+        m2 = {'Outer':         0,
+              'Si':            0,
+              'CapillaryEncl': self.n_air**2 - self.n_si**2,
+              'InnerCore':     self.n_air**2 - self.n_si**2,
+              'FillAir':       self.n_air**2 - self.n_si**2}
+        return ng.CoefficientFunction([(a*k)**2 * m2[mat]
+                                       for mat in self.mesh.GetMaterials()])
+
+    def selfadjsystem(self, p):
+
+        X = ng.H1(self.mesh, order=p, dirichlet='Outer', complex=True)
+        u = X.TrialFunction()
+        v = X.TestFunction()
+
+        A = ng.BilinearForm(X)
+        A += grad(u)*grad(v) * dx - self.m2()*u*v * dx
+        A.Assemble()
+
+        B = ng.BilinearForm(X)
+        B += u * v * dx
+        B.Assemble()
+
+        return A, B, X
