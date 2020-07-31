@@ -1,20 +1,13 @@
 """
-Some mode computations on ARF model using a selfadjoint eigenproblem,
-yet to be modified for proper resonance computation.
+Computing some modes of ARF 
 """
 
-from pyeigfeast.spectralproj.ngs import NGvecs, SpectralProjNG
 from arf import ARF
 
+a = ARF()
 
-a = ARF(scaling=15)
-A, B, X = a.selfadjsystem(p=2)
+_, Ys, betas = a.polyeig(p=3)
 
-rad = 1
-ctr = 3069
-npts = 8
-P = SpectralProjNG(X, A.mat, B.mat, rad, ctr, npts, reduce_sym=True)
-Y = NGvecs(X, 10, B)
-Y.setrandom()
-lam, Y, history, Yl = P.feast(Y, hermitian=True, stop_tol=1e-6)
-Y.draw()
+print('betas =', betas)
+
+Ys[0].draw()

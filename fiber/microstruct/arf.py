@@ -9,6 +9,9 @@ import netgen.geom2d as geom2d
 import ngsolve as ng
 from ngsolve import grad, dx
 import numpy as np
+from pyeigfeast.spectralproj.ngs import NGvecs, SpectralProjNG
+from pyeigfeast.spectralproj.ngs import SpectralProjNGGeneral
+from fiberamp.fiber.spectralprojpoly import SpectralProjNGPoly
 
 
 class ARF:
@@ -26,10 +29,11 @@ class ARF:
                 the updatable length attributes by the 'scaling' value.
         """
 
+        self.freecapil = freecapil
+
         # DEFAULT ATTRIBUTE VALUES
 
-        self.freecapil = freecapil
-        self.scaling = 1
+        self.scaling = 15  # to get actual length, multiply by scaling * 1e-6
 
         # Primary geometrical parameters (geometry shown in tex folder)
 
@@ -47,19 +51,22 @@ class ARF:
         self.outer_maxh = 10.0
 
         # Updatable length attributes. All lengths are in micrometers.
+
         self.updatablelengths = ['Rc', 'tclad', 't', 'touter',
                                  'capillary_maxh', 'air_maxh',
                                  'inner_core_maxh', 'glass_maxh', 'outer_maxh']
+        for key in self.updatablelengths:  # Divide these lengths by scaling
+            setattr(self, key, getattr(self, key)/self.scaling)
 
         # Attributes specific to the embedded capillary case:
         #
         #    e = fraction of the capillary tube thickness that
         #        is embedded into the adjacent silica layer. When
-        #        embed=0, the outer circle of the capillary tube
+        #        e=0, the outer circle of the capillary tube
         #        osculates the circular boundary of the silica
-        #        layer. When embed=1, the inner circle of the capillary
+        #        layer. When e=1, the inner circle of the capillary
         #        tube is tangential to the circular boundary (and
-        #        the outer circle is embedded). Value of embed must be
+        #        the outer circle is embedded). Value of e must be
         #        strictly greater than 0 and less than or equal to 1.
         self.e = 0.025 / self.t    # nondimensional fraction
 
@@ -84,6 +91,7 @@ class ARF:
         if 'scaling' in kwargs:    # scale all updatable lengths
             for key in self.updatablelengths:
                 setattr(self, key, getattr(self, key)/kwargs['scaling'])
+        print('\nInitialized: ', self)
 
         # DEPENDENT attributes
 
@@ -169,6 +177,46 @@ class ARF:
         ngmesh = self.geo.GenerateMesh()
         self.mesh = ng.Mesh(ngmesh)
         self.mesh.Curve(3)
+
+        # MATERIAL COEFFICIENTS
+
+        # index of refraction
+        index = {'Outer':         self.n_air,
+                 'Si':            self.n_si,
+                 'CapillaryEncl': self.n_air,
+                 'InnerCore':     self.n_air,
+                 'FillAir':       self.n_air}
+        self.index = ng.CoefficientFunction(
+            [index[mat] for mat in self.mesh.GetMaterials()])
+
+        # coefficient for nondimensionalized eigenproblems
+        a = self.scaling * 1e-6
+        k = self.wavenum()
+        m = {'Outer':         0,
+             'Si':            self.n_si**2 - self.n_air**2,
+             'CapillaryEncl': 0,
+             'InnerCore':     0,
+             'FillAir':       0}
+        self.m = ng.CoefficientFunction(
+            [(a*k)**2 * m[mat] for mat in self.mesh.GetMaterials()])
+
+    def __str__(self):
+        s = 'ARF object.' + \
+            '\n  Rc = %g x %g x 1e-6 meters' % (self.Rc, self.scaling)
+        s += '\n  tclad = %g x %g x 1e-6 meters' % (self.tclad, self.scaling)
+        s += '\n  touter = %g x %g x 1e-6 meters' % (self.touter, self.scaling)
+        s += '\n  t = %g x %g x 1e-6 meters' % (self.t, self.scaling)
+        s += '\n  Wavelength = %g, refractive indices: %g (air), %g (Si)' \
+            % (self.wavelength, self.n_air, self.n_si)
+        s += '\n  Mesh sizes: %g (capillary), %g (air), %g (inner core)' \
+            % (self.capillary_maxh, self.air_maxh, self.inner_core_maxh)
+        s += '\n  Mesh sizes: %g (glass), %g (outer)'  \
+            % (self.glass_maxh,   self.outer_maxh)
+        if self.freecapil:
+            s += '\n  With free capillaries, s = %g.' % self.s
+        else:
+            s += '\n  With embedded capillaries, e = %g.' % self.e
+        return s
 
     # GEOMETRY ########################################################
 
@@ -418,64 +466,186 @@ class ARF:
 
         return 2 * np.pi / self.wavelength
 
-    def betafrom(self, Z):
+    def betafrom(self, Z2):
         """ Return physical propagation constants (beta), given
-        nondimensional Z values, β = sqrt(k²n₀² - (Z/a)²). """
+        nondimensional Z² values (input in Z2), per the formula
+        β = sqrt(k²n₀² - (Z/a)²). """
 
         # account for micrometer lengths & any additional scaling in geometry
         a = self.scaling * 1e-6
         k = self.wavenum()
-        n0 = self.n_si
-        akn0 = a * k * n0   # a number less whacky in size
-        return np.sqrt(akn0**2 - Z**2) / a
+        akn0 = a * k * self.n_air   # a number less whacky in size
+        return np.sqrt(akn0**2 - Z2) / a
 
     def sqrZfrom(self, betas):
         """ Return values of nondimensional Z squared, given physical
-        propagation constants betas, Z² = a² (k²n₀² - β²). """
+        propagation constants betas, ie, return Z² = a² (k²n₀² - β²). """
 
         a = self.scaling * 1e-6
         k = self.wavenum()
-        n0 = self.n_si
+        n0 = self.n_air
         return (a*k*n0)**2 - (a*betas)**2
-
-    def indx(self):
-        """ Return index of refraction as a coefficient function. """
-
-        index = {'Outer':         self.n_si,
-                 'Si':            self.n_si,
-                 'CapillaryEncl': self.n_air,
-                 'InnerCore':     self.n_air,
-                 'FillAir':       self.n_air}
-        return ng.CoefficientFunction([index[mat]
-                                       for mat in self.mesh.GetMaterials()])
-
-    def m2(self):
-        """ Return the (squared) nondimensional coefficient function
-        m2 = a² k² (n² - n₀²).
-        """
-
-        a = self.scaling * 1e-6
-        k = self.wavenum()
-        m2 = {'Outer':         0,
-              'Si':            0,
-              'CapillaryEncl': self.n_air**2 - self.n_si**2,
-              'InnerCore':     self.n_air**2 - self.n_si**2,
-              'FillAir':       self.n_air**2 - self.n_si**2}
-        return ng.CoefficientFunction([(a*k)**2 * m2[mat]
-                                       for mat in self.mesh.GetMaterials()])
 
     def selfadjsystem(self, p):
 
-        X = ng.H1(self.mesh, order=p, dirichlet='Outer', complex=True)
-        u = X.TrialFunction()
-        v = X.TestFunction()
+        X = ng.H1(self.mesh, order=p, dirichlet='OuterCircle', complex=True)
+        u, v = X.TnT()
 
         A = ng.BilinearForm(X)
-        A += grad(u)*grad(v) * dx - self.m2()*u*v * dx
-        A.Assemble()
-
+        A += grad(u)*grad(v) * dx - self.m*u*v * dx
         B = ng.BilinearForm(X)
         B += u * v * dx
-        B.Assemble()
+
+        with ng.TaskManager():
+            A.Assemble()
+            B.Assemble()
 
         return A, B, X
+
+    def autopmlsystem(self, p, alpha=1):
+
+        radial = ng.pml.Radial(rad=self.Rclado,
+                               alpha=alpha*1j, origin=(0, 0))
+        self.mesh.SetPML(radial, 'Outer')
+        X = ng.H1(self.mesh, order=p, dirichlet='OuterCircle', complex=True)
+        u, v = X.TnT()
+        A = ng.BilinearForm(X)
+        B = ng.BilinearForm(X)
+        A += (grad(u) * grad(v) - self.m * u * v) * dx
+        B += u * v * dx
+        with ng.TaskManager():
+            A.Assemble()
+            B.Assemble()
+        return A, B, X
+
+    def lineareig(self, p, method='auto',
+                  #    LP01, LP11,  LP02
+                  ctrs=(5,   12.71, 25.9),
+                  radi=(0.1,  0.1,   0.2)):
+        """
+        Solve a linear eigenproblem to compute mode approximations.
+
+        If method='selfadjoint', then run selfadjoint feast with
+        the given centers and radii by solving a Dirichlet Helmholtz
+        eigenproblem. Loss factors cannot be computed with this method.
+
+        If method='auto', use NGSolve's mesh PML transformation to formulate
+        and solve a linear nonselfadjoint eigenproblem. Eigenvalues will
+        generally have imaginary parts, but we usually do not get as
+        good accuracy with this method as with the nonlinear method.
+
+        Default paramater values of ctrs and radii are appropriate
+        only for an ARF object with default constructor parameters. """
+
+        npts = 8
+        mspn = 5
+        Ys = []
+        Zs = []
+        betas = []
+
+        if method == 'selfadjoint':
+            A, B, X = self.selfadjsystem(p)
+        elif method == 'auto':
+            A, B, X = self.autopmlsystem(p)
+        else:
+            raise ValueError('Unimplemented method=%s asked of lineareig'
+                             % method)
+
+        for rad, ctr in zip(radi, ctrs):
+            Y = NGvecs(X, mspn, B.mat)
+            Y.setrandom()
+            if method == 'selfadjoint':
+                P = SpectralProjNG(X, A.mat, B.mat, rad, ctr,
+                                   npts, reduce_sym=True)
+            else:
+                P = SpectralProjNGGeneral(X, A.mat, B.mat, rad, ctr, npts)
+
+            Zsqr, Y, history, Yl = P.feast(Y, hermitian=True, stop_tol=1e-14)
+            Ys.append(Y.copy())
+            Zs.append(Zsqr)
+            betas.append(self.betafrom(Zsqr))
+
+        return Zs, Ys, betas
+
+    def polypmlsystem(self, p, alpha=1):
+
+        dx_pml = dx(definedon=self.mesh.Materials('Outer'))
+        dx_int = dx(definedon=self.mesh.Materials
+                    ('Si|CapillaryEncl|InnerCore|FillAir'))
+        R = self.Rclado  # PML starts right after cladding
+        s = 1 + 1j * alpha
+        x = ng.x
+        y = ng.y
+        r = ng.sqrt(x*x+y*y) + 0j
+        X = ng.H1(self.mesh, order=p, dirichlet='OuterCircle', complex=True)
+        u, v = X.TnT()
+        ux, uy = grad(u)
+        vx, vy = grad(v)
+
+        AA = [ng.BilinearForm(X, check_unused=False)]
+        AA[0] += (s*r/R) * grad(u) * grad(v) * dx_pml
+        AA[0] += s * (r-R)/(R*r*r) * (x*ux+y*uy) * v * dx_pml
+        AA[0] += s * (R-2*r)/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
+        AA[0] += -s**3 * (r-R)**2/(R*r) * u * v * dx_pml
+
+        AA += [ng.BilinearForm(X)]
+        AA[1] += grad(u) * grad(v) * dx_int
+        AA[1] += -self.m * u * v * dx_int
+        AA[1] += 2 * (r-R)/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
+        AA[1] += 1/r**2 * (x*ux+y*uy) * v * dx_pml
+        AA[1] += -2*s*s*(r-R)/r * u * v * dx_pml
+
+        AA += [ng.BilinearForm(X, check_unused=False)]
+        AA[2] += R/s/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
+        AA[2] += -R*s/r * u * v * dx_pml
+
+        AA += [ng.BilinearForm(X, check_unused=False)]
+        AA[3] += -u * v * dx_int
+
+        # A mass matrix for compound space  X x X x X
+        X3 = ng.FESpace([X, X, X])
+        u0, u1, u2 = X3.TrialFunction()
+        v0, v1, v2 = X3.TestFunction()
+        B = ng.BilinearForm(X3)
+        B += (u0 * v0 + u1 * v1 + u2 * v2) * ng.dx
+
+        with ng.TaskManager():
+            B.Assemble()
+            for i in range(len(AA)):
+                AA[i].Assemble()
+
+        return AA, B, X, X3
+
+    def polyeig(self, p, alpha=1,
+                #    LP01, LP11
+                ctrs=(2.2,  3.6),
+                radi=(0.2,  0.2)):
+        """
+        Solve the Nannen-Wess nonlinear polynomial PML eigenproblem
+        to compute modes with losses. A custom polynomial feast uses
+        the given centers and radii to search for the modes.
+        """
+
+        AA, B, X, X3 = self.polypmlsystem(p=p, alpha=alpha)
+        npts = 8
+        mspn = 5
+        Ys = []
+        Zs = []
+        betas = []
+
+        for rad, ctr in zip(radi, ctrs):
+            Y = NGvecs(X3, mspn, M=B.mat)
+            Yl = Y.create()
+            Y.setrandom()
+            Yl.setrandom()
+
+            P = SpectralProjNGPoly(AA, X, rad, ctr, npts)
+            Z, Y, _, Yl = P.feast(Y, Yl=Yl, hermitian=False,
+                                  stop_tol=1e-13)
+
+            y = P.first(Y)
+            Ys.append(y.copy())
+            Zs.append(Z)
+            betas.append(self.betafrom(Z**2))
+
+        return Zs, Ys, betas
