@@ -38,15 +38,15 @@ class ARF:
         # Primary geometrical parameters (geometry shown in tex folder)
 
         self.Rc = 15.0    # radius of inner part of hollow core
-        self.tclad = 2    # thickness of the glass jacket/sheath
+        self.tclad = 5    # thickness of the glass jacket/sheath
         self.touter = 10  # thickness of final outer annular layer
         self.t = 0.42     # thickness of the capillary tubes
 
         # Attributes for tuning mesh sizes
 
-        self.capillary_maxh = 0.8
-        self.air_maxh = 8.0
-        self.inner_core_maxh = 2
+        self.capillary_maxh = 0.5
+        self.air_maxh = 4.0
+        self.inner_core_maxh = 1
         self.glass_maxh = 10.0
         self.outer_maxh = 10.0
 
@@ -206,7 +206,7 @@ class ARF:
         s += '\n  tclad = %g x %g x 1e-6 meters' % (self.tclad, self.scaling)
         s += '\n  touter = %g x %g x 1e-6 meters' % (self.touter, self.scaling)
         s += '\n  t = %g x %g x 1e-6 meters' % (self.t, self.scaling)
-        s += '\n  Wavelength = %g, refractive indices: %g (air), %g (Si)' \
+        s += '\n  Wavelength = %g m, refractive indices: %g (air), %g (Si)' \
             % (self.wavelength, self.n_air, self.n_si)
         s += '\n  Mesh sizes: %g (capillary), %g (air), %g (inner core)' \
             % (self.capillary_maxh, self.air_maxh, self.inner_core_maxh)
@@ -616,10 +616,10 @@ class ARF:
 
         return AA, B, X, X3
 
-    def polyeig(self, p, alpha=1,
-                #    LP01, LP11
-                ctrs=(2.2,  3.6),
-                radi=(0.2,  0.2)):
+    def polyeig(self, p, alpha=1, stop_tol=1e-12,
+                #    LP01,   LP11,  LP02
+                ctrs=(2.24,  3.57,  5.09),
+                radi=(0.05,  0.01,  0.05)):
         """
         Solve the Nannen-Wess nonlinear polynomial PML eigenproblem
         to compute modes with losses. A custom polynomial feast uses
@@ -641,8 +641,7 @@ class ARF:
 
             P = SpectralProjNGPoly(AA, X, rad, ctr, npts)
             Z, Y, _, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                  stop_tol=1e-13)
-
+                                  stop_tol=stop_tol)
             y = P.first(Y)
             Ys.append(y.copy())
             Zs.append(Z)
