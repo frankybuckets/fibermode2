@@ -12,6 +12,7 @@ import numpy as np
 from pyeigfeast.spectralproj.ngs import NGvecs, SpectralProjNG
 from pyeigfeast.spectralproj.ngs import SpectralProjNGGeneral
 from fiberamp.fiber.spectralprojpoly import SpectralProjNGPoly
+import os
 
 
 class ARF:
@@ -24,9 +25,10 @@ class ARF:
                 be modeled as free standing in the hollow region.
                 Otherwise, they will be embedded into the glass sheath.
 
-           kwargs: Overwrite default attribute values set in the class.
+           kwargs: Override default values of updatable length attributes.
+                Give length values in units of micrometers.
                 A keyword argument 'scaling', if given, will also divide
-                the updatable length attributes by the 'scaling' value.
+                the updatable length attributes by 'scaling'.
         """
 
         self.freecapil = freecapil
@@ -36,7 +38,6 @@ class ARF:
         self.scaling = 15  # to get actual length, multiply by scaling * 1e-6
 
         # Primary geometrical parameters (geometry shown in tex folder)
-
         self.Rc = 15.0    # radius of inner part of hollow core
         self.tclad = 5    # thickness of the glass jacket/sheath
         self.touter = 10  # thickness of final outer annular layer
@@ -49,14 +50,19 @@ class ARF:
         self.inner_core_maxh = 1
         self.glass_maxh = 10.0
         self.outer_maxh = 10.0
+        self.refined = 0
 
         # Updatable length attributes. All lengths are in micrometers.
 
         self.updatablelengths = ['Rc', 'tclad', 't', 'touter',
                                  'capillary_maxh', 'air_maxh',
                                  'inner_core_maxh', 'glass_maxh', 'outer_maxh']
+
+        # Scale updatablelengths and store scaled values in class attributes
+        # whose name has an 's' appended. Only the scaled values are used
+        # for geometry and mesh construction.
         for key in self.updatablelengths:  # Divide these lengths by scaling
-            setattr(self, key, getattr(self, key)/self.scaling)
+            setattr(self, key + 's', getattr(self, key)/self.scaling)
 
         # Attributes specific to the embedded capillary case:
         #
@@ -90,31 +96,36 @@ class ARF:
             setattr(self, key, value)
         if 'scaling' in kwargs:    # scale all updatable lengths
             for key in self.updatablelengths:
-                setattr(self, key, getattr(self, key)/kwargs['scaling'])
+                setattr(self, key + 's', getattr(self, key)/kwargs['scaling'])
         print('\nInitialized: ', self)
 
-        # DEPENDENT attributes
+        # attributes in addition to updatablelengths for reconstructing obj
+        #    (don't save scaling: avoid re-re-scaling!)
+        self.savableattr = ['freecapil', 'n_air', 'n_si', 'wavelength',
+                            'e', 's', 'scaling', 'refined']
+
+        # DEPENDENT attributes (dependent on scaled length attributes)
 
         # distance b/w capillary tubes
-        self.d = 5 * self.t
+        self.d = 5 * self.ts
         # inner radius of the capillary tubes
-        self.Rto = self.Rc - self.d
+        self.Rto = self.Rcs - self.d
         # outer radius of the capillary tubes
-        self.Rti = self.Rto - self.t
+        self.Rti = self.Rto - self.ts
 
         if self.freecapil:
             # outer radius of glass sheath, where the geometry ends
-            self.Rclado = self.Rc + 2 * self.Rto + self.tclad
+            self.Rclado = self.Rcs + 2 * self.Rto + self.tclads
             # radius where glass sheath (cladding) begins
-            self.Rcladi = self.Rc + 2 * self.Rto
+            self.Rcladi = self.Rcs + 2 * self.Rto
         else:
             # radius where glass sheath (cladding) begins
-            self.Rcladi = self.Rc + self.t + 2*self.Rti + self.t*(1-self.e)
+            self.Rcladi = self.Rcs + self.ts + 2*self.Rti + self.ts*(1-self.e)
             # outer radius of glass sheath
-            self.Rclado = self.Rcladi + self.tclad
+            self.Rclado = self.Rcladi + self.tclads
 
         # final radius where geometry ends
-        self.Rout = self.Rclado + self.touter
+        self.Rout = self.Rclado + self.touters
 
         # BOUNDARY & MATERIAL NAMES
 
@@ -167,15 +178,22 @@ class ARF:
             self.geo.SetMaterial(domain, material)
 
         # Set the maximum mesh sizes in subdomains
-        self.geo.SetDomainMaxH(mat['Outer'], self.outer_maxh)
-        self.geo.SetDomainMaxH(mat['Si'], self.glass_maxh)
-        self.geo.SetDomainMaxH(mat['CapillaryEncl'], self.air_maxh)
-        self.geo.SetDomainMaxH(mat['InnerCore'], self.inner_core_maxh)
-        self.geo.SetDomainMaxH(mat['FillAir'], self.air_maxh)
+        self.geo.SetDomainMaxH(mat['Outer'], self.outer_maxhs)
+        self.geo.SetDomainMaxH(mat['Si'], self.glass_maxhs)
+        self.geo.SetDomainMaxH(mat['CapillaryEncl'], self.air_maxhs)
+        self.geo.SetDomainMaxH(mat['InnerCore'], self.inner_core_maxhs)
+        self.geo.SetDomainMaxH(mat['FillAir'], self.air_maxhs)
 
         # Generate Mesh
-        ngmesh = self.geo.GenerateMesh()
-        self.mesh = ng.Mesh(ngmesh)
+        if 'ngmesh' in kwargs:
+            print('  Using input mesh.')
+            self.mesh = ng.Mesh(kwargs['ngmesh'])
+            self.mesh.ngmesh.SetGeometry(self.geo)
+        else:
+            print('  Generating new mesh.')
+            ngmesh = self.geo.GenerateMesh()
+            self.mesh = ng.Mesh(ngmesh)
+
         self.mesh.Curve(3)
 
         # MATERIAL COEFFICIENTS
@@ -200,18 +218,27 @@ class ARF:
         self.m = ng.CoefficientFunction(
             [(a*k)**2 * m[mat] for mat in self.mesh.GetMaterials()])
 
+        # OUTPUT LOCATION
+
+        self.outfolder = './outputs'
+        if os.path.isdir(self.outfolder) is not True:
+            os.mkdir(self.outfolder)
+
     def __str__(self):
         s = 'ARF object.' + \
-            '\n  Rc = %g x %g x 1e-6 meters' % (self.Rc, self.scaling)
-        s += '\n  tclad = %g x %g x 1e-6 meters' % (self.tclad, self.scaling)
-        s += '\n  touter = %g x %g x 1e-6 meters' % (self.touter, self.scaling)
-        s += '\n  t = %g x %g x 1e-6 meters' % (self.t, self.scaling)
+            '\n  Rc = %g x %g x 1e-6 meters' % (self.Rcs, self.scaling)
+        s += '\n  tclad = %g x %g x 1e-6 meters' % (self.tclads, self.scaling)
+        s += '\n  touter = %g x %g x 1e-6 meters' % (
+            self.touters, self.scaling)
+        s += '\n  t = %g x %g x 1e-6 meters' % (self.ts, self.scaling)
         s += '\n  Wavelength = %g m, refractive indices: %g (air), %g (Si)' \
             % (self.wavelength, self.n_air, self.n_si)
         s += '\n  Mesh sizes: %g (capillary), %g (air), %g (inner core)' \
-            % (self.capillary_maxh, self.air_maxh, self.inner_core_maxh)
+            % (self.capillary_maxhs, self.air_maxhs, self.inner_core_maxhs)
         s += '\n  Mesh sizes: %g (glass), %g (outer)'  \
-            % (self.glass_maxh,   self.outer_maxh)
+            % (self.glass_maxhs,   self.outer_maxhs)
+        if self.refined > 0:
+            s += '\n  Uniformly refined %g times.' % self.refined
         if self.freecapil:
             s += '\n  With free capillaries, s = %g.' % self.s
         else:
@@ -241,7 +268,7 @@ class ARF:
 
         # The capillary tubes
         Nxc = 0                   # N tube center xcoord
-        Nyc = self.Rc + self.Rto  # N tube center ycoord
+        Nyc = self.Rcs + self.Rto  # N tube center ycoord
         NEyc = Nyc / 2            # NE tube center ycoord
         NExc = ng.sqrt(Nyc**2-NEyc**2)  # NE tube center xcoord
         NWxc = -NExc             # NW tube center ycoord
@@ -264,18 +291,18 @@ class ARF:
             geo.AddCircle(c=c, r=self.Rti,
                           leftdomain=bdr['CapilInner'][0],
                           rightdomain=bdr['CapilInner'][1],
-                          bc='CapilInner', maxh=self.capillary_maxh)
+                          bc='CapilInner', maxh=self.capillary_maxhs)
             geo.AddCircle(c=c, r=self.Rto,
                           leftdomain=bdr['CapilOuter'][0],
                           rightdomain=bdr['CapilOuter'][1],
-                          bc='CapilOuter', maxh=self.capillary_maxh)
+                          bc='CapilOuter', maxh=self.capillary_maxhs)
 
         # Inner core region (not physcial, only used for refinement)
-        radius = 0.75 * self.Rc
+        radius = 0.75 * self.Rcs
         geo.AddCircle(c=(0, 0), r=radius,
                       leftdomain=bdr['Inner'][0],
                       rightdomain=bdr['Inner'][1],
-                      bc='Inner', maxh=self.inner_core_maxh)
+                      bc='Inner', maxh=self.inner_core_maxhs)
 
         return geo
 
@@ -305,8 +332,8 @@ class ARF:
         # (-Rcladi * cos(phi), Rcladi * sin(phi)).
 
         phi = np.arcsin((self.Rcladi**2 +
-                         (self.Rc + self.Rto)**2 - self.Rto**2)
-                        / (2 * (self.Rc + self.Rto) * self.Rcladi))
+                         (self.Rcs + self.Rto)**2 - self.Rto**2)
+                        / (2 * (self.Rcs + self.Rto) * self.Rcladi))
 
         # Obtain the angle of the arc between two  capillaries.
         psi = 2 * (phi - np.pi / 3)
@@ -315,7 +342,7 @@ class ARF:
         D = self.Rcladi / np.cos(psi / 2)
 
         # The center of the top circle.
-        c = (0, self.Rc + self.Rto)
+        c = (0, self.Rcs + self.Rto)
 
         capillary_points = []
 
@@ -352,7 +379,7 @@ class ARF:
 
         # The coordinates of the tube centers
         Nxc = 0         # N tube center xcoord
-        Nyc = self.Rc + self.Rto  # N tube center ycoord
+        Nyc = self.Rcs + self.Rto  # N tube center ycoord
         NEyc = Nyc / 2  # NE tube center ycoord
         NExc = np.sqrt(Nyc**2-NEyc**2)  # NE tube center xcoord
         NWxc = -NExc    # NW tube center ycoord
@@ -377,14 +404,14 @@ class ARF:
             geo.AddCircle(c=c, r=self.Rti,
                           leftdomain=bdr['CapilInner'][0],
                           rightdomain=bdr['CapilInner'][1],
-                          bc='CapilInner', maxh=self.capillary_maxh)
+                          bc='CapilInner', maxh=self.capillary_maxhs)
 
         # Add the circle for the inner core.
-        radius = 0.75 * self.Rc
+        radius = 0.75 * self.Rcs
         geo.AddCircle(c=origin, r=radius,
                       leftdomain=bdr['Inner'][0],
                       rightdomain=bdr['Inner'][1],
-                      bc='Inner', maxh=self.inner_core_maxh)
+                      bc='Inner', maxh=self.inner_core_maxhs)
 
         return geo
 
@@ -459,6 +486,14 @@ class ARF:
 
         return capillary_points
 
+    def refine(self):
+        """ Refine mesh by dividing each triangle into four """
+
+        self.refined += 1
+        self.mesh.ngmesh.Refine()
+        self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
+        self.mesh.Curve(3)
+
     # EIGENPROBLEM ####################################################
 
     def wavenum(self):
@@ -518,7 +553,7 @@ class ARF:
             B.Assemble()
         return A, B, X
 
-    def lineareig(self, p, method='auto',
+    def lineareig(self, p, method='selfadjoint', initdim=5, stop_tol=1e-13,
                   #    LP01, LP11,  LP02
                   ctrs=(5,   12.71, 25.9),
                   radi=(0.1,  0.1,   0.2)):
@@ -538,7 +573,6 @@ class ARF:
         only for an ARF object with default constructor parameters. """
 
         npts = 8
-        mspn = 5
         Ys = []
         Zs = []
         betas = []
@@ -552,7 +586,7 @@ class ARF:
                              % method)
 
         for rad, ctr in zip(radi, ctrs):
-            Y = NGvecs(X, mspn, B.mat)
+            Y = NGvecs(X, initdim, B.mat)
             Y.setrandom()
             if method == 'selfadjoint':
                 P = SpectralProjNG(X, A.mat, B.mat, rad, ctr,
@@ -560,7 +594,9 @@ class ARF:
             else:
                 P = SpectralProjNGGeneral(X, A.mat, B.mat, rad, ctr, npts)
 
-            Zsqr, Y, history, Yl = P.feast(Y, hermitian=True, stop_tol=1e-14)
+            isherm = method == 'selfadjoint'
+            Zsqr, Y, history, Yl = P.feast(Y, hermitian=isherm,
+                                           stop_tol=stop_tol)
             Ys.append(Y.copy())
             Zs.append(Zsqr)
             betas.append(self.betafrom(Zsqr))
@@ -648,3 +684,69 @@ class ARF:
             betas.append(self.betafrom(Z**2))
 
         return Zs, Ys, betas
+
+    # SAVE & LOAD #####################################################
+
+    def save(self, fileprefix):
+        """ Save this object so it can be loaded later """
+
+        arffilename = os.path.abspath(self.outfolder+'/'+fileprefix+'_arf.npz')
+        d = {}
+        for key in self.updatablelengths + self.savableattr:
+            d[key] = getattr(self, key)
+        print('Writing ARF object into ', arffilename)
+        np.savez(arffilename, **d)
+
+        meshf = os.path.abspath(self.outfolder+'/'+fileprefix+'_msh.vol.gz')
+        print('Writing mesh into ', meshf)
+        self.mesh.ngmesh.Save(meshf)
+
+    def savemodes(self, fileprefix, Y, p, betas,
+                  solverparams, saveallagain=True):
+        """ Save a NGVec span object Y containing modes of FE degree p """
+
+        f = os.path.abspath(self.outfolder+'/'+fileprefix+'_mde.npz')
+        if saveallagain:
+            self.save(fileprefix)
+        y = Y.tonumpy()
+        d = {'y': y, 'p': p, 'betas': betas}
+        d.update(**solverparams)
+        print('Writing mode file ', f)
+        np.savez(f, **d)
+
+
+# LOAD FROM FILE #####################################################
+
+
+def loadarf(fileprefix):
+    """ Load a saved ARF object """
+
+    f = os.path.abspath(fileprefix+'_arf.npz')
+    d = dict(np.load(f, allow_pickle=True))
+    for k, v in d.items():
+        d[k] = v.item()  # convert singleton arrays to scalars
+
+    # if a mesh file exists, load mesh from it (else generate new mesh)
+    meshf = fileprefix+'_msh.vol.gz'
+    if os.path.exists(meshf):
+        d['ngmesh'] = ng.Mesh(meshf).ngmesh
+
+    return ARF(**d)
+
+
+def loadarfmode(fileprefix):
+
+    a = loadarf(fileprefix)
+    modef = os.path.abspath(fileprefix+'_mde.npz')
+
+    d = dict(np.load(modef, allow_pickle=True))
+    p = int(d.pop('p'))
+    betas = d.pop('betas')
+    y = d.pop('y')
+
+    print('  Degree %d modes found in file %s' % (p, modef))
+    fes = ng.H1(a.mesh, order=p, dirichlet='Outer', complex=True)
+    Y = NGvecs(fes, y.shape[1])
+    Y.fromnumpy(y)
+
+    return a, Y, betas, p, d
