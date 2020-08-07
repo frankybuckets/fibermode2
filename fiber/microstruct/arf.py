@@ -652,10 +652,10 @@ class ARF:
 
         return AA, B, X, X3
 
-    def polyeig(self, p, alpha=1, stop_tol=1e-12,
-                #    LP01,   LP11,  LP02
-                ctrs=(2.24,  3.57,  5.09),
-                radi=(0.05,  0.01,  0.05)):
+    def polyeig(self, p, alpha=1, stop_tol=1e-12, npts=8, initdim=5,
+                #    LP01,   LP11,  LP21   LP02
+                ctrs=(2.24,  3.57,  4.75,  5.09),
+                radi=(0.05,  0.01,  0.01,  0.01)):
         """
         Solve the Nannen-Wess nonlinear polynomial PML eigenproblem
         to compute modes with losses. A custom polynomial feast uses
@@ -663,14 +663,12 @@ class ARF:
         """
 
         AA, B, X, X3 = self.polypmlsystem(p=p, alpha=alpha)
-        npts = 8
-        mspn = 5
         Ys = []
         Zs = []
         betas = []
 
         for rad, ctr in zip(radi, ctrs):
-            Y = NGvecs(X3, mspn, M=B.mat)
+            Y = NGvecs(X3, initdim, M=B.mat)
             Yl = Y.create()
             Y.setrandom()
             Yl.setrandom()
@@ -725,7 +723,6 @@ def loadarf(fileprefix):
     d = dict(np.load(f, allow_pickle=True))
     for k, v in d.items():
         d[k] = v.item()  # convert singleton arrays to scalars
-
     # if a mesh file exists, load mesh from it (else generate new mesh)
     meshf = fileprefix+'_msh.vol.gz'
     if os.path.exists(meshf):
@@ -734,16 +731,24 @@ def loadarf(fileprefix):
     return ARF(**d)
 
 
-def loadarfmode(fileprefix):
+def loadarfmode(fileprefix, arfile=None):
+    """ Load a saved mode together with an ARF object. If the ARF object
+    and mesh are in another file with prefix arfile, then give it as
+    the optional argument. """
 
-    a = loadarf(fileprefix)
+    if arfile is None:
+        arfile = fileprefix
+    a = loadarf(arfile)
     modef = os.path.abspath(fileprefix+'_mde.npz')
-
     d = dict(np.load(modef, allow_pickle=True))
     p = int(d.pop('p'))
     betas = d.pop('betas')
     y = d.pop('y')
-
+    for k, v in d.items():
+        if v.ndim > 0:
+            d[k] = v
+        else:  # convert singleton arrays to scalars
+            d[k] = v.item()
     print('  Degree %d modes found in file %s' % (p, modef))
     fes = ng.H1(a.mesh, order=p, dirichlet='Outer', complex=True)
     Y = NGvecs(fes, y.shape[1])
