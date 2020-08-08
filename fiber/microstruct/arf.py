@@ -489,6 +489,7 @@ class ARF:
     def refine(self):
         """ Refine mesh by dividing each triangle into four """
 
+        print('  Refining ARF mesh uniformly.')
         self.refined += 1
         self.mesh.ngmesh.Refine()
         self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
@@ -656,10 +657,27 @@ class ARF:
                 #    LP01,   LP11,  LP21   LP02
                 ctrs=(2.24,  3.57,  4.75,  5.09),
                 radi=(0.05,  0.01,  0.01,  0.01)):
-        """
-        Solve the Nannen-Wess nonlinear polynomial PML eigenproblem
+        """Solve the Nannen-Wess nonlinear polynomial PML eigenproblem
         to compute modes with losses. A custom polynomial feast uses
         the given centers and radii to search for the modes.
+
+        PARAMETERS:
+
+        p:        polynomial degree of finite elements
+        alpha:    PML strength
+        stop_tol: quit feast when relative ew diff are smaller than this
+        npts:     number of quadrature points in feast
+        initdim:  dimension of initial span for feast
+        ctrs, radi: repeat feast with a circular contour centered at
+                  ctrs[i] of radius radi[i] for each i. Eigenvalues found by
+                  feast for each i are returned in output Zs[i], and the
+                  corresponding eigenspaces are in span object Ys[i].
+
+        OUTPUTS:  Zs, Ys, betas
+
+        Zs[i] and Ys[i] are as described above, and betas[i] give the
+        propagation constants corresponding to nondimensional
+        eigenvalues in Zs[i].
         """
 
         AA, B, X, X3 = self.polypmlsystem(p=p, alpha=alpha)
