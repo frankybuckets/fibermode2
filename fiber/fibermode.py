@@ -697,8 +697,8 @@ class FiberMode:
         y = NGvecs(self.X, Y.m)
         yl = NGvecs(self.X, Y.m)
         for i in range(Y.m):
-            y.data[i].data = Yg.components[0].vecs[i]
-            yl.data[i].data = Ylg.components[0].vecs[i]
+            y._mv[i].data = Yg.components[0].vecs[i]
+            yl._mv[i].data = Ylg.components[0].vecs[i]
 
         return z, yl, y, P, Yl, Y
 
