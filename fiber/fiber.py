@@ -552,17 +552,15 @@ class Fiber:
             rclad = rfiber
             # specify signal wavelength first,
             # then specify tones
-            wavelen = 2.133e-6
+            wavelen = 2.11e-6
             ncore = 1.439994
             k0 = 2 * pi / wavelen
             NA = 0.09
             nclad = sqrt(ncore*ncore - NA*NA)
-            tone_wavelens = [1.95e-6]
-            ASE_wavelens = [1.9e-6, 1.94e-6, 1.98e-6, 2.02e-6,
-                            2.06e-6, 2.1e-6, 2.14e-6]
+            tone_wavelens = [1.9306356965146654e-6]
+            ASE_wavelens = [1.925e-6, 1.975e-6, 2.025e-6, 2.075e-6, 2.125e-6]
 
             extra_wavelens = tone_wavelens + ASE_wavelens
-            
             L = 0.1  # to be varied for each simulation
 
         elif case == 'Toned_Yb':
@@ -579,7 +577,7 @@ class Fiber:
             tone_wavelens = [1.040e-6]
 
             extra_wavelens = tone_wavelens
-  
+
         elif case == 'LLMA_Yb':
 
             # ** Variation of Nufern Ytterbium-Doped LMA Double Clad Fiber **
