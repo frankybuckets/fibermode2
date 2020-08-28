@@ -322,7 +322,8 @@ class FiberMode:
                 betas_, Zsqrs_, Y_ = compute(VV)
                 betas = np.append(betas, betas_)
                 Zsqrs = np.append(Zsqrs, Zsqrs_)
-                Y.data += Y_.data
+                for ind in range(len(betas_)):
+                    Y._mv.Append(Y_._mv[ind])
                 Y.m += len(betas_)
                 fmind.append(fmind[-1] + len(betas_))
             fmind.append(len(betas))
