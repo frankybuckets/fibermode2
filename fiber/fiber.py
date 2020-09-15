@@ -511,6 +511,36 @@ class Fiber:
 
             L = 0.1   # to be varied for each simulation
 
+        elif case == 'Nufern_Tm2':
+
+            # ** (25/400) Thulium-Doped LMA Double Clad Fiber **
+            # From Spec sheet provided by Grosek:
+
+            rcore = 1.25e-5
+            rclad = 2e-4
+            wavelen = 2.133e-6
+            ncore = 1.439994
+            k0 = 2 * pi / wavelen
+            NA = 0.1
+            nclad = sqrt(ncore*ncore - NA*NA)
+
+            L = 0.1   # to be varied for each simulation
+
+        elif case == 'Nufern_Tm3':
+
+            # ** (25/400) Thulium-Doped LMA Double Clad Fiber **
+            # From Spec sheet provided by Grosek:
+
+            rcore = 1.25e-5
+            rclad = 2e-4
+            wavelen = 2.170e-6
+            ncore = 1.439994
+            k0 = 2 * pi / wavelen
+            NA = 0.1
+            nclad = sqrt(ncore*ncore - NA*NA)
+
+            L = 0.1   # to be varied for each simulation
+
         elif case == 'Toned_Tm':
 
             rcore = 1e-5
@@ -558,6 +588,42 @@ class Fiber:
             NA = 0.09
             nclad = sqrt(ncore*ncore - NA*NA)
             tone_wavelens = [1.9306356965146654e-6]
+            ASE_wavelens = [1.925e-6, 1.975e-6, 2.025e-6, 2.075e-6, 2.125e-6]
+
+            extra_wavelens = tone_wavelens + ASE_wavelens
+            L = 0.1  # to be varied for each simulation
+
+        elif case == 'TonedASE_Tm2':
+
+            rcore = 1e-5
+            rfiber = 2.75e-4
+            rclad = rfiber
+            # specify signal wavelength first,
+            # then specify tones
+            wavelen = 2.133e-6
+            ncore = 1.439994
+            k0 = 2 * pi / wavelen
+            NA = 0.09
+            nclad = sqrt(ncore*ncore - NA*NA)
+            tone_wavelens = [1.9498737599293853e-6]
+            ASE_wavelens = [1.925e-6, 1.975e-6, 2.025e-6, 2.075e-6, 2.125e-6]
+
+            extra_wavelens = tone_wavelens + ASE_wavelens
+            L = 0.1  # to be varied for each simulation
+
+        elif case == 'TonedASE_Tm3':
+
+            rcore = 1e-5
+            rfiber = 2.75e-4
+            rclad = rfiber
+            # specify signal wavelength first,
+            # then specify tones
+            wavelen = 2.170e-6
+            ncore = 1.439994
+            k0 = 2 * pi / wavelen
+            NA = 0.09
+            nclad = sqrt(ncore*ncore - NA*NA)
+            tone_wavelens = [1.9807473196535323e-6]
             ASE_wavelens = [1.925e-6, 1.975e-6, 2.025e-6, 2.075e-6, 2.125e-6]
 
             extra_wavelens = tone_wavelens + ASE_wavelens
