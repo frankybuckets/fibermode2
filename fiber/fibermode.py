@@ -113,6 +113,7 @@ class FiberMode:
         self.setstepindexgeom()  # sets self.geo
         mesh = ng.Mesh(self.geo.GenerateMesh())
         mesh.Curve(3)
+        # mesh.Refine()
         ng.Draw(mesh)
         self.mesh = mesh
 
@@ -1191,7 +1192,7 @@ class FiberMode:
                 self.savemodes(fibername+'_p' + str(p), betas, Y,
                                saveallagain=False, name2ind=n2i,
                                exact=exbeta, tone=tone)
-        return betas, Y, n2
+        return betas, Y, n2i
 
     def makeguidedmodelibrary(self, maxp=5, maxl=9, delta=None,
                               nspan=15, interp=False, tone=False):
