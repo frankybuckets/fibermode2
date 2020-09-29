@@ -113,7 +113,6 @@ class FiberMode:
         self.setstepindexgeom()  # sets self.geo
         mesh = ng.Mesh(self.geo.GenerateMesh())
         mesh.Curve(3)
-        # mesh.Refine()
         ng.Draw(mesh)
         self.mesh = mesh
 
@@ -828,89 +827,6 @@ class FiberMode:
 
     # BENT MODES ############################################################
 
-    def bentmode_noloss(self, p, curvature=12.5, bendfactor=1.28,
-                        temperature=30, nquadpts=20, nspan=15,
-                        stop_tol=1e-10, check_contour=2, niterations=50):
-        self.curvature = curvature
-        self.bendfactor = bendfactor
-        fib = self.fiber
-
-        n = CoefficientFunction([fib.nclad, fib.nclad, fib.ncore])
-        dndT = 1.29e-5
-        aa = fib.rcore
-        NA = np.sqrt(fib.ncore ** 2 - fib.nclad ** 2)
-
-        self.p = p
-        self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
-
-        def compute(vnum):
-            """
-            solves the non-dimensional eigenproblem using FEAST
-            for a given V-number
-            INPUT:
-                vnum = V-number in float
-            OUTPUT:
-                betas, Zsqrs, Y: Same as guidemodes docstring
-            """
-            ka = vnum / NA
-            ka2 = ka ** 2
-            kan2 = ka2 * (fib.nclad ** 2)
-
-            nbent_wo_T = n * (1 + (ng.x * aa * curvature/bendfactor))
-            nbent = nbent_wo_T + (dndT * temperature)
-
-            m = ka2 * nbent * nbent - kan2
-            self.m = CoefficientFunction([0, m, m])
-
-            u, v = self.X.TnT()
-            a = BilinearForm(self.X)
-            a += (grad(u) * grad(v) - self.m * u * v) * dx
-
-            b = BilinearForm(self.X)
-            b += u * v * dx
-
-            with ng.TaskManager():
-                a.Assemble()
-                b.Assemble()
-            self.a = a
-            self.b = b
-
-            left = -vnum*vnum
-            right = 0
-
-            print("Running selfadjoint FEAST to capture guided modes in \
-            ({},{})".format(left, right))
-
-            print('assuming not more than %d modes in this interval' % nspan)
-
-            ctr = (right+left)/2
-            rad = (right-left)/2
-            P = SpectralProjNG(self.X, a.mat, b.mat, rad, ctr, nquadpts,
-                               reduce_sym=True, verbose=True)
-            Y = NGvecs(self.X, nspan)
-            Y.setrandom()
-            Zsqrs, Y, history, _ = P.feast(Y, stop_tol=stop_tol,
-                                           check_contour=check_contour,
-                                           niterations=niterations)
-            betas = np.array(self.Z2toBeta(Zsqrs, v=vnum))
-            return betas, Zsqrs, Y
-
-        V = self.fiber.fiberV(tone=True)
-        betas, Zsqrs, Y = compute(V[0])
-        fmind = [0]
-        for VV in V[1:]:
-            betas_, Zsqrs_, Y_ = compute(VV)
-            betas = np.append(betas, betas_)
-            Zsqrs = np.append(Zsqrs, Zsqrs_)
-            for ind in range(len(betas_)):
-                Y._mv.Append(Y_._mv[ind])
-            Y.m += len(betas_)
-            fmind.append(fmind[-1] + len(betas_))
-        fmind.append(len(betas))
-        self.firstmodeindex = fmind
-
-        return betas, Zsqrs, Y
-
     def bentmode(self, curvature, radiusZ, centerZ, p,
                  bendfactor=1.28, **kwargs):
 
@@ -922,22 +838,6 @@ class FiberMode:
         betas = self.ZtoBeta(z)
         print('Physical propagation constants:\n', betas)
         return betas, z, y, P
-
-    def makebentmodelibrary(self, maxp=5, maxl=9, delta=None, nspan=15):
-
-        fprefix = self.fibername
-        self.savefbm(fprefix)        # save FiberMode object
-        self.savemesh(fprefix)       # save mesh
-
-        for p in range(1, maxp+1):   # save modes, one file per degree
-            betas, zsqrs, Y = self.bentmode_noloss(p=p, nspan=nspan)
-            print('Physical propagation constants:\n', betas)
-            print('Computed non-dimensional Z-squared values:\n', zsqrs)
-            n2i, exbeta = self.name2indices(betas, maxl=maxl, delta=delta,
-                                            tone=True)
-            self.savemodes(fprefix+'_p' + str(p), betas, Y,
-                           saveallagain=False, name2ind=n2i, exact=exbeta,
-                           tone=True, bent=True)
 
     # INTERPOLATED MODES ####################################################
 
@@ -1118,7 +1018,7 @@ class FiberMode:
 
     def savemodes(self, fileprefix, betas, Y,
                   saveallagain=True, name2ind=None, exact=None,
-                  interp=False, tone=False, bent=False):
+                  interp=False, tone=False):
         """ Convert Y to numpy and save in npz format. """
 
         if saveallagain:
@@ -1129,8 +1029,6 @@ class FiberMode:
         if os.path.isdir(self.outfolder) is not True:
             os.mkdir(self.outfolder)
         suffix = '_imde.npz' if interp else '_mde.npz'
-        if bent:
-            suffix = 'BENT_' + suffix
         fullname = self.outfolder+'/'+fileprefix+suffix
         print('Writing modes into:\n', fullname)
         if tone:
