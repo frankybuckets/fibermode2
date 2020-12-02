@@ -104,34 +104,34 @@ class Fiber:
         ks = V / (self.numerical_aperture() * a)
         return np.sqrt((ks*self.ncore)**2-(Z/a)**2)
 
-    def visualize_mode(self, l, m):
+    def visualize_mode(self, ll, m):
         """
-        Plot the LP(l,m) mode. Also return the mode as a function of
+        Plot the LP(ll,m) mode. Also return the mode as a function of
         scalar coordinates x and y. Note that l and m are both indexed
         to start from 0, so for example, the traditional LP_01 and LP_11
         modes are obtained by calling LP(0, 0) and LP(1, 0), respectively.
         """
 
-        X = self.propagation_constants(l)
+        X = self.propagation_constants(ll)
         if len(X) < m:
-            raise ValueError('For l=%d, only %d fiber modes computed'
-                             % (l, len(X)))
+            raise ValueError('For ll=%d, only %d fiber modes computed'
+                             % (ll, len(X)))
         kappa = X[m] / self.rcore
         k0 = self.ks
         beta = sqrt(self.ncore*self.ncore*k0*k0 - kappa*kappa)
         gamma = sqrt(beta*beta - self.nclad*self.nclad*k0*k0)
-        Jkrcr = jv(l, kappa*self.rcore)
-        Kgrcr = kv(l, gamma*self.rcore)
+        Jkrcr = jv(ll, kappa*self.rcore)
+        Kgrcr = kv(ll, gamma*self.rcore)
 
         def mode(x, y):
             r = sqrt(x*x + y*y)
             theta = atan2(y, x)
             if r < self.rcore:
-                u = Kgrcr * jv(l, kappa*r)
+                u = Kgrcr * jv(ll, kappa*r)
             else:
-                u = Jkrcr * kv(l, gamma*r)
+                u = Jkrcr * kv(ll, gamma*r)
 
-            u = u*np.cos(l*theta)
+            u = u*np.cos(ll*theta)
             return u
 
         fig = plt.figure()
@@ -149,9 +149,9 @@ class Fiber:
 
         return mode
 
-    def propagation_constants(self, l, maxnroots=50, v=None):
+    def propagation_constants(self, ll, maxnroots=50, v=None):
         """
-        Given mode index "l", attempt to find all propagation constants by
+        Given mode index "ll", attempt to find all propagation constants by
         bisection or other nonlinear root finders. (Circularly
         symmetric modes are obtained with l=0.  Modes with higher l
         have angular variations.)
@@ -173,7 +173,7 @@ class Fiber:
             # where jz are roots of l-th Bessel function. Below we reverse
             # engineer X so that this beta is produced by later formulae.
 
-            jz = jn_zeros(l, maxnroots)
+            jz = jn_zeros(ll, maxnroots)
             jz = jz[np.where(jz < ks*self.rclad)[0]]
             if len(jz) == 0:
                 print('There are no propagating modes for wavenumber ks!')
@@ -187,11 +187,11 @@ class Fiber:
 
         # Case of non-empty fibers (V>0):
 
-        _, f1, f2, g1, g2, f, g = self.VJKfun(l, v=V)
+        _, f1, f2, g1, g2, f, g = self.VJKfun(ll, v=V)
 
         # Collect Bessel roots appended with 0 and V:
 
-        jz = jn_zeros(l, maxnroots)
+        jz = jn_zeros(ll, maxnroots)
         jz = jz[np.where(jz < V)[0]]
         jz = np.insert(jz, 0, 0)
         jz = np.append(jz, V)
@@ -259,19 +259,19 @@ class Fiber:
         print(' ROOTS FOUND: ', X)
         return X
 
-    def visualize_roots(self, l):
+    def visualize_roots(self, ll):
         """
         Visualize two different functions f = f1 - f2 and g = g1 - g2
         whose roots are used to compute propagation constants for
         each mode index "l".
         """
 
-        V, f1, f2, g1, g2, f, g = self.VJKfun(l)
+        V, f1, f2, g1, g2, f, g = self.VJKfun(ll)
 
         fig, axes = plt.subplots(nrows=2, ncols=2)
         plt.grid(True)
         plt.rc('text', usetex=True)
-        fig.suptitle(r'Mode index $l=$%1d:' % l +
+        fig.suptitle(r'Mode index $ll=$%1d:' % ll +
                      r'$\beta$ found by roots of $f$ or $g$',
                      fontsize=14)
         xx = np.arange(0, V, V/500.0)
@@ -304,9 +304,9 @@ class Fiber:
         plt.show()
         plt.show(block=False)
 
-    def VJKfun(self, l, v=None):
+    def VJKfun(self, ll, v=None):
         """
-        For the "l"-th mode index of the fiber, return the nonlinear
+        For the "ll"-th mode index of the fiber, return the nonlinear
         functions whose roots give propagation constants.
         v: V-number of the fiber
         """
@@ -316,7 +316,7 @@ class Fiber:
         K = kv
 
         def jl(X):
-            Jlx = J(l, X)
+            Jlx = J(ll, X)
             if abs(Jlx) < 1.e-15:
                 if Jlx < 0:
                     Jlx = Jlx - 1e-15
@@ -326,7 +326,7 @@ class Fiber:
 
         def f1(X):
             JlX = jl(X)
-            return J(l+1, X) * X / JlX
+            return J(ll+1, X) * X / JlX
 
         def y(X):
             if X > V:
@@ -337,7 +337,7 @@ class Fiber:
 
         def f2(X):
             Y = y(X)
-            return K(l+1, Y) * Y / K(l, Y)
+            return K(ll+1, Y) * Y / K(ll, Y)
 
         def f(X):  # Propagation constant is a root of f(X)
             return f1(X) - f2(X)
@@ -345,7 +345,7 @@ class Fiber:
         def g1(X):
             JlX = jl(X)
             Y = y(X)
-            return J(l+1, X) * K(l, Y) / (JlX * K(l+1, Y))
+            return J(ll+1, X) * K(ll, Y) / (JlX * K(ll+1, Y))
 
         def g2(X):
             return y(X)/max(X, 1e-15)
@@ -355,9 +355,9 @@ class Fiber:
 
         return V, f1, f2, g1, g2, f, g
 
-    def VJHfuns(self, l):
+    def VJHfuns(self, ll):
         """
-        For the "l"-th mode index, return a nonlinear function of a
+        For the "ll"-th mode index, return a nonlinear function of a
         nondimensional variable Z whose nondimensionalized roots give
         leaky modes.  The function is returned as a string (with letter Z)
         which can be evaluated for specific Z values later.
@@ -365,24 +365,24 @@ class Fiber:
         z, nu = sm.symbols('z nu')
         V = self.fiberV()
         x = sm.sqrt(V*V + z*z)
-        g = z*sm.besselj(l, x)*sm.hankel1(l+1, z) - \
-            x*sm.besselj(l+1, x)*sm.hankel1(l, z)
+        g = z*sm.besselj(ll, x)*sm.hankel1(ll+1, z) - \
+            x*sm.besselj(ll+1, x)*sm.hankel1(ll, z)
         dg = g.diff(z).expand()
 
         dgstr = str(dg).replace('z', 'Z').     \
             replace('besselj', 'jv').          \
-            replace('nu', 'l').                \
+            replace('nu', 'll').               \
             replace('sqrt', 'np.sqrt')
         gstr = str(g).replace('z', 'Z').       \
             replace('besselj', 'jv').          \
-            replace('nu', 'l').                \
+            replace('nu', 'll').               \
             replace('sqrt', 'np.sqrt')
         return gstr, dgstr
 
-    def leaky_propagation_constants(self, l, xran=None, yran=None):
+    def leaky_propagation_constants(self, ll, xran=None, yran=None):
         """
-        Given a mode index "l" indicating angular variation (the
-        radially symmetric case being l=0), search the following
+        Given a mode index "ll" indicating angular variation (the
+        radially symmetric case being ll=0), search the following
         rectangular region (given by tuples xran, yran)
               [xran[0], xran[1]]  x  [yran[0], yran[1]]
         of the complex plane for roots that yield leaky outgoing modes.
@@ -396,7 +396,7 @@ class Fiber:
             yran = (-2, 0)
         print('Searching region (%g, %g) x (%g, %g) in complex plane'
               % (xran[0], xran[1], yran[0], yran[1]))
-        gstr, dgstr = self.VJHfuns(l)
+        gstr, dgstr = self.VJHfuns(ll)
         try:
             rect = Rectangle(xran, yran)
             r = rect.roots(lambda Z: eval(gstr),
@@ -410,13 +410,13 @@ class Fiber:
             yran2 = (yran[0] + 0.01 * dy, yran[1] - 0.01 * dy)
             print('Retrying in adjusted search region (%g, %g) x (%g, %g)'
                   % (xran2[0], xran2[1], yran2[0], yran2[1]))
-            r = self.leaky_propagation_constants(l, xran=xran2, yran=yran2)
+            r = self.leaky_propagation_constants(ll, xran=xran2, yran=yran2)
         return r.roots
 
-    def visualize_leaky_mode(self, Z, l, corelim=2):
+    def visualize_leaky_mode(self, Z, ll, corelim=2):
         """
         Given a complex propagation constant Z obtained from
-        self.leaky_propagation_constants(l),  compute the corresponding
+        self.leaky_propagation_constants(ll),  compute the corresponding
         leaky mode. Return its values F at a meshgrid of points (X, Y) and
         plot it. If "corelim" is given, this grid discretizes the xy region
         [-lim, lim] x [-lim, lim] where lim is corelim x core radius.
@@ -427,17 +427,17 @@ class Fiber:
         a = self.rcore
         alpha0 = Z/a
         alpha1 = X/a
-        B = jv(l, X)
-        A = hankel1(l, Z)
+        B = jv(ll, X)
+        A = hankel1(ll, Z)
 
         def modefun(x, y):
             r = np.sqrt(x*x + y*y)
             theta = atan2(y, x)
             if r < a:
-                u = A * jv(l, alpha1*r)
+                u = A * jv(ll, alpha1*r)
             else:
-                u = B * hankel1(l, alpha0*r)
-            u = u*np.cos(l*theta)
+                u = B * hankel1(ll, alpha0*r)
+            u = u*np.cos(ll*theta)
             return u
 
         lim = a * corelim
