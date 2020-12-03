@@ -376,8 +376,8 @@ class FiberMode:
 
             # l=0 case should be simple eigenvalues:
             activesimple = np.arange(len(sm['index']))
-            LP0 = self.fiber.XtoBeta(self.fiber.propagation_constants(0, v=vnum),
-                                     v=vnum)
+            LP0 = self.fiber.XtoBeta(
+                self.fiber.propagation_constants(0, v=vnum), v=vnum)
             b = β[sm['index']]
             for m in range(len(LP0)):
                 ind = np.argmin(abs(LP0[m]-b[activesimple]))
@@ -391,15 +391,15 @@ class FiberMode:
             # l>0 cases should have multiplicity 2:
             activemultiple = np.arange(len(ml['index']))
             ctrs = np.array(ml['center'])
-            for l in range(1, maxl):
-                LPl = self.fiber.XtoBeta(self.fiber.propagation_constants(l, v=vnum),
-                                         v=vnum)
+            for ll in range(1, maxl):
+                LPl = self.fiber.XtoBeta(
+                    self.fiber.propagation_constants(ll, v=vnum), v=vnum)
                 for m in range(len(LPl)):
                     ind = np.argmin(abs(LPl[m]-ctrs[activemultiple]))
                     i2beta_a = ml['index'][activemultiple[ind]][0]
                     i2beta_b = ml['index'][activemultiple[ind]][1]
-                    name2ind['LP' + str(l) + str(m+1)+'_a'] = i2beta_a
-                    name2ind['LP' + str(l) + str(m+1)+'_b'] = i2beta_b
+                    name2ind['LP' + str(ll) + str(m+1)+'_a'] = i2beta_a
+                    name2ind['LP' + str(ll) + str(m+1)+'_b'] = i2beta_b
                     exact[i2beta_a] = LPl[m]
                     exact[i2beta_b] = LPl[m]
                     activemultiple = np.delete(activemultiple, ind)
@@ -907,13 +907,13 @@ class FiberMode:
         name2ind = dict(zip(names, range(len(names))))
         return modes, betas, name2ind
 
-    def interpmodeLP(self, l, m):
+    def interpmodeLP(self, ll, m):
         """
-        Return un-normalized LP(l,m) "mode" of the fiber as an NGSolve
+        Return un-normalized LP(ll,m) "mode" of the fiber as an NGSolve
         CoefficientFunction and its corresponding propagation
         constant "beta" when calling:
 
-           beta, mode = fbm.interpmodeLP(l, m)
+           beta, mode = fbm.interpmodeLP(ll, m)
 
         Note that l and m are both indexed to start from 0, so for
         example, the traditional LP_01 and LP_11 modes are obtained by
@@ -922,11 +922,11 @@ class FiberMode:
         See also Fiber.visualize_mode(l, m).
         """
 
-        X = self.fiber.propagation_constants(l)
+        X = self.fiber.propagation_constants(ll)
 
         if len(X) <= m:
-            raise ValueError('For l=%d, only %d fiber modes computed'
-                             % (l, len(X)))
+            raise ValueError('For ll=%d, only %d fiber modes computed'
+                             % (ll, len(X)))
 
         kappa = X[m] / self.fiber.rcore
         ncore, nclad = self.fiber.ncore, self.fiber.nclad
@@ -937,34 +937,34 @@ class FiberMode:
         r = ng.sqrt(ng.x*ng.x + ng.y*ng.y)
         theta = ng.atan2(ng.y, ng.x)
 
-        print('\nCOMPUTED LP(%1d,%d) MODE: ' % (l, m) + '-'*49)
+        print('\nCOMPUTED LP(%1d,%d) MODE: ' % (ll, m) + '-'*49)
         print('  beta:      %20g' % (beta) +
               '{:>39}'.format('exact propagation constant'))
 
         # If NA=0, then return the Bessel mode of an empty waveguide:
         if abs(self.fiber.numerical_aperture()) < 1.e-15:
             print('  NA = 0, so further parameters are meaningless.\n')
-            a0cf = jv(kappa*r*self.R, l) * ng.cos(l*theta)
+            a0cf = jv(kappa*r*self.R, ll) * ng.cos(ll*theta)
 
             return beta, a0cf
 
         # For NA>0, define the guided mode piecewise:
         print('  variation: %20g' % (k0*abs(nclad-ncore)) +
               '{:>39}'.format('interval length of propagation consts'))
-        Jkrcr = scf.jv(l, kappa*self.fiber.rcore)
-        Kgrcr = scf.kv(l, gamma*self.fiber.rcore)
+        Jkrcr = scf.jv(ll, kappa*self.fiber.rcore)
+        Kgrcr = scf.kv(ll, gamma*self.fiber.rcore)
         print('  edge value:%20g'
-              % (Jkrcr*scf.kv(l, gamma*self.fiber.rclad)) +
+              % (Jkrcr*scf.kv(ll, gamma*self.fiber.rclad)) +
               '{:>39}'.format('mode size at outer cladding edge'))
         print('  kappa:     %20g' % (kappa) +
               '{:>39}'.format('coefficient in BesselJ core mode'))
         print('  gamma:     %20g' % (gamma) +
               '{:>39}'.format('coefficient in BesselK cladding mode'))
 
-        Jkr = jv(kappa*r*self.fiber.rcore, l)
-        Kgr = kv(gamma*r*self.fiber.rcore, l)
+        Jkr = jv(kappa*r*self.fiber.rcore, ll)
+        Kgr = kv(gamma*r*self.fiber.rcore, ll)
 
-        a0cf = IfPos(1 - r, Kgrcr*Jkr, Jkrcr*Kgr) * ng.cos(l*theta)
+        a0cf = IfPos(1 - r, Kgrcr*Jkr, Jkrcr*Kgr) * ng.cos(ll*theta)
         return beta, a0cf
 
     # CONVENIENCE & DEBUGGING ###############################################
