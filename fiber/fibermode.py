@@ -706,7 +706,7 @@ class FiberMode:
     def leakymode(self, p, radius, center,
                   alpha=1, includeclad=False,
                   stop_tol=1e-10, npts=10, niter=50, nspan=10,
-                  verbose=True, inverse='umfpack', mass='eye'):
+                  verbose=True, inverse='umfpack'):
         """
         Compute leaky modes by solving a nonlinear eigenproblem derived
         from a frequency-dependent PML formulated by [Nannen+Wess].
@@ -799,7 +799,7 @@ class FiberMode:
 
         P = SpectralProjNGPoly(AA, self.X,
                                radius, center, npts,
-                               verbose=verbose, inverse=inverse, mass=mass)
+                               verbose=verbose, inverse=inverse)
 
         # A mass matrix for compound space  X x X x X
         X3 = ng.FESpace([self.X, self.X, self.X])
