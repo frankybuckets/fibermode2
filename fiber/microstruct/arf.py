@@ -97,7 +97,6 @@ class ARF:
         if 'scaling' in kwargs:    # scale all updatable lengths
             for key in self.updatablelengths:
                 setattr(self, key + 's', getattr(self, key)/kwargs['scaling'])
-        print('\nInitialized: ', self)
 
         # attributes in addition to updatablelengths for reconstructing obj
         #    (don't save scaling: avoid re-re-scaling!)
@@ -224,15 +223,23 @@ class ARF:
         if os.path.isdir(self.outfolder) is not True:
             os.mkdir(self.outfolder)
 
+        print('\nInitialized: ', self)
+
     def __str__(self):
-        s = 'ARF object.' + \
+        s = 'ARF object. Physical paramaters:' + \
             '\n  Rc = %g x %g x 1e-6 meters' % (self.Rcs, self.scaling)
         s += '\n  tclad = %g x %g x 1e-6 meters' % (self.tclads, self.scaling)
-        s += '\n  touter = %g x %g x 1e-6 meters' % (
-            self.touters, self.scaling)
+        s += '\n  touter = %g x %g x 1e-6 meters' % \
+            (self.touters, self.scaling)
         s += '\n  t = %g x %g x 1e-6 meters' % (self.ts, self.scaling)
+        # s += '\n  d = %g x %g x 1e-6 meters' % (self.d, self.scaling)
+        s += '\n  Rti = %g x %g x 1e-6 meters' % (self.Rti, self.scaling)
+        s += '\n  Rto = %g x %g x 1e-6 meters' % (self.Rto, self.scaling)
         s += '\n  Wavelength = %g m, refractive indices: %g (air), %g (Si)' \
             % (self.wavelength, self.n_air, self.n_si)
+        s += '\nNondimensional computational parameters:'
+        s += '\n  Rout = %g' % self.Rout
+        s += '\n  Rclado = %g' % self.Rclado
         s += '\n  Mesh sizes: %g (capillary), %g (air), %g (inner core)' \
             % (self.capillary_maxhs, self.air_maxhs, self.inner_core_maxhs)
         s += '\n  Mesh sizes: %g (glass), %g (outer)'  \
@@ -242,7 +249,7 @@ class ARF:
         if self.freecapil:
             s += '\n  With free capillaries, s = %g.' % self.s
         else:
-            s += '\n  With embedded capillaries, e = %g.' % self.e
+            s += '\n  With embedded capillaries, e = %g x t.' % (self.e*self.t)
         return s
 
     # GEOMETRY ########################################################
@@ -699,7 +706,7 @@ class ARF:
             Zs.append(Z)
             betas.append(self.betafrom(Z**2))
 
-        return Zs, Ys, betas
+        return Zs, Ys, betas, P
 
     # SAVE & LOAD #####################################################
 
