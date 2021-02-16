@@ -689,6 +689,7 @@ class ARF:
 
         AA, B, X, X3 = self.polypmlsystem(p=p, alpha=alpha)
         Ys = []
+        Yls = []
         Zs = []
         betas = []
 
@@ -702,11 +703,13 @@ class ARF:
             Z, Y, _, Yl = P.feast(Y, Yl=Yl, hermitian=False,
                                   stop_tol=stop_tol)
             y = P.first(Y)
+            yl = P.last(Yl)
             Ys.append(y.copy())
+            Yls.append(yl.copy())
             Zs.append(Z)
             betas.append(self.betafrom(Z**2))
 
-        return Zs, Ys, betas, P
+        return Zs, Ys, Yls, betas, P
 
     # SAVE & LOAD #####################################################
 
