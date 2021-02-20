@@ -13,6 +13,7 @@ from pyeigfeast.spectralproj.ngs import NGvecs, SpectralProjNG
 from pyeigfeast.spectralproj.ngs import SpectralProjNGGeneral
 from fiberamp.fiber.spectralprojpoly import SpectralProjNGPoly
 import os
+import pickle
 
 
 class ARF:
@@ -88,12 +89,14 @@ class ARF:
 
         self.n_air = 1.00027717    # refractive index of air
         self.n_si = 1.4545         # refractive index of glass
-        self.wavelength = 1.8e-6   # fiber's operating wavelength
+        self._wavelength = 1.8e-6  # fiber's operating wavelength
 
         # UPDATE (any of the above) attributes using given inputs
 
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+        # create attributes ending in 's' (nondim scaled lengths)
         if 'scaling' in kwargs:    # scale all updatable lengths
             for key in self.updatablelengths:
                 setattr(self, key + 's', getattr(self, key)/kwargs['scaling'])
@@ -106,9 +109,9 @@ class ARF:
         # DEPENDENT attributes (dependent on scaled length attributes)
 
         # distance b/w capillary tubes
-        self.d = 5 * self.ts
+        self.ds = 5 * self.ts
         # inner radius of the capillary tubes
-        self.Rto = self.Rcs - self.d
+        self.Rto = self.Rcs - self.ds
         # outer radius of the capillary tubes
         self.Rti = self.Rto - self.ts
 
@@ -206,7 +209,28 @@ class ARF:
         self.index = ng.CoefficientFunction(
             [index[mat] for mat in self.mesh.GetMaterials()])
 
-        # coefficient for nondimensionalized eigenproblems
+        self.setnondimmat()  # coefficient for nondimensionalized eigenproblems
+
+        # OUTPUT LOCATION
+
+        self.outfolder = './outputs'
+        if os.path.isdir(self.outfolder) is not True:
+            os.mkdir(self.outfolder)
+
+        print('\nInitialized: ', self)
+
+    @property
+    def wavelength(self):
+        return self._wavelength
+
+    @wavelength.setter
+    def wavelength(self, lam):
+        self._wavelength = lam
+        self.setnondimmat()
+
+    def setnondimmat(self):
+        """ set the material cf """
+
         a = self.scaling * 1e-6
         k = self.wavenum()
         m = {'Outer':         0,
@@ -217,29 +241,23 @@ class ARF:
         self.m = ng.CoefficientFunction(
             [(a*k)**2 * m[mat] for mat in self.mesh.GetMaterials()])
 
-        # OUTPUT LOCATION
-
-        self.outfolder = './outputs'
-        if os.path.isdir(self.outfolder) is not True:
-            os.mkdir(self.outfolder)
-
-        print('\nInitialized: ', self)
-
     def __str__(self):
-        s = 'ARF object. Physical paramaters:' + \
+        s = 'ARF Physical Parameters:' + \
             '\n  Rc = %g x %g x 1e-6 meters' % (self.Rcs, self.scaling)
         s += '\n  tclad = %g x %g x 1e-6 meters' % (self.tclads, self.scaling)
         s += '\n  touter = %g x %g x 1e-6 meters' % \
             (self.touters, self.scaling)
         s += '\n  t = %g x %g x 1e-6 meters' % (self.ts, self.scaling)
-        # s += '\n  d = %g x %g x 1e-6 meters' % (self.d, self.scaling)
+        s += '\n  d = %g x %g x 1e-6 meters' % (self.ds, self.scaling)
         s += '\n  Rti = %g x %g x 1e-6 meters' % (self.Rti, self.scaling)
         s += '\n  Rto = %g x %g x 1e-6 meters' % (self.Rto, self.scaling)
-        s += '\n  Wavelength = %g m, refractive indices: %g (air), %g (Si)' \
-            % (self.wavelength, self.n_air, self.n_si)
-        s += '\nNondimensional computational parameters:'
-        s += '\n  Rout = %g' % self.Rout
-        s += '\n  Rclado = %g' % self.Rclado
+        s += '\n  Wavelength = % g meters' % self.wavelength
+        s += '\n  Refractive indices: %g (air), %g (Si)' % \
+            (self.n_air, self.n_si)
+
+        s += '\nNondimensional Computational Parameters:'
+        s += '\n  Divide all lengths above by %g x 1e-6' % self.scaling
+        s += '\n  to get the actual computational lengths used.'
         s += '\n  Mesh sizes: %g (capillary), %g (air), %g (inner core)' \
             % (self.capillary_maxhs, self.air_maxhs, self.inner_core_maxhs)
         s += '\n  Mesh sizes: %g (glass), %g (outer)'  \
@@ -249,7 +267,7 @@ class ARF:
         if self.freecapil:
             s += '\n  With free capillaries, s = %g.' % self.s
         else:
-            s += '\n  With embedded capillaries, e = %g x t.' % (self.e*self.t)
+            s += '\n  With embedded capillaries, e/t = %g.' % self.e
         return s
 
     # GEOMETRY ########################################################
@@ -612,7 +630,12 @@ class ARF:
         return Zs, Ys, betas
 
     def polypmlsystem(self, p, alpha=1):
-
+        """
+        Returns AA, B, X, X3:
+          AA = list of 4 cubic matrix polynomial coefficients on FE space X
+          X3 = three copies of X
+          B = Gram matrix of L^2 inner product on X3.
+        """
         dx_pml = dx(definedon=self.mesh.Materials('Outer'))
         dx_int = dx(definedon=self.mesh.Materials
                     ('Si|CapillaryEncl|InnerCore|FillAir'))
@@ -699,7 +722,14 @@ class ARF:
             Y.setrandom()
             Yl.setrandom()
 
-            P = SpectralProjNGPoly(AA, X, rad, ctr, npts)
+            def within(z):
+                inside1 = abs(ctr - z)**2 < rad**2
+                inside2 = z.imag < 0
+                return inside1 & inside2
+
+            P = SpectralProjNGPoly(AA, X, radius=rad, center=ctr, npts=npts,
+                                   within=within)
+
             Z, Y, _, Yl = P.feast(Y, Yl=Yl, hermitian=False,
                                   stop_tol=stop_tol)
             y = P.first(Y)
@@ -716,27 +746,25 @@ class ARF:
     def save(self, fileprefix):
         """ Save this object so it can be loaded later """
 
-        arffilename = os.path.abspath(self.outfolder+'/'+fileprefix+'_arf.npz')
-        d = {}
-        for key in self.updatablelengths + self.savableattr:
-            d[key] = getattr(self, key)
-        print('Writing ARF object into ', arffilename)
-        np.savez(arffilename, **d)
-
-        meshf = os.path.abspath(self.outfolder+'/'+fileprefix+'_msh.vol.gz')
-        print('Writing mesh into ', meshf)
-        self.mesh.ngmesh.Save(meshf)
+        arffilename = os.path.abspath(self.outfolder+'/'+fileprefix+'_arf.pkl')
+        os.makedirs(os.path.dirname(arffilename), exist_ok=True)
+        print('Pickling ARF object into ', arffilename)
+        with open(arffilename, 'wb') as f:
+            pickle.dump(self, f)
 
     def savemodes(self, fileprefix, Y, p, betas,
-                  solverparams, saveallagain=True):
-        """ Save a NGVec span object Y containing modes of FE degree p """
+                  solverparams, arfpickle=True):
+        """ Save a NGVec span object Y containing modes of FE degree p.
+        Include any solver paramaters to be saved together with the
+        modes in the input dictionary "solverparams".
+        """
 
-        f = os.path.abspath(self.outfolder+'/'+fileprefix+'_mde.npz')
-        if saveallagain:
+        if arfpickle:
             self.save(fileprefix)
         y = Y.tonumpy()
         d = {'y': y, 'p': p, 'betas': betas}
         d.update(**solverparams)
+        f = os.path.abspath(self.outfolder+'/'+fileprefix+'_mde.npz')
         print('Writing mode file ', f)
         np.savez(f, **d)
 
@@ -745,29 +773,20 @@ class ARF:
 
 
 def loadarf(fileprefix):
-    """ Load a saved ARF object """
+    """ Load a saved ARF object from file <fileprefix>_arf.pkl """
 
-    f = os.path.abspath(fileprefix+'_arf.npz')
-    d = dict(np.load(f, allow_pickle=True))
-    for k, v in d.items():
-        d[k] = v.item()  # convert singleton arrays to scalars
-    # if a mesh file exists, load mesh from it (else generate new mesh)
-    meshf = fileprefix+'_msh.vol.gz'
-    if os.path.exists(meshf):
-        d['ngmesh'] = ng.Mesh(meshf).ngmesh
-
-    return ARF(**d)
+    arffile = os.path.abspath(fileprefix+'_arf.pkl')
+    with open(arffile, 'rb') as f:
+        a = pickle.load(f)
+    return a
 
 
-def loadarfmode(fileprefix, arfile=None):
-    """ Load a saved mode together with an ARF object. If the ARF object
-    and mesh are in another file with prefix arfile, then give it as
-    the optional argument. """
+def loadarfmode(modenpzf, arfpklf):
+    """  Load a mode saved in npz file <modenpzf> compatible with the
+    ARF object saved in pickle file <arfpklf>. """
 
-    if arfile is None:
-        arfile = fileprefix
-    a = loadarf(arfile)
-    modef = os.path.abspath(fileprefix+'_mde.npz')
+    a = loadarf(arfpklf)
+    modef = os.path.abspath(modenpzf)
     d = dict(np.load(modef, allow_pickle=True))
     p = int(d.pop('p'))
     betas = d.pop('betas')
