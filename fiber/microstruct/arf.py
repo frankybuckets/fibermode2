@@ -812,13 +812,6 @@ def loadarfmode(modenpzf, arffprefix):
     print('  Degree %d modes found in file %s' % (p, modenpzf))
     X = ng.H1(a.mesh, order=p, dirichlet='OuterCircle', complex=True)
     X3 = ng.FESpace([X, X, X])
-    u0, u1, u2 = X3.TrialFunction()
-    v0, v1, v2 = X3.TestFunction()
-    B = ng.BilinearForm(X3)
-    B += (u0 * v0 + u1 * v1 + u2 * v2) * ng.dx
-    with ng.TaskManager():
-        B.Assemble()
-
     Y = NGvecs(X, y.shape[1])
     Y.fromnumpy(y)
     longY = None
@@ -827,10 +820,10 @@ def loadarfmode(modenpzf, arffprefix):
     longyl = d['longyl']
 
     if longy is not None:
-        longY = NGvecs(X3, longy.shape[1], M=B.mat)
+        longY = NGvecs(X3, longy.shape[1])
         longY.fromnumpy(longy)
     if longyl is not None:
-        longYl = NGvecs(X3, longyl.shape[1], M=B.mat)
+        longYl = NGvecs(X3, longyl.shape[1])
         longYl.fromnumpy(longyl)
 
     return a, Y, betas, Zs, p, d, longY, longYl
