@@ -712,7 +712,9 @@ class ARF:
 
         AA, B, X, X3 = self.polypmlsystem(p=p, alpha=alpha)
         Ys = []
+        longYs = []
         Yls = []
+        longYls = []
         Zs = []
         betas = []
 
@@ -736,10 +738,12 @@ class ARF:
             yl = P.last(Yl)
             Ys.append(y.copy())
             Yls.append(yl.copy())
+            longYs.append(Y.copy())
+            longYls.append(Yl.copy())
             Zs.append(Z)
             betas.append(self.betafrom(Z**2))
 
-        return Zs, Ys, Yls, betas, P
+        return Zs, Ys, Yls, betas, P, longYs, longYls
 
     # SAVE & LOAD #####################################################
 
@@ -752,18 +756,26 @@ class ARF:
         with open(arffilename, 'wb') as f:
             pickle.dump(self, f)
 
-    def savemodes(self, fileprefix, Y, p, betas,
-                  solverparams, arfpickle=True):
-        """ Save a NGVec span object Y containing modes of FE degree p.
+    def savemodes(self, fileprefix, Y, p, betas, Zs,
+                  solverparams, longY=None, longYl=None, arfpickle=False):
+        """
+        Save a NGVec span object Y containing modes of FE degree p.
         Include any solver paramaters to be saved together with the
-        modes in the input dictionary "solverparams".
+        modes in the input dictionary "solverparams". If "arfpickle"
+        is True, then the arf object is also save under the same "fileprefix".
         """
 
         if arfpickle:
             self.save(fileprefix)
         y = Y.tonumpy()
-        d = {'y': y, 'p': p, 'betas': betas}
+        if longY is not None:
+            longY = longY.tonumpy()
+        if longYl is not None:
+            longYl = longYl.tonumpy()
+        d = {'y': y, 'p': p, 'betas': betas, 'Zs': Zs,
+             'longy': longY, 'longyl': longYl}
         d.update(**solverparams)
+
         f = os.path.abspath(self.outfolder+'/'+fileprefix+'_mde.npz')
         print('Writing mode file ', f)
         np.savez(f, **d)
@@ -781,24 +793,44 @@ def loadarf(fileprefix):
     return a
 
 
-def loadarfmode(modenpzf, arfpklf):
+def loadarfmode(modenpzf, arffprefix):
     """  Load a mode saved in npz file <modenpzf> compatible with the
-    ARF object saved in pickle file <arfpklf>. """
+    ARF object saved in pickle file <arffprefix>_arf.pkl. """
 
-    a = loadarf(arfpklf)
+    a = loadarf(arffprefix)
     modef = os.path.abspath(modenpzf)
     d = dict(np.load(modef, allow_pickle=True))
     p = int(d.pop('p'))
     betas = d.pop('betas')
+    Zs = d.pop('Zs')
     y = d.pop('y')
     for k, v in d.items():
         if v.ndim > 0:
             d[k] = v
         else:  # convert singleton arrays to scalars
             d[k] = v.item()
-    print('  Degree %d modes found in file %s' % (p, modef))
-    fes = ng.H1(a.mesh, order=p, dirichlet='Outer', complex=True)
-    Y = NGvecs(fes, y.shape[1])
-    Y.fromnumpy(y)
+    print('  Degree %d modes found in file %s' % (p, modenpzf))
+    X = ng.H1(a.mesh, order=p, dirichlet='OuterCircle', complex=True)
+    X3 = ng.FESpace([X, X, X])
+    u0, u1, u2 = X3.TrialFunction()
+    v0, v1, v2 = X3.TestFunction()
+    B = ng.BilinearForm(X3)
+    B += (u0 * v0 + u1 * v1 + u2 * v2) * ng.dx
+    with ng.TaskManager():
+        B.Assemble()
 
-    return a, Y, betas, p, d
+    Y = NGvecs(X, y.shape[1])
+    Y.fromnumpy(y)
+    longY = None
+    longYl = None
+    longy = d['longy']
+    longyl = d['longyl']
+
+    if longy is not None:
+        longY = NGvecs(X3, longy.shape[1], M=B.mat)
+        longY.fromnumpy(longy)
+    if longyl is not None:
+        longYl = NGvecs(X3, longyl.shape[1], M=B.mat)
+        longYl.fromnumpy(longyl)
+
+    return a, Y, betas, Zs, p, d, longY, longYl
