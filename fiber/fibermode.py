@@ -292,7 +292,8 @@ class FiberMode:
 
             ctr = (right+left)/2
             rad = (right-left)/2
-            P = SpectralProjNG(self.X, a.mat, b.mat, rad, ctr, nquadpts,
+            P = SpectralProjNG(self.X, a.mat, b.mat,
+                               radius=rad, center=ctr, npts=nquadpts,
                                reduce_sym=True, verbose=verbose)
             Y = NGvecs(self.X, nspan)
             Y.setrandom()
@@ -682,7 +683,7 @@ class FiberMode:
         # Since B is selfadjoint, we do not use SpectralProjNGGeneral here:
 
         P = SpectralProjNG(X3, A.mat, B.mat,
-                           radius, center, npts,
+                           radius=radius, center=center, npts=npts,
                            verbose=verbose, inverse=inverse)
         Y = NGvecs(X3, nspan, M=B.mat)
         Yl = Y.create()
