@@ -4,28 +4,19 @@ Computing some modes of ARF
 
 from arf import ARF
 
-# Compute modes using degree p finite elements
+
 a = ARF()
-p = 2
-Zs, Ys, betas = a.polyeig(p=p, ctrs=(2.24,), radi=(0.05,))
+
+p = 2         # finite element degree
+a.refine()    # refine the default mesh once (comment out if short of memory)
+
+Zs, Ys, Yls, betas, P, _, _ =  \
+    a.polyeig(p=p, ctrs=(5.1,), radi=(0.05,), npts=6)
+
 print('Zs =', Zs)
 print('betas =', betas)
-Ys[0].draw()
+Ys[0].draw()  # visualize in netgen window
 
-# Save modes into file (together with mesh and ARF object)
-a.savemodes('arfLP01_p%d' % p, Ys[0], p, betas,
-            {'method': 'polyeig',
-             'Zs': Zs,
-             'name': 'LP01'})
-
-# Refine mesh once, re-compute, and save
-refine = 1
-a.refine()
-Zs, Ys, betas = a.polyeig(p=p, ctrs=(2.24,), radi=(0.05,))
-a.savemodes('arfLP01_p%d_r%d' % (p, refine), Ys[0], p, betas,
-            {'method': 'polyeig',
-             'Zs': Zs,
-             'name': 'LP01',
-             'refine': 1})
-
-# To load any of these solution files, follow arf_load.py
+a.savemodes('arfLP02_p%d' % p, Ys[0], p, betas, Zs,
+            {'method': 'polyeig', 'Zs': Zs,
+             'name': 'LP02'}, arfpickle=True)
