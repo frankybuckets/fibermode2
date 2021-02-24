@@ -702,7 +702,7 @@ class ARF:
     def polyeig(self, p, alpha=10, stop_tol=1e-12, npts=8, initdim=5,
                 #    LP01,   LP11,  LP21   LP02
                 ctrs=(2.24,  3.57,  4.75,  5.09),
-                radi=(0.05,  0.01,  0.01,  0.01)):
+                radi=(0.05,  0.01,  0.01,  0.01), **kwargs):
         """Solve the Nannen-Wess nonlinear polynomial PML eigenproblem
         to compute modes with losses. A custom polynomial feast uses
         the given centers and radii to search for the modes.
@@ -718,6 +718,7 @@ class ARF:
                   ctrs[i] of radius radi[i] for each i. Eigenvalues found by
                   feast for each i are returned in output Zs[i], and the
                   corresponding eigenspaces are in span object Ys[i].
+        kwargs: further keyword arguments passed to spectral projector.
 
         OUTPUTS:  Zs, Ys, betas
 
@@ -743,12 +744,13 @@ class ARF:
             Yl.setrandom()
 
             def within(z):
+                # look below the real axis only
                 inside1 = abs(ctr - z)**2 < rad**2
                 inside2 = z.imag < 0
                 return inside1 & inside2
 
             P = SpectralProjNGPoly(AA, X, radius=rad, center=ctr, npts=npts,
-                                   within=within)
+                                   within=within, **kwargs)
 
             Z, Y, _, Yl = P.feast(Y, Yl=Yl, hermitian=False,
                                   stop_tol=stop_tol)
