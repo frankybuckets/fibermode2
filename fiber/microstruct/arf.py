@@ -27,7 +27,9 @@ class ARF:
                 Otherwise, they will be embedded into the glass sheath.
 
            kwargs: Override default values of updatable length attributes.
-                Give length values in units of micrometers.
+                Give length values in units of micrometers, e.g.,
+                    ARF(touter=15)
+                yields a PML thickness of 15 micrometers in physical units.
                 A keyword argument 'scaling', if given, will also divide
                 the updatable length attributes by 'scaling'.
         """
@@ -58,12 +60,6 @@ class ARF:
         self.updatablelengths = ['Rc', 'tclad', 't', 'touter',
                                  'capillary_maxh', 'air_maxh',
                                  'inner_core_maxh', 'glass_maxh', 'outer_maxh']
-
-        # Scale updatablelengths and store scaled values in class attributes
-        # whose name has an 's' appended. Only the scaled values are used
-        # for geometry and mesh construction.
-        for key in self.updatablelengths:  # Divide these lengths by scaling
-            setattr(self, key + 's', getattr(self, key)/self.scaling)
 
         # Attributes specific to the embedded capillary case:
         #
@@ -96,7 +92,12 @@ class ARF:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-        # create attributes ending in 's' (nondim scaled lengths)
+        # Scale updatablelengths and store scaled values in class attributes
+        # whose name has an 's' appended. Only the scaled values are used
+        # for geometry and mesh construction.
+        for key in self.updatablelengths:  # Divide these lengths by scaling
+            setattr(self, key + 's', getattr(self, key)/self.scaling)
+
         if 'scaling' in kwargs:    # scale all updatable lengths
             for key in self.updatablelengths:
                 setattr(self, key + 's', getattr(self, key)/kwargs['scaling'])
