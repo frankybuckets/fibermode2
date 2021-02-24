@@ -41,15 +41,15 @@ class ARF:
         # Primary geometrical parameters (geometry shown in tex folder)
         self.Rc = 15.0    # radius of inner part of hollow core
         self.tclad = 5    # thickness of the glass jacket/sheath
-        self.touter = 10  # thickness of final outer annular layer
+        self.touter = 30  # thickness of final outer annular layer (PML)
         self.t = 0.42     # thickness of the capillary tubes
 
         # Attributes for tuning mesh sizes
 
         self.capillary_maxh = 0.5
         self.air_maxh = 4.0
-        self.inner_core_maxh = 1
-        self.glass_maxh = 10.0
+        self.inner_core_maxh = 0.75
+        self.glass_maxh = 5.0
         self.outer_maxh = 10.0
         self.refined = 0
 
@@ -132,7 +132,7 @@ class ARF:
         # BOUNDARY & MATERIAL NAMES
 
         self.material = {
-            'Outer': 1,          # outer most annular layer
+            'Outer': 1,          # outer most annular layer (PML)
             'Si': 2,             # cladding & capillaries are glass
             'CapillaryEncl': 3,  # air regions enclosed by capillaries
             'InnerCore': 4,      # inner hollow core (air) region r < Rc
@@ -251,17 +251,28 @@ class ARF:
         s += '\n  d = %g x %g x 1e-6 meters' % (self.ds, self.scaling)
         s += '\n  Rti = %g x %g x 1e-6 meters' % (self.Rti, self.scaling)
         s += '\n  Rto = %g x %g x 1e-6 meters' % (self.Rto, self.scaling)
-        s += '\n  Wavelength = % g meters' % self.wavelength
+        s += '\n  Wavelength = %g meters' % self.wavelength
         s += '\n  Refractive indices: %g (air), %g (Si)' % \
             (self.n_air, self.n_si)
 
         s += '\nNondimensional Computational Parameters:'
         s += '\n  Divide all lengths above by %g x 1e-6' % self.scaling
         s += '\n  to get the actual computational lengths used.'
+        s += '\n  Cladding starts at Rcladi = %g' % self.Rcladi
+        s += '\n  PML starts at Rclado = %g and ends at Rout = %g' \
+            % (self.Rclado, self.Rout)
         s += '\n  Mesh sizes: %g (capillary), %g (air), %g (inner core)' \
             % (self.capillary_maxhs, self.air_maxhs, self.inner_core_maxhs)
         s += '\n  Mesh sizes: %g (glass), %g (outer)'  \
             % (self.glass_maxhs,   self.outer_maxhs)
+        s += '\n  Elements/wavelength:'
+        s += '%g (capillary), %g (air), %g (inner core)' \
+            % (self.wavelength*1e6/self.scaling/self.capillary_maxhs,
+               self.wavelength*1e6/self.scaling/self.air_maxhs,
+               self.wavelength*1e6/self.scaling/self.inner_core_maxhs)
+        s += '\n  Elements/wavelength: %g (glass), %g (outer)'  \
+            % (self.wavelength*1e6/self.scaling/self.glass_maxhs,
+               self.wavelength*1e6/self.scaling/self.outer_maxhs)
         if self.refined > 0:
             s += '\n  Uniformly refined %g times.' % self.refined
         if self.freecapil:
@@ -514,7 +525,7 @@ class ARF:
     def refine(self):
         """ Refine mesh by dividing each triangle into four """
 
-        print('  Refining ARF mesh uniformly.')
+        print('  Refining ARF mesh uniformly: each element split into four')
         self.refined += 1
         self.mesh.ngmesh.Refine()
         self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
@@ -549,7 +560,8 @@ class ARF:
 
     def selfadjsystem(self, p):
 
-        X = ng.H1(self.mesh, order=p, dirichlet='OuterCircle', complex=True)
+        X = ng.H1(self.mesh, order=p, complex=True)
+
         u, v = X.TnT()
 
         A = ng.BilinearForm(X)
@@ -568,7 +580,7 @@ class ARF:
         radial = ng.pml.Radial(rad=self.Rclado,
                                alpha=alpha*1j, origin=(0, 0))
         self.mesh.SetPML(radial, 'Outer')
-        X = ng.H1(self.mesh, order=p, dirichlet='OuterCircle', complex=True)
+        X = ng.H1(self.mesh, order=p, complex=True)
         u, v = X.TnT()
         A = ng.BilinearForm(X)
         B = ng.BilinearForm(X)
@@ -644,7 +656,7 @@ class ARF:
         x = ng.x
         y = ng.y
         r = ng.sqrt(x*x+y*y) + 0j
-        X = ng.H1(self.mesh, order=p, dirichlet='OuterCircle', complex=True)
+        X = ng.H1(self.mesh, order=p, complex=True)
         u, v = X.TnT()
         ux, uy = grad(u)
         vx, vy = grad(v)
@@ -669,21 +681,24 @@ class ARF:
         AA += [ng.BilinearForm(X, check_unused=False)]
         AA[3] += -u * v * dx_int
 
-        # A mass matrix for compound space  X x X x X
-        X3 = ng.FESpace([X, X, X])
-        u0, u1, u2 = X3.TrialFunction()
-        v0, v1, v2 = X3.TestFunction()
-        B = ng.BilinearForm(X3)
-        B += (u0 * v0 + u1 * v1 + u2 * v2) * ng.dx
+        # A mass matrix for X
+        u, v = X.TnT()
+        B = ng.BilinearForm(X)
+        B += u * v * dx
 
         with ng.TaskManager():
             B.Assemble()
             for i in range(len(AA)):
                 AA[i].Assemble()
 
-        return AA, B, X, X3
+        X3 = ng.FESpace([X, X, X])
+        B3 = ng.BlockMatrix([[B.mat, None, None],
+                             [None, B.mat, None],
+                             [None, None, B.mat]])
 
-    def polyeig(self, p, alpha=1, stop_tol=1e-12, npts=8, initdim=5,
+        return AA, B.mat, X, B3, X3
+
+    def polyeig(self, p, alpha=10, stop_tol=1e-12, npts=8, initdim=5,
                 #    LP01,   LP11,  LP21   LP02
                 ctrs=(2.24,  3.57,  4.75,  5.09),
                 radi=(0.05,  0.01,  0.01,  0.01)):
@@ -710,7 +725,9 @@ class ARF:
         eigenvalues in Zs[i].
         """
 
-        AA, B, X, X3 = self.polypmlsystem(p=p, alpha=alpha)
+        AA, B, X, B3, X3 = self.polypmlsystem(p=p, alpha=alpha)
+        print('Set PML with alpha=', alpha, 'and thickness=%.3f'
+              % self.touters)
         Ys = []
         longYs = []
         Yls = []
@@ -719,7 +736,7 @@ class ARF:
         betas = []
 
         for rad, ctr in zip(radi, ctrs):
-            Y = NGvecs(X3, initdim, M=B.mat)
+            Y = NGvecs(X3, initdim, M=B3)
             Yl = Y.create()
             Y.setrandom()
             Yl.setrandom()
@@ -736,6 +753,28 @@ class ARF:
                                   stop_tol=stop_tol)
             y = P.first(Y)
             yl = P.last(Yl)
+            y.centernormalize(self.mesh(0, 0))
+            yl.centernormalize(self.mesh(0, 0))
+            print('Computed Z =', Z)
+
+            # a posteriori checks
+            decayrate = alpha * (self.Rout - self.Rcs) + self.Rcs * Z.imag
+            bdryval = np.exp(-decayrate) / np.sqrt(np.abs(Z)*np.pi/2)
+            bdrnrm0 = bdryval*2*np.pi*self.Rout
+            print('PML guessed boundary norm ~ %.1e' % max(bdrnrm0))
+            if np.max(bdrnrm0) > 1e-6:
+                print('*** Not enough PML decay for this Z!')
+
+            def outint(u):
+                out = self.mesh.Boundaries('OuterCircle')
+                s = ng.Integrate(u*ng.Conj(u), out, ng.BND).real
+                return ng.sqrt(s)
+
+            bdrnrm = y.applyfnl(outint)
+            print('Actual boundary norm = %.1e' % max(bdrnrm))
+            if np.max(bdrnrm) > 1e-6:
+                print('*** Mode has not decayed in PML enough!')
+
             Ys.append(y.copy())
             Yls.append(yl.copy())
             longYs.append(Y.copy())
@@ -810,7 +849,7 @@ def loadarfmode(modenpzf, arffprefix):
         else:  # convert singleton arrays to scalars
             d[k] = v.item()
     print('  Degree %d modes found in file %s' % (p, modenpzf))
-    X = ng.H1(a.mesh, order=p, dirichlet='OuterCircle', complex=True)
+    X = ng.H1(a.mesh, order=p, complex=True)
     X3 = ng.FESpace([X, X, X])
     Y = NGvecs(X, y.shape[1])
     Y.fromnumpy(y)
