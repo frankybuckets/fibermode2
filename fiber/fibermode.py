@@ -41,7 +41,7 @@ class FiberMode:
           * region r < 1, in polar coords, is called "core",
           * region 1 < r < Rpml   is called "clad",
           * region Rpml < r < Rout   is called "pml",
-          * when "Rpml" is unspecified, it is set to Rpml = (Rout+1)/2,
+          * when "Rpml" is None, it is set to Rpml = (Rout+1)/2,
           * index of refraction is set using Fiber("fibername")
           * when "Rout" is unspecified, it is taken to match the ratio
             of cladding radius to core radius from Fiber("fibername"),
@@ -85,6 +85,23 @@ class FiberMode:
         self.m = None
         self.pml_ngs = None  # True if ngsolve pml set (then cant reuse mesh)
         self.X = None
+        self.curvature = None
+
+    def __str__(self):
+
+        s = '\nFiberMode Object: Nondimensional Computational Parameters:'
+        s += '\n  Geometry consists of circular core (radius = 1), an annular'
+        s += '\n  layer 1<r<Rpml=%g, and another layer Rpml<r<Rout=%g.'\
+            % (self.Rpml, self.Rout)
+        s += '\n  Max mesh sizes: %g (core), %g (cladding), %g (pml)\n' \
+            % (self.hcore, self.hclad, self.hpml)
+        s += 'Physical Parameters:' + \
+            '\n  Wavelength = %g meters' % (2*np.pi/self.fiber.ks)
+        s += '\n  Refractive indices: %g (cladding), %g (core)' % \
+            (self.fiber.nclad, self.fiber.ncore)
+        if self.curvature is not None:
+            s += '\n  Fiber bending curvature = %g' % self.curvature
+        return s
 
     # FURTHER INITIALIZATIONS & SETTERS #####################################
 
@@ -468,7 +485,7 @@ class FiberMode:
             self.setrefractiveindex(curvature=0)
 
         print(' PML (automatic, frequency-independent) starts at r=', pmlbegin)
-        print(' Degree p = ', p, ' Curvature =', self.curvature)
+        print(' Degree p = ', p, ' Fiber curvature =', self.curvature)
 
         self.p = p
         self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
@@ -624,7 +641,7 @@ class FiberMode:
         print(' PML (poly, k-dependent), includeclad =', includeclad)
         print(' Degree p = ', p, ' Curvature =', self.curvature)
 
-        self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
+        self.X = H1(self.mesh, order=self.p, complex=True)
 
         # Our implementation of [Nannen+Wess]'s frequency-dependent PML is
         # based on the idea to make a cubic eigenproblem using 3 copies of X:
@@ -639,7 +656,7 @@ class FiberMode:
         v2x, v2y = grad(v2)
 
         if includeclad:
-            pmlbegin = self.rclad
+            pmlbegin = self.Rpml
             dx_pml = dx(definedon=self.mesh.Materials('pml'))
             dx_int = dx(definedon=self.mesh.Materials('core|clad'))
         else:
@@ -704,10 +721,9 @@ class FiberMode:
 
         return z, yl, y, P, Yl, Y
 
-    def leakymode(self, p, radius, center,
-                  alpha=1, includeclad=False,
-                  stop_tol=1e-10, npts=10, niter=50, nspan=10,
-                  verbose=True, inverse='umfpack'):
+    def leakymode(self, p, radius, center, npts=8, nspan=10,
+                  alpha=5, includeclad=True, inverse=None,
+                  **feastkwargs):
         """
         Compute leaky modes by solving a nonlinear eigenproblem derived
         from a frequency-dependent PML formulated by [Nannen+Wess].
@@ -750,11 +766,10 @@ class FiberMode:
         if self.m is None:
             self.setrefractiveindex(curvature=0)
         self.p = p
-        print(' PML (poly, k-dependent), includeclad =', includeclad)
-        print(' Degree p = ', p, ' Curvature =', self.curvature)
+        print(self)
 
         if includeclad:
-            pmlbegin = self.rclad
+            pmlbegin = self.Rpml
             dx_pml = dx(definedon=self.mesh.Materials('pml'))
             dx_int = dx(definedon=self.mesh.Materials('core|clad'))
         else:
@@ -762,13 +777,16 @@ class FiberMode:
             dx_pml = dx(definedon=self.mesh.Materials('pml|clad'))
             dx_int = dx(definedon=self.mesh.Materials('core'))
 
+        print('Using frequency dependent PML with includeclad =', includeclad)
+        print('PML starts at', pmlbegin, 'and ends at ', self.Rout)
+
         R = pmlbegin
         s = 1 + 1j * alpha
         x = ng.x
         y = ng.y
         r = ng.sqrt(x*x+y*y) + 0j
 
-        self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
+        self.X = H1(self.mesh, order=self.p, complex=True)
 
         u, v = self.X.TnT()
         ux, uy = grad(u)
@@ -798,9 +816,8 @@ class FiberMode:
             for i in range(4):
                 AA[i].Assemble()
 
-        P = SpectralProjNGPoly(AA, self.X,
-                               radius, center, npts,
-                               verbose=verbose, inverse=inverse)
+        P = SpectralProjNGPoly(AA, self.X, radius, center, npts,
+                               inverse=inverse)
 
         # A mass matrix for compound space  X x X x X
         X3 = ng.FESpace([self.X, self.X, self.X])
@@ -811,18 +828,38 @@ class FiberMode:
         with ng.TaskManager():
             B.Assemble()
 
-        Y = NGvecs(X3, 10, M=B.mat)
+        Y = NGvecs(X3, nspan, M=B.mat)
         Yl = Y.create()
-        Y.setrandom()
-        Yl.setrandom()
+        Y.setrandom(seed=1)
+        Yl.setrandom(seed=1)
 
         z, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                    stop_tol=stop_tol,
-                                    check_contour=2,
-                                    niterations=niter, nrestarts=1)
+                                    **feastkwargs)
 
         yl = P.first(Yl)
         yr = P.first(Y)
+        yr.centernormalize(self.mesh(0, 0))
+        yl.centernormalize(self.mesh(0, 0))
+        print('Computed Z =', z)
+
+        # a posteriori checks
+        decayrate = alpha * (self.Rout - self.Rpml) + self.Rpml * z.imag
+        bdryval = np.exp(-decayrate) / np.sqrt(np.abs(z)*np.pi/2)
+        bdrnrm0 = bdryval*2*np.pi*self.Rout
+        print('PML guessed boundary norm ~ %.1e' % max(bdrnrm0))
+        if np.max(bdrnrm0) > 1e-6:
+            print('*** Likely not enough PML decay for this Z!')
+
+        def outint(u):
+            out = self.mesh.Boundaries('outer')
+            s = ng.Integrate(u*ng.Conj(u), out, ng.BND).real
+            return ng.sqrt(s)
+
+        bdrnrm = yr.applyfnl(outint)
+        print('Actual boundary norm = %.1e' % max(bdrnrm))
+        if np.max(bdrnrm) > 1e-5:
+            raise RuntimeError('*** Mode has not decayed in PML enough! ' +
+                               'Mode boundary norm = %.1e' % max(bdrnrm))
 
         return z, yl, yr, P, Yl, Y
 
@@ -1065,7 +1102,7 @@ class FiberMode:
             self.checkload(f)
             self.p = int(f['p'])
             print('  Degree %d modes found in file' % self.p)
-            self.X = H1(self.mesh, order=self.p, dirichlet='outer',
+            self.X = H1(self.mesh, order=self.p,
                         complex=True)
             y = f['y']
             betas = f['betas']
