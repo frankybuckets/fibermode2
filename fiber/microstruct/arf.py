@@ -740,8 +740,8 @@ class ARF:
         for rad, ctr in zip(radi, ctrs):
             Y = NGvecs(X3, initdim, M=B3)
             Yl = Y.create()
-            Y.setrandom()
-            Yl.setrandom()
+            Y.setrandom(seed=1)
+            Yl.setrandom(seed=1)
 
             def within(z):
                 # look below the real axis only
@@ -761,7 +761,8 @@ class ARF:
             print('Computed Z =', Z)
 
             # a posteriori checks
-            decayrate = alpha * (self.Rout - self.Rcs) + self.Rcs * Z.imag
+            decayrate = alpha * (self.Rout - self.Rclado) + \
+                self.Rclado * Z.imag
             bdryval = np.exp(-decayrate) / np.sqrt(np.abs(Z)*np.pi/2)
             bdrnrm0 = bdryval*2*np.pi*self.Rout
             print('PML guessed boundary norm ~ %.1e' % max(bdrnrm0))

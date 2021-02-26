@@ -843,7 +843,7 @@ class FiberMode:
         print('Computed Z =', z)
 
         # a posteriori checks
-        decayrate = alpha * (self.Rout - self.Rpml) + self.Rpml * z.imag
+        decayrate = alpha * (self.Rout - pmlbegin) + pmlbegin * z.imag
         bdryval = np.exp(-decayrate) / np.sqrt(np.abs(z)*np.pi/2)
         bdrnrm0 = bdryval*2*np.pi*self.Rout
         print('PML guessed boundary norm ~ %.1e' % max(bdrnrm0))
