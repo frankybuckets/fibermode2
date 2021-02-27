@@ -497,8 +497,9 @@ class FiberMode:
             dx_pml = dx(definedon=self.mesh.Materials('pml|clad'))
             dx_int = dx(definedon=self.mesh.Materials('core'))
 
-        print('Using frequency dependent PML with includeclad =', includeclad)
-        print('PML starts at', pmlbegin, 'and ends at ', self.Rout)
+        print('Using frequency dependent PML with includeclad=', includeclad)
+        print('PML of alpha=', alpha, ' starts at',
+              pmlbegin, 'and ends at ', self.Rout)
 
         R = pmlbegin
         s = 1 + 1j * alpha
