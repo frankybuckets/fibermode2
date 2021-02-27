@@ -441,6 +441,151 @@ class FiberMode:
 
     # LEAKY MODES ###########################################################
 
+    def leakymode(self, p, radius, center, npts=8, nspan=10,
+                  alpha=5, includeclad=True, inverse=None,
+                  **feastkwargs):
+        """
+        Compute leaky modes by solving a nonlinear eigenproblem derived
+        from a frequency-dependent PML formulated by [Nannen+Wess].
+
+        INPUTS:
+
+        * p: degree of finite element to be used to compute modes.
+        * radius, center: Capture modes whose non-dimensional resonance
+            value Z (not Z²) is contained within the circular contour
+            centered at "center" of radius "radius" in the complex plane.
+        * alpha: Quantity α (PML strength) in the mapping formula below.
+        * includeclad:
+            If True, then cladding is included in the domain, so PML
+            is set in 'pml' region only.
+            If False, then PML is set in the union 'pml|clad'.
+        * npts: number of quadrature points in the contour for FEAST.
+        * niter: number of FEAST iterations before restart.
+        * nspan: intial number of random vectors to start FEAST.
+        * verbose: when true, prints FEAST iteration details
+        * inverse: type of sparse inverse to use (if more than one installed)
+
+        OUTPUTS:    z, yl, yr, P, Yl, Y
+
+        * z: computed resonance values
+        * yl, yr: left and right eigenspans of nonlinear eigenproblem
+        * P: spectral projector approximation
+        * Yl, Y: left & right eigenspans of large linear eigenproblem
+
+        METHOD:
+
+        [Nannen+Wess]'s method performs the complex coordinate transformation
+           mapped_x = x * η(r) / r,                   where
+           η(r) = R + (r - R) * (1 + 1j * α) / Z
+        and R is the radius where PML starts (the variable pmlbegin below).
+        (Note that Z takes the role of frequency, called ω in [Nannen+Wess].)
+        This then leads to a cubic eigenproblem. We solve it using our own
+        spectral projector facility for polynomial eigenproblems.
+        """
+
+        if self.m is None:
+            self.setrefractiveindex(curvature=0)
+        self.p = p
+        print(self)
+
+        if includeclad:
+            pmlbegin = self.Rpml
+            dx_pml = dx(definedon=self.mesh.Materials('pml'))
+            dx_int = dx(definedon=self.mesh.Materials('core|clad'))
+        else:
+            pmlbegin = 1
+            dx_pml = dx(definedon=self.mesh.Materials('pml|clad'))
+            dx_int = dx(definedon=self.mesh.Materials('core'))
+
+        print('Using frequency dependent PML with includeclad =', includeclad)
+        print('PML starts at', pmlbegin, 'and ends at ', self.Rout)
+
+        R = pmlbegin
+        s = 1 + 1j * alpha
+        x = ng.x
+        y = ng.y
+        r = ng.sqrt(x*x+y*y) + 0j
+
+        self.X = H1(self.mesh, order=self.p, complex=True)
+
+        u, v = self.X.TnT()
+        ux, uy = grad(u)
+        vx, vy = grad(v)
+
+        AA = [BilinearForm(self.X, check_unused=False)]
+        AA[0] += (s*r/R) * grad(u) * grad(v) * dx_pml
+        AA[0] += s * (r-R)/(R*r*r) * (x*ux+y*uy) * v * dx_pml
+        AA[0] += s * (R-2*r)/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
+        AA[0] += -s**3 * (r-R)**2/(R*r) * u * v * dx_pml
+
+        AA += [BilinearForm(self.X)]
+        AA[1] += grad(u) * grad(v) * dx_int
+        AA[1] += -self.m * u * v * dx_int
+        AA[1] += 2 * (r-R)/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
+        AA[1] += 1/r**2 * (x*ux+y*uy) * v * dx_pml
+        AA[1] += -2*s*s*(r-R)/r * u * v * dx_pml
+
+        AA += [BilinearForm(self.X, check_unused=False)]
+        AA[2] += R/s/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
+        AA[2] += -R*s/r * u * v * dx_pml
+
+        AA += [BilinearForm(self.X, check_unused=False)]
+        AA[3] += -u * v * dx_int
+
+        with ng.TaskManager():
+            for i in range(4):
+                AA[i].Assemble()
+
+        P = SpectralProjNGPoly(AA, self.X, radius, center, npts,
+                               inverse=inverse)
+
+        # A mass matrix for compound space  X x X x X
+        X3 = ng.FESpace([self.X, self.X, self.X])
+        u0, u1, u2 = X3.TrialFunction()
+        v0, v1, v2 = X3.TestFunction()
+        B = BilinearForm(X3)
+        B += (u0 * v0 + u1 * v1 + u2 * v2) * dx
+        with ng.TaskManager():
+            B.Assemble()
+
+        Y = NGvecs(X3, nspan, M=B.mat)
+        Yl = Y.create()
+        Y.setrandom(seed=1)
+        Yl.setrandom(seed=1)
+
+        z, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
+                                    **feastkwargs)
+
+        ews, cgd = history[-2], history[-1]
+        if not cgd:
+            print('*** Iterations did not converge')
+
+        yl = P.last(Yl)
+        yr = P.first(Y)
+        yr.centernormalize(self.mesh(0, 0))
+        yl.centernormalize(self.mesh(0, 0))
+        print('Computed Z =', z)
+
+        # a posteriori checks
+        decayrate = alpha * (self.Rout - pmlbegin) + pmlbegin * z.imag
+        bdryval = np.exp(-decayrate) / np.sqrt(np.abs(z)*np.pi/2)
+        bdrnrm0 = bdryval*2*np.pi*self.Rout
+        print('PML guessed boundary norm ~ %.1e' % max(bdrnrm0))
+        if np.max(bdrnrm0) > 1e-6:
+            print('*** Likely not enough PML decay for this Z!')
+
+        def outint(u):
+            out = self.mesh.Boundaries('outer')
+            s = ng.Integrate(u*ng.Conj(u), out, ng.BND).real
+            return ng.sqrt(s)
+
+        bdrnrm = yr.applyfnl(outint)
+        print('Actual max boundary norm = %.1e' % max(bdrnrm))
+        if np.max(bdrnrm) > 1e-5:
+            print('*** Mode has not decayed in PML enough!')
+
+        return z, yl, yr, P, Yl, Y, ews
+
     def leakymode_auto(self, p, radiusZ2, centerZ2,
                        alpha=1, includeclad=False,
                        stop_tol=1e-10, npts=10, niter=50, nspan=10,
@@ -720,148 +865,6 @@ class FiberMode:
             yl._mv[i].data = Ylg.components[0].vecs[i]
 
         return z, yl, y, P, Yl, Y
-
-    def leakymode(self, p, radius, center, npts=8, nspan=10,
-                  alpha=5, includeclad=True, inverse=None,
-                  **feastkwargs):
-        """
-        Compute leaky modes by solving a nonlinear eigenproblem derived
-        from a frequency-dependent PML formulated by [Nannen+Wess].
-
-        INPUTS:
-
-        * p: degree of finite element to be used to compute modes.
-        * radius, center: Capture modes whose non-dimensional resonance
-            value Z (not Z²) is contained within the circular contour
-            centered at "center" of radius "radius" in the complex plane.
-        * alpha: Quantity α (PML strength) in the mapping formula below.
-        * includeclad:
-            If True, then cladding is included in the domain, so PML
-            is set in 'pml' region only.
-            If False, then PML is set in the union 'pml|clad'.
-        * npts: number of quadrature points in the contour for FEAST.
-        * niter: number of FEAST iterations before restart.
-        * nspan: intial number of random vectors to start FEAST.
-        * verbose: when true, prints FEAST iteration details
-        * inverse: type of sparse inverse to use (if more than one installed)
-
-        OUTPUTS:    z, yl, yr, P, Yl, Y
-
-        * z: computed resonance values
-        * yl, yr: left and right eigenspans of nonlinear eigenproblem
-        * P: spectral projector approximation
-        * Yl, Y: left & right eigenspans of large linear eigenproblem
-
-        METHOD:
-
-        [Nannen+Wess]'s method performs the complex coordinate transformation
-           mapped_x = x * η(r) / r,                   where
-           η(r) = R + (r - R) * (1 + 1j * α) / Z
-        and R is the radius where PML starts (the variable pmlbegin below).
-        (Note that Z takes the role of frequency, called ω in [Nannen+Wess].)
-        This then leads to a cubic eigenproblem. We solve it using our own
-        spectral projector facility for polynomial eigenproblems.
-        """
-
-        if self.m is None:
-            self.setrefractiveindex(curvature=0)
-        self.p = p
-        print(self)
-
-        if includeclad:
-            pmlbegin = self.Rpml
-            dx_pml = dx(definedon=self.mesh.Materials('pml'))
-            dx_int = dx(definedon=self.mesh.Materials('core|clad'))
-        else:
-            pmlbegin = 1
-            dx_pml = dx(definedon=self.mesh.Materials('pml|clad'))
-            dx_int = dx(definedon=self.mesh.Materials('core'))
-
-        print('Using frequency dependent PML with includeclad =', includeclad)
-        print('PML starts at', pmlbegin, 'and ends at ', self.Rout)
-
-        R = pmlbegin
-        s = 1 + 1j * alpha
-        x = ng.x
-        y = ng.y
-        r = ng.sqrt(x*x+y*y) + 0j
-
-        self.X = H1(self.mesh, order=self.p, complex=True)
-
-        u, v = self.X.TnT()
-        ux, uy = grad(u)
-        vx, vy = grad(v)
-
-        AA = [BilinearForm(self.X, check_unused=False)]
-        AA[0] += (s*r/R) * grad(u) * grad(v) * dx_pml
-        AA[0] += s * (r-R)/(R*r*r) * (x*ux+y*uy) * v * dx_pml
-        AA[0] += s * (R-2*r)/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
-        AA[0] += -s**3 * (r-R)**2/(R*r) * u * v * dx_pml
-
-        AA += [BilinearForm(self.X)]
-        AA[1] += grad(u) * grad(v) * dx_int
-        AA[1] += -self.m * u * v * dx_int
-        AA[1] += 2 * (r-R)/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
-        AA[1] += 1/r**2 * (x*ux+y*uy) * v * dx_pml
-        AA[1] += -2*s*s*(r-R)/r * u * v * dx_pml
-
-        AA += [BilinearForm(self.X, check_unused=False)]
-        AA[2] += R/s/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
-        AA[2] += -R*s/r * u * v * dx_pml
-
-        AA += [BilinearForm(self.X, check_unused=False)]
-        AA[3] += -u * v * dx_int
-
-        with ng.TaskManager():
-            for i in range(4):
-                AA[i].Assemble()
-
-        P = SpectralProjNGPoly(AA, self.X, radius, center, npts,
-                               inverse=inverse)
-
-        # A mass matrix for compound space  X x X x X
-        X3 = ng.FESpace([self.X, self.X, self.X])
-        u0, u1, u2 = X3.TrialFunction()
-        v0, v1, v2 = X3.TestFunction()
-        B = BilinearForm(X3)
-        B += (u0 * v0 + u1 * v1 + u2 * v2) * dx
-        with ng.TaskManager():
-            B.Assemble()
-
-        Y = NGvecs(X3, nspan, M=B.mat)
-        Yl = Y.create()
-        Y.setrandom(seed=1)
-        Yl.setrandom(seed=1)
-
-        z, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                    **feastkwargs)
-
-        yl = P.first(Yl)
-        yr = P.first(Y)
-        yr.centernormalize(self.mesh(0, 0))
-        yl.centernormalize(self.mesh(0, 0))
-        print('Computed Z =', z)
-
-        # a posteriori checks
-        decayrate = alpha * (self.Rout - pmlbegin) + pmlbegin * z.imag
-        bdryval = np.exp(-decayrate) / np.sqrt(np.abs(z)*np.pi/2)
-        bdrnrm0 = bdryval*2*np.pi*self.Rout
-        print('PML guessed boundary norm ~ %.1e' % max(bdrnrm0))
-        if np.max(bdrnrm0) > 1e-6:
-            print('*** Likely not enough PML decay for this Z!')
-
-        def outint(u):
-            out = self.mesh.Boundaries('outer')
-            s = ng.Integrate(u*ng.Conj(u), out, ng.BND).real
-            return ng.sqrt(s)
-
-        bdrnrm = yr.applyfnl(outint)
-        print('Actual boundary norm = %.1e' % max(bdrnrm))
-        if np.max(bdrnrm) > 1e-5:
-            raise RuntimeError('*** Mode has not decayed in PML enough! ' +
-                               'Mode boundary norm = %.1e' % max(bdrnrm))
-
-        return z, yl, yr, P, Yl, Y
 
     # BENT MODES ############################################################
 
