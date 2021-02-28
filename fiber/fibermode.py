@@ -28,7 +28,7 @@ class FiberMode:
 
     def __init__(self, fibername=None, fromfile=None,
                  Rpml=None, Rout=None, geom=None,
-                 h=4, hcore=None):
+                 h=3, hcore=None, refine=0):
         """
         EITHER provide a prefix "filename" of a collection of files, e.g.,
 
@@ -61,7 +61,7 @@ class FiberMode:
                 raise ValueError('Need either a file or a fiber name')
             self.makefibermode(fibername, Rpml=Rpml, Rout=Rout, geom=geom,
                                h=h, hcore=hcore)
-            self.makemesh()
+            self.makemesh(refine)
         else:
             fbmfilename = self.outfolder+'/'+fromfile+'_fbm.npz'
             if os.path.isfile(fbmfilename):
@@ -126,9 +126,12 @@ class FiberMode:
         self.hclad = h
         self.hpml = h
 
-    def makemesh(self):
+    def makemesh(self, refine):
         self.setstepindexgeom()  # sets self.geo
-        mesh = ng.Mesh(self.geo.GenerateMesh())
+        ngmesh = self.geo.GenerateMesh()
+        for i in range(refine):
+            ngmesh.Refine()
+        mesh = ng.Mesh(ngmesh)
         mesh.Curve(3)
         ng.Draw(mesh)
         self.mesh = mesh
