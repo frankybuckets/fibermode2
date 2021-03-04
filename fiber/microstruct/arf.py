@@ -18,9 +18,13 @@ import pickle
 
 class ARF:
 
-    def __init__(self, freecapil=False, **kwargs):
+    def __init__(self, name=None, freecapil=False, **kwargs):
         """
         PARAMETERS:
+
+           name: If None, default to using the ARF microstructure fiber
+                with 6 capillary tubes. Otherwise, set geometric fibers
+                for the fiber based on the name provided.
 
            freecapil: If True, capillary tubes in the microstructure will
                 be modeled as free standing in the hollow region.
@@ -36,15 +40,10 @@ class ARF:
 
         self.freecapil = freecapil
 
-        # DEFAULT ATTRIBUTE VALUES
+        # Set the fiber parameters.
+        self.set(name=name)
 
-        self.scaling = 15  # to get actual length, multiply by scaling * 1e-6
-
-        # Primary geometrical parameters (geometry shown in tex folder)
-        self.Rc = 15.0    # radius of inner part of hollow core
-        self.tclad = 5    # thickness of the glass jacket/sheath
-        self.touter = 30  # thickness of final outer annular layer (PML)
-        self.t = 0.42     # thickness of the capillary tubes
+        # Quick debug: Print out number of capillary tubes and 
 
         # Attributes for tuning mesh sizes
 
@@ -57,73 +56,48 @@ class ARF:
 
         # Updatable length attributes. All lengths are in micrometers.
 
-        self.updatablelengths = ['Rc', 'tclad', 't', 'touter',
+        self.updatablelengths = ['Rc', 'Rto', 'Rti', 't', 'd', 'tclad', 'touter',
                                  'capillary_maxh', 'air_maxh',
                                  'inner_core_maxh', 'glass_maxh', 'outer_maxh']
-
-        # Attributes specific to the embedded capillary case:
-        #
-        #    e = fraction of the capillary tube thickness that
-        #        is embedded into the adjacent silica layer. When
-        #        e=0, the outer circle of the capillary tube
-        #        osculates the circular boundary of the silica
-        #        layer. When e=1, the inner circle of the capillary
-        #        tube is tangential to the circular boundary (and
-        #        the outer circle is embedded). Value of e must be
-        #        strictly greater than 0 and less than or equal to 1.
-        self.e = 0.025 / self.t    # nondimensional fraction
-
-        # Attributes used only in the freestanding capillary case:
-        #
-        #    s = separation of the hollow capillary tubes as a
-        #        percentage of the radial distance from the center of
-        #        the fiber to the center of capillary tubes (which
-        #        would be tangential to the outer glass jacket when s=0).
-        self.s = 0.05              # nondimensional fraction
 
         # Physical parameters
 
         self.n_air = 1.00027717    # refractive index of air
         self.n_si = 1.4545         # refractive index of glass
-        self._wavelength = 1.8e-6  # fiber's operating wavelength
 
-        # UPDATE (any of the above) attributes using given inputs
+        # UPDATE attributes set in ARF.set() using given inputs
 
         for key, value in kwargs.items():
             setattr(self, key, value)
 
+        # TODO: Update remaining lengths dependent on the set attributes. If the
+        # user updates an arbitrary set of parameters, we need to perform a
+        # geometry check to make sure that the parameters the user set are not
+        # erroneous.
+
+        # Set the scaling as requested by the user.
+        if 'scaling' in kwargs:
+            self.scaling = kwargs['scaling']
+
         # Scale updatablelengths and store scaled values in class attributes
         # whose name has an 's' appended. Only the scaled values are used
         # for geometry and mesh construction.
-        for key in self.updatablelengths:  # Divide these lengths by scaling
+        for key in self.updatablelengths:
             setattr(self, key + 's', getattr(self, key)/self.scaling)
-
-        if 'scaling' in kwargs:    # scale all updatable lengths
-            for key in self.updatablelengths:
-                setattr(self, key + 's', getattr(self, key)/kwargs['scaling'])
 
         # attributes in addition to updatablelengths for reconstructing obj
         #    (don't save scaling: avoid re-re-scaling!)
         self.savableattr = ['freecapil', 'n_air', 'n_si', 'wavelength',
                             'e', 's', 'scaling', 'refined']
 
-        # DEPENDENT attributes (dependent on scaled length attributes)
-
-        # distance b/w capillary tubes
-        self.ds = 5 * self.ts
-        # inner radius of the capillary tubes
-        self.Rto = self.Rcs - self.ds
-        # outer radius of the capillary tubes
-        self.Rti = self.Rto - self.ts
-
         if self.freecapil:
             # outer radius of glass sheath, where the geometry ends
-            self.Rclado = self.Rcs + 2 * self.Rto + self.tclads
+            self.Rclado = self.Rcs + 2 * self.Rtos + self.tclads
             # radius where glass sheath (cladding) begins
-            self.Rcladi = self.Rcs + 2 * self.Rto
+            self.Rcladi = self.Rcs + 2 * self.Rtos
         else:
             # radius where glass sheath (cladding) begins
-            self.Rcladi = self.Rcs + self.ts + 2*self.Rti + self.ts*(1-self.e)
+            self.Rcladi = self.Rcs + self.ts + 2*self.Rtis + self.ts*(1-self.e)
             # outer radius of glass sheath
             self.Rclado = self.Rcladi + self.tclads
 
@@ -167,10 +141,13 @@ class ARF:
             'CapilOuter': [mat['Si'], mat['FillAir']],
         }
 
+        # Before creating the mesh, check to make sure that the geometric
+        # parameters lead to a mesh with non-tangent and non-overlapping
+        # subdomains (overlapping and tangent subdomains can cause netgen
+        # to crash).
+        self._check_geometric_parameters()
+
         # CREATE GEOMETRY & MESH
-
-        self.num_capillary_tubes = 6  # only case 6 implemented/tested!
-
         if self.freecapil:
             self.geo = self.geom_freestand_capillaries()
         else:
@@ -242,6 +219,75 @@ class ARF:
         self.m = ng.CoefficientFunction(
             [(a*k)**2 * m[mat] for mat in self.mesh.GetMaterials()])
 
+    def set(self, name=None):
+        """
+        Method that sets the geometric parameters of the ARF fiber based
+        on the name supplied by the user. Specifying name='poletti'
+        yields a six-capillary fiber, while name='kolyadin' specifies
+        an 8-capillary fiber. 
+
+        Attributes specific to the embedded capillary case:
+        
+           e = fraction of the capillary tube thickness that
+               is embedded into the adjacent silica layer. When
+               e=0, the outer circle of the capillary tube
+               osculates the circular boundary of the silica
+               layer. When e=1, the inner circle of the capillary
+               tube is tangential to the circular boundary (and
+               the outer circle is embedded). Value of e must be
+               strictly greater than 0 and less than or equal to 1.
+
+        Attributes used only in the freestanding capillary case:
+        
+           s = separation of the hollow capillary tubes as a
+               percentage of the radial distance from the center of
+               the fiber to the center of capillary tubes (which
+               would be tangential to the outer glass jacket when s=0).
+        """
+
+        # By default, we'll use the 6-capillary fiber.
+        self.name = 'poletti' if name is None else name
+
+        if self.name == 'poletti':
+            # This case gives the default attributes of the fiber.
+
+            self.Rc = 15                 # core radius
+            self.Rto = 12.9              # capillary outer radius
+            self.Rti = 12.48             # capillary inner radius
+            self.t = self.Rto - self.Rti # capillary thickness
+            self.tclad = 5               # glass jacket (cladding) thickness
+            self.touter = 30             # outer jacket (PML) thickness
+            self.scaling = self.Rc       # scaling for the PDE
+            self.num_capillary_tubes = 6 # number of capillaries
+            self.s = 0.05
+            self.e = 0.025 / self.t
+            self._wavelength = 1.8e-6
+
+            # Compute the capillary tube separation distance.
+            half_sector = np.pi / self.num_capillary_tubes
+            D = 2 * (self.Rc + self.Rto) * np.sin(half_sector)
+            self.d = D - 2 * self.Rto
+        elif self.name == 'kolyadin':
+            self.Rc = 59.5               # core radius
+            self.Rto = 31.5              # capillary outer radius
+            self.Rti = 25.5              # capillary inner radius
+            self.t = self.Rto - self.Rti # capillary thickness
+            self.tclad = 1.2 * self.Rti  # glass jacket (cladding) thickness
+            self.touter = 30             # outer jacket (PML) thickness
+            self.scaling = self.Rc       # scaling for the PDE
+            self.num_capillary_tubes = 8 # number of capillaries
+            self.s = 0.05
+            self.e = 2.0 / self.t
+            self._wavelength = 5.75e-6
+
+            # Compute the capillary tube separation distance.
+            half_sector = np.pi / self.num_capillary_tubes
+            D = 2 * (self.Rc + self.Rto) * np.sin(half_sector)
+            self.d = D - 2 * self.Rto
+        else:
+            err_str = 'Fiber \'{0:s}\' not implemented.'.format(self.name)
+            raise NotImplementedError(err_str)
+
     def __str__(self):
         s = 'ARF Physical Parameters:' + \
             '\n  Rc = %g x %g x 1e-6 meters' % (self.Rcs, self.scaling)
@@ -284,6 +330,76 @@ class ARF:
 
     # GEOMETRY ########################################################
 
+    def _check_geometric_parameters(self):
+        """
+        Method that checks to make sure there are no overlapping
+        capillary tubes, or that other parameters provided for the
+        geometry are not erroneous.
+        """
+
+        if self.freecapil:
+            # First, given the current geometric parameters, compute
+            # an upper bound on the capillary contraction parameter s.
+            frac = self.Rtos / ((self.Rcs + self.Rtos) \
+                 * np.sin(np.pi / self.num_capillary_tubes))
+            sub = 1 - frac
+
+            # Next, given the current geometric parameters, compute
+            # an upper bound on the number of capillary tubes and
+            # check the current specified number of capillary tubes
+            # against this.
+            asin_frac = self.Rtos / ((1 - self.s) * (self.Rcs + self.Rtos))
+            nub = int(np.floor(np.pi / np.arcsin(asin_frac)))
+            
+            # A placeholder for the number of user-specified tubes.
+            n = self.num_capillary_tubes
+            
+            if n > nub:
+                # Set a new upper bound on s that uses the maximum lower
+                # bound on the number of capillary tubes.
+                frac = self.Rtos / ((self.Rcs + self.Rtos) \
+                     * np.sin(np.pi / self.num_capillary_tubes))
+                new_sub = sub if sub > 0 else 1 - frac
+
+                err_str = 'Specifying {0:d} capillary tube(s) '.format(n) \
+                        + 'results in tangent or overlapping capillary' \
+                        + 'subdomains. Consider setting ' \
+                        + '\'num_capillary_tubes\' less than or equal ' \
+                        + 'to {0:d} and then'.format(nub) \
+                        + 'setting s < {1:.3f},'.format(new_sub) \
+                        + 'or adjusting other geometric parameters.'
+        else:
+            # For the embedded case, we first check to make sure the embed
+            # fraction e gives us a resulting geometry that doesn't have
+            # tangent subdomain boundaries (e = 0) or capillary tubes that
+            # get pushed into the outer glass jacket.
+            if self.e <= 0 or self.e > 1:
+                err_str = 'Current value of e = {0:.3f}'.format(self.e) \
+                        + 'results in capillary tubes in invalid ' \
+                        + 'positions. The embedding fraction \'e\'' \
+                        + 'must be a real number satisfying ' \
+                        + '0 < e <= 1.'
+                raise ValueError(err_str)
+
+            # Next, given the current geometric parameters, compute
+            # an upper limit on the number of capillary tubes and
+            # check the current specified number of capillary tubes
+            # against this.
+            asin_frac = self.Rtos / (self.Rcs + self.Rtos)
+            nub = int(np.floor(np.pi / np.arcsin(asin_frac)))
+            
+            # A placeholder for the number of user-specified tubes.
+            n = self.num_capillary_tubes
+            
+            if n > nub:
+                err_str = 'Specifying {0:d} capillary tube(s) '.format(n) \
+                        + 'results in tangent or overlapping capillary' \
+                        + 'subdomains. Consider making ' \
+                        + '\'num_capillary_tubes\' less than or equal to ' \
+                        + '{0:d}'.format(nub) \
+                        + 'or adjusting other geometric parameters.'
+                raise ValueError(err_str)
+
     def geom_freestand_capillaries(self):
 
         geo = geom2d.SplineGeometry()
@@ -303,39 +419,35 @@ class ARF:
                       rightdomain=bdr['CladInner'][1],
                       bc='CladInner')
 
-        # The capillary tubes
-        Nxc = 0                   # N tube center xcoord
-        Nyc = self.Rcs + self.Rto  # N tube center ycoord
-        NEyc = Nyc / 2            # NE tube center ycoord
-        NExc = ng.sqrt(Nyc**2-NEyc**2)  # NE tube center xcoord
-        NWxc = -NExc             # NW tube center ycoord
-        NWyc = NEyc              # NW tube center xcoord
-        Sxc = 0                  # S tube center xcoord
-        Syc = -Nyc               # S tube center ycoord
-        SExc = NExc              # SE tube center xcoord
-        SEyc = -NEyc             # SE tube center ycoord
-        SWxc = -NExc             # SW tube center ycoord
-        SWyc = -NEyc             # SW tube center xcoord
+        #---------------------------------------------------------------------
+        # Add capillary tubes.
+        #---------------------------------------------------------------------
 
-        Nc = (Nxc*(1-self.s), Nyc*(1-self.s))
-        NEc = (NExc*(1-self.s), NEyc*(1-self.s))
-        NWc = (NWxc*(1-self.s), NWyc*(1-self.s))
-        Sc = (Sxc*(1-self.s), Syc*(1-self.s))
-        SEc = (SExc*(1-self.s), SEyc*(1-self.s))
-        SWc = (SWxc*(1-self.s), SWyc*(1-self.s))
+        # Spacing for the angles we need to add the inner circles for the
+        # capillaries.
+        theta = np.pi / 2.0 \
+              + np.linspace(0, 2*np.pi,
+                            num=self.num_capillary_tubes, endpoint=False)
 
-        for c in [Nc, NEc, NWc, Sc, SEc, SWc]:
-            geo.AddCircle(c=c, r=self.Rti,
+        # The radial distance to the capillary tube centers.
+        dist = (1 - self.s) * (self.Rcs + self.Rtos)
+
+        for t in theta:
+            c = (dist*np.cos(t), dist*np.sin(t))
+
+            geo.AddCircle(c=c, r=self.Rtis,
                           leftdomain=bdr['CapilInner'][0],
                           rightdomain=bdr['CapilInner'][1],
                           bc='CapilInner', maxh=self.capillary_maxhs)
-            geo.AddCircle(c=c, r=self.Rto,
+            geo.AddCircle(c=c, r=self.Rtos,
                           leftdomain=bdr['CapilOuter'][0],
                           rightdomain=bdr['CapilOuter'][1],
                           bc='CapilOuter', maxh=self.capillary_maxhs)
 
-        # Inner core region (not physcial, only used for refinement)
-        radius = 0.75 * self.Rcs
+        # Add the circle for the inner core. Since we are scaling back the
+        # (original) distance to the capillary tube centers by (1 - s), we
+        # necessarily need to do the same for the inner core region.
+        radius = 0.75 * self.Rcs * (1 - self.s)
         geo.AddCircle(c=(0, 0), r=radius,
                       leftdomain=bdr['Inner'][0],
                       rightdomain=bdr['Inner'][1],
@@ -344,9 +456,7 @@ class ARF:
         return geo
 
     def geom_embedded_capillaries(self):
-
-        # The origin of our coordinate system.
-        origin = (0.0, 0.0)
+        # Grab the boundary dictionary and create the spline geometry.
         bdr = self.boundary
         geo = geom2d.SplineGeometry()
 
@@ -368,33 +478,44 @@ class ARF:
         # (Rcladi * cos(phi), Rcladi * sin(phi)) and
         # (-Rcladi * cos(phi), Rcladi * sin(phi)).
 
-        phi = np.arcsin((self.Rcladi**2 +
-                         (self.Rcs + self.Rto)**2 - self.Rto**2)
-                        / (2 * (self.Rcs + self.Rto) * self.Rcladi))
+        acos_frac = (self.Rcladi**2 + (self.Rcs + self.Rtos)**2 - self.Rtos**2) \
+                  / (2 * (self.Rcs + self.Rtos) * self.Rcladi)
+        phi = np.arccos(acos_frac)
 
-        # Obtain the angle of the arc between two  capillaries.
-        psi = 2 * (phi - np.pi / 3)
+        # The angle of a given sector that bisects two adjacent capillary tubes.
+        # Visually, this looks like a wedge in the computational domain that
+        # contains a half capillary tube on each side of the widest part of the wedge.
+        sector = 2 * np.pi / self.num_capillary_tubes
 
-        # Get the distance to the middle control pt for the aforementioned arc.
+        # Obtain the angle of the arc between two capillaries. This subtends
+        # the arc between the two points where two adjacent capillary tubes
+        # embed into the outer glass jacket.
+        psi = sector - 2 * phi 
+
+        # Get the distance to the middle control point for the aforementioned arc.
         D = self.Rcladi / np.cos(psi / 2)
 
-        # The center of the top circle.
-        c = (0, self.Rcs + self.Rto)
+        # The center of the top capillary tube.
+        c = (0, self.Rcs + self.Rtos)
 
         capillary_points = []
 
         for k in range(self.num_capillary_tubes):
-            # Compute the rotation angle.
-            rotation_angle = k * np.pi / 3
+            # Compute the rotation angle needed for rotating the north
+            # capillary spline points to the other capillary locations in the
+            # domain.
+            rotation_angle = k * sector
 
-            # Compute the middle control point for the outer arc.
-            capillary_points += [(D * np.cos(phi - psi / 2 + rotation_angle),
-                                  D * np.sin(phi - psi / 2 + rotation_angle))]
+            # Compute the middle control point for the outer arc subtended by
+            # the angle psi + rotation_angle.
+            ctrl_pt_angle = np.pi / 2 - phi - psi / 2 + rotation_angle
+            capillary_points += [(D * np.cos(ctrl_pt_angle),
+                                  D * np.sin(ctrl_pt_angle))]
 
             # Obtain the control points for the capillary tube immediately
             # counterclockwise from the above control point.
             capillary_points += \
-                self.get_capillary_spline_points(c,  phi, k * np.pi / 3)
+                self.get_capillary_spline_points(c, phi, rotation_angle)
 
         # Add the capillary points to the geometry
         capnums = [geo.AppendPoint(x, y) for x, y in capillary_points]
@@ -412,40 +533,30 @@ class ARF:
                 bc='CapilOuterCladInner'
             )
 
-        # Add capillary tubes
+        #---------------------------------------------------------------------
+        # Add capillary tubes.
+        #---------------------------------------------------------------------
 
-        # The coordinates of the tube centers
-        Nxc = 0         # N tube center xcoord
-        Nyc = self.Rcs + self.Rto  # N tube center ycoord
-        NEyc = Nyc / 2  # NE tube center ycoord
-        NExc = np.sqrt(Nyc**2-NEyc**2)  # NE tube center xcoord
-        NWxc = -NExc    # NW tube center ycoord
-        NWyc = NEyc     # NW tube center xcoord
-        Sxc = 0         # S tube center xcoord
-        Syc = -Nyc      # S tube center ycoord
-        SExc = NExc     # SE tube center xcoord
-        SEyc = -NEyc    # SE tube center ycoord
-        SWxc = -NExc    # SW tube center ycoord
-        SWyc = -NEyc    # SW tube center xcoord
+        # Spacing for the angles we need to add the inner circles for the
+        # capillaries.
+        theta = np.pi / 2.0 \
+              + np.linspace(0, 2*np.pi,
+                            num=self.num_capillary_tubes, endpoint=False)
 
-        Nc = (Nxc,  Nyc)
-        NEc = (NExc, NEyc)
-        NWc = (NWxc, NWyc)
-        Sc = (Sxc,  Syc)
-        SEc = (SExc, SEyc)
-        SWc = (SWxc, SWyc)
+        # The radial distance to the capillary tube centers.
+        dist = self.Rcs + self.Rtos
 
-        # The capillary tubes
-        for c in [Nc, NEc, NWc, Sc, SEc, SWc]:
+        for t in theta:
+            c = (dist*np.cos(t), dist*np.sin(t))
 
-            geo.AddCircle(c=c, r=self.Rti,
+            geo.AddCircle(c=c, r=self.Rtis,
                           leftdomain=bdr['CapilInner'][0],
                           rightdomain=bdr['CapilInner'][1],
                           bc='CapilInner', maxh=self.capillary_maxhs)
 
         # Add the circle for the inner core.
         radius = 0.75 * self.Rcs
-        geo.AddCircle(c=origin, r=radius,
+        geo.AddCircle(c=(0, 0), r=radius,
                       leftdomain=bdr['Inner'][0],
                       rightdomain=bdr['Inner'][1],
                       bc='Inner', maxh=self.inner_core_maxhs)
@@ -482,8 +593,11 @@ class ARF:
         # make any transformations to the points easier to work with.
         points = np.zeros((2, 9))
 
-        # Determine the corresponding angle in the unit circle.
-        psi = np.arccos((self.Rcladi * np.cos(phi) - c[0]) / self.Rto)
+        # Compute the angle inside of the capillary tube to determine some
+        # of the subsequent spline points for the upper half of the outer
+        # capillary tube.
+        acos_frac = (self.Rcladi * np.sin(phi) - c[0]) / self.Rtos
+        psi = np.arccos(acos_frac)
 
         # The control points for the first spline.
         points[:, 0] = [np.cos(psi), np.sin(psi)]
@@ -510,7 +624,7 @@ class ARF:
         )
 
         # Rotate, scale, and shift the points.
-        points *= self.Rto
+        points *= self.Rtos
         points[0, :] += c[0]
         points[1, :] += c[1]
         points = np.dot(R, points)
