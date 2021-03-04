@@ -43,7 +43,11 @@ class ARF:
         # Set the fiber parameters.
         self.set(name=name)
 
-        # Quick debug: Print out number of capillary tubes and 
+        # Quick debug: Print out number of capillary tubes and the d/t ratio.
+        print('Number of tubes:', self.num_capillary_tubes)
+        print('d :', self.d)
+        print('t :', self.t)
+        print('d/t :', self.d / self.t)
 
         # Attributes for tuning mesh sizes
 
@@ -56,9 +60,10 @@ class ARF:
 
         # Updatable length attributes. All lengths are in micrometers.
 
-        self.updatablelengths = ['Rc', 'Rto', 'Rti', 't', 'd', 'tclad', 'touter',
-                                 'capillary_maxh', 'air_maxh',
-                                 'inner_core_maxh', 'glass_maxh', 'outer_maxh']
+        self.updatablelengths = ['Rc', 'Rto', 'Rti', 't', 'd', 'tclad',
+                                 'touter', 'capillary_maxh', 'air_maxh',
+                                 'inner_core_maxh', 'glass_maxh',
+                                 'outer_maxh']
 
         # Physical parameters
 
@@ -70,10 +75,10 @@ class ARF:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-        # TODO: Update remaining lengths dependent on the set attributes. If the
-        # user updates an arbitrary set of parameters, we need to perform a
-        # geometry check to make sure that the parameters the user set are not
-        # erroneous.
+        # TODO: Update remaining lengths dependent on the set attributes. If
+        # the user updates an arbitrary set of parameters, we need to perform
+        # a geometry check to make sure that the parameters the user set are
+        # not erroneous.
 
         # Set the scaling as requested by the user.
         if 'scaling' in kwargs:
@@ -224,10 +229,10 @@ class ARF:
         Method that sets the geometric parameters of the ARF fiber based
         on the name supplied by the user. Specifying name='poletti'
         yields a six-capillary fiber, while name='kolyadin' specifies
-        an 8-capillary fiber. 
+        an 8-capillary fiber.
 
         Attributes specific to the embedded capillary case:
-        
+
            e = fraction of the capillary tube thickness that
                is embedded into the adjacent silica layer. When
                e=0, the outer circle of the capillary tube
@@ -238,7 +243,7 @@ class ARF:
                strictly greater than 0 and less than or equal to 1.
 
         Attributes used only in the freestanding capillary case:
-        
+
            s = separation of the hollow capillary tubes as a
                percentage of the radial distance from the center of
                the fiber to the center of capillary tubes (which
@@ -251,14 +256,14 @@ class ARF:
         if self.name == 'poletti':
             # This case gives the default attributes of the fiber.
 
-            self.Rc = 15                 # core radius
-            self.Rto = 12.9              # capillary outer radius
-            self.Rti = 12.48             # capillary inner radius
-            self.t = self.Rto - self.Rti # capillary thickness
-            self.tclad = 5               # glass jacket (cladding) thickness
-            self.touter = 30             # outer jacket (PML) thickness
-            self.scaling = self.Rc       # scaling for the PDE
-            self.num_capillary_tubes = 6 # number of capillaries
+            self.Rc = 15                  # core radius
+            self.Rto = 12.9               # capillary outer radius
+            self.Rti = 12.48              # capillary inner radius
+            self.t = self.Rto - self.Rti  # capillary thickness
+            self.tclad = 5                # glass jacket (cladding) thickness
+            self.touter = 30              # outer jacket (PML) thickness
+            self.scaling = self.Rc        # scaling for the PDE
+            self.num_capillary_tubes = 6  # number of capillaries
             self.s = 0.05
             self.e = 0.025 / self.t
             self._wavelength = 1.8e-6
@@ -268,14 +273,14 @@ class ARF:
             D = 2 * (self.Rc + self.Rto) * np.sin(half_sector)
             self.d = D - 2 * self.Rto
         elif self.name == 'kolyadin':
-            self.Rc = 59.5               # core radius
-            self.Rto = 31.5              # capillary outer radius
-            self.Rti = 25.5              # capillary inner radius
-            self.t = self.Rto - self.Rti # capillary thickness
-            self.tclad = 1.2 * self.Rti  # glass jacket (cladding) thickness
-            self.touter = 30             # outer jacket (PML) thickness
-            self.scaling = self.Rc       # scaling for the PDE
-            self.num_capillary_tubes = 8 # number of capillaries
+            self.Rc = 59.5                # core radius
+            self.Rto = 31.5               # capillary outer radius
+            self.Rti = 25.5               # capillary inner radius
+            self.t = self.Rto - self.Rti  # capillary thickness
+            self.tclad = 1.2 * self.Rti   # glass jacket (cladding) thickness
+            self.touter = 30              # outer jacket (PML) thickness
+            self.scaling = self.Rc        # scaling for the PDE
+            self.num_capillary_tubes = 8  # number of capillaries
             self.s = 0.05
             self.e = 2.0 / self.t
             self._wavelength = 5.75e-6
@@ -285,7 +290,7 @@ class ARF:
             D = 2 * (self.Rc + self.Rto) * np.sin(half_sector)
             self.d = D - 2 * self.Rto
         else:
-            err_str = 'Fiber \'{0:s}\' not implemented.'.format(self.name)
+            err_str = 'Fiber \'{:s}\' not implemented.'.format(self.name)
             raise NotImplementedError(err_str)
 
     def __str__(self):
@@ -339,9 +344,9 @@ class ARF:
 
         if self.freecapil:
             # First, given the current geometric parameters, compute
-            # an upper bound on the capillary contraction parameter s.
-            frac = self.Rtos / ((self.Rcs + self.Rtos) \
-                 * np.sin(np.pi / self.num_capillary_tubes))
+            # an upper bound on the capillary contraction parameters.
+            half_sector = np.pi / self.num_capillary_tubes
+            frac = self.Rtos / ((self.Rcs + self.Rtos) * np.sin(half_sector))
             sub = 1 - frac
 
             # Next, given the current geometric parameters, compute
@@ -350,31 +355,31 @@ class ARF:
             # against this.
             asin_frac = self.Rtos / ((1 - self.s) * (self.Rcs + self.Rtos))
             nub = int(np.floor(np.pi / np.arcsin(asin_frac)))
-            
+
             # A placeholder for the number of user-specified tubes.
             n = self.num_capillary_tubes
-            
+
             if n > nub:
                 # Set a new upper bound on s that uses the maximum lower
                 # bound on the number of capillary tubes.
-                frac = self.Rtos / ((self.Rcs + self.Rtos) \
-                     * np.sin(np.pi / self.num_capillary_tubes))
+                frac = self.Rtos / ((self.Rcs + self.Rtos) *
+                                    np.sin(np.pi / nub))
                 new_sub = sub if sub > 0 else 1 - frac
 
                 err_str = 'Specifying {0:d} capillary tube(s) '.format(n) \
-                        + 'results in tangent or overlapping capillary' \
-                        + 'subdomains. Consider setting ' \
-                        + '\'num_capillary_tubes\' less than or equal ' \
-                        + 'to {0:d} and then'.format(nub) \
-                        + 'setting s < {1:.3f},'.format(new_sub) \
-                        + 'or adjusting other geometric parameters.'
+                    + 'results in tangent or overlapping capillary' \
+                    + 'subdomains. Consider setting ' \
+                    + '\'num_capillary_tubes\' less than or equal ' \
+                    + 'to {:d} and then'.format(nub) \
+                    + 'setting s < {:.3f},'.format(new_sub) \
+                    + 'or adjusting other geometric parameters.'
         else:
             # For the embedded case, we first check to make sure the embed
             # fraction e gives us a resulting geometry that doesn't have
             # tangent subdomain boundaries (e = 0) or capillary tubes that
             # get pushed into the outer glass jacket.
             if self.e <= 0 or self.e > 1:
-                err_str = 'Current value of e = {0:.3f}'.format(self.e) \
+                err_str = 'Current value of e = {:.3f}'.format(self.e) \
                         + 'results in capillary tubes in invalid ' \
                         + 'positions. The embedding fraction \'e\'' \
                         + 'must be a real number satisfying ' \
@@ -387,10 +392,10 @@ class ARF:
             # against this.
             asin_frac = self.Rtos / (self.Rcs + self.Rtos)
             nub = int(np.floor(np.pi / np.arcsin(asin_frac)))
-            
+
             # A placeholder for the number of user-specified tubes.
             n = self.num_capillary_tubes
-            
+
             if n > nub:
                 err_str = 'Specifying {0:d} capillary tube(s) '.format(n) \
                         + 'results in tangent or overlapping capillary' \
@@ -419,15 +424,15 @@ class ARF:
                       rightdomain=bdr['CladInner'][1],
                       bc='CladInner')
 
-        #---------------------------------------------------------------------
+        # --------------------------------------------------------------------
         # Add capillary tubes.
-        #---------------------------------------------------------------------
+        # --------------------------------------------------------------------
 
         # Spacing for the angles we need to add the inner circles for the
         # capillaries.
-        theta = np.pi / 2.0 \
-              + np.linspace(0, 2*np.pi,
-                            num=self.num_capillary_tubes, endpoint=False)
+        theta = np.pi / 2.0 + np.linspace(0, 2*np.pi,
+                                          num=self.num_capillary_tubes,
+                                          endpoint=False)
 
         # The radial distance to the capillary tube centers.
         dist = (1 - self.s) * (self.Rcs + self.Rtos)
@@ -439,6 +444,7 @@ class ARF:
                           leftdomain=bdr['CapilInner'][0],
                           rightdomain=bdr['CapilInner'][1],
                           bc='CapilInner', maxh=self.capillary_maxhs)
+
             geo.AddCircle(c=c, r=self.Rtos,
                           leftdomain=bdr['CapilOuter'][0],
                           rightdomain=bdr['CapilOuter'][1],
@@ -478,21 +484,24 @@ class ARF:
         # (Rcladi * cos(phi), Rcladi * sin(phi)) and
         # (-Rcladi * cos(phi), Rcladi * sin(phi)).
 
-        acos_frac = (self.Rcladi**2 + (self.Rcs + self.Rtos)**2 - self.Rtos**2) \
-                  / (2 * (self.Rcs + self.Rtos) * self.Rcladi)
+        numerator = self.Rcladi**2 + (self.Rcs + self.Rtos)**2 - self.Rtos**2
+        denominator = 2 * (self.Rcs + self.Rtos) * self.Rcladi
+        acos_frac = numerator / denominator
         phi = np.arccos(acos_frac)
 
-        # The angle of a given sector that bisects two adjacent capillary tubes.
-        # Visually, this looks like a wedge in the computational domain that
-        # contains a half capillary tube on each side of the widest part of the wedge.
+        # The angle of a given sector that bisects two adjacent capillary
+        # tubes. Visually, this looks like a wedge in the computational domain
+        # that contains a half capillary tube on each side of the widest part
+        # of the wedge.
         sector = 2 * np.pi / self.num_capillary_tubes
 
         # Obtain the angle of the arc between two capillaries. This subtends
         # the arc between the two points where two adjacent capillary tubes
         # embed into the outer glass jacket.
-        psi = sector - 2 * phi 
+        psi = sector - 2 * phi
 
-        # Get the distance to the middle control point for the aforementioned arc.
+        # Get the distance to the middle control point for the aforementioned
+        # arc.
         D = self.Rcladi / np.cos(psi / 2)
 
         # The center of the top capillary tube.
@@ -533,15 +542,15 @@ class ARF:
                 bc='CapilOuterCladInner'
             )
 
-        #---------------------------------------------------------------------
+        # --------------------------------------------------------------------
         # Add capillary tubes.
-        #---------------------------------------------------------------------
+        # --------------------------------------------------------------------
 
         # Spacing for the angles we need to add the inner circles for the
         # capillaries.
-        theta = np.pi / 2.0 \
-              + np.linspace(0, 2*np.pi,
-                            num=self.num_capillary_tubes, endpoint=False)
+        theta = np.pi / 2.0 + np.linspace(0, 2*np.pi,
+                                          num=self.num_capillary_tubes,
+                                          endpoint=False)
 
         # The radial distance to the capillary tube centers.
         dist = self.Rcs + self.Rtos
