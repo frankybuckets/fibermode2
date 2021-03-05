@@ -43,27 +43,10 @@ class ARF:
         # Set the fiber parameters.
         self.set(name=name)
 
-        # Quick debug: Print out number of capillary tubes and the d/t ratio.
-        print('Number of tubes:', self.num_capillary_tubes)
-        print('d :', self.d)
-        print('t :', self.t)
-        print('d/t :', self.d / self.t)
-
-        # Attributes for tuning mesh sizes
-
-        self.capillary_maxh = 0.5
-        self.air_maxh = 4.0
-        self.inner_core_maxh = 0.75
-        self.glass_maxh = 5.0
-        self.outer_maxh = 10.0
-        self.refined = 0
-
         # Updatable length attributes. All lengths are in micrometers.
 
         self.updatablelengths = ['Rc', 'Rto', 'Rti', 't', 'd', 'tclad',
-                                 'touter', 'capillary_maxh', 'air_maxh',
-                                 'inner_core_maxh', 'glass_maxh',
-                                 'outer_maxh']
+                                 'touter']
 
         # Physical parameters
 
@@ -272,6 +255,15 @@ class ARF:
             half_sector = np.pi / self.num_capillary_tubes
             D = 2 * (self.Rc + self.Rto) * np.sin(half_sector)
             self.d = D - 2 * self.Rto
+
+            # Set the (non-dimensional) mesh sizes.
+            self.capillary_maxhs = 0.05
+            self.air_maxhs = 0.25
+            self.inner_core_maxhs = 0.25
+            self.glass_maxhs = 0.33
+            self.outer_maxhs = 2.0
+            self.refined = 0
+
         elif self.name == 'kolyadin':
             self.Rc = 59.5                # core radius
             self.Rto = 31.5               # capillary outer radius
@@ -289,6 +281,14 @@ class ARF:
             half_sector = np.pi / self.num_capillary_tubes
             D = 2 * (self.Rc + self.Rto) * np.sin(half_sector)
             self.d = D - 2 * self.Rto
+
+            # Set the (non-dimensional) mesh sizes.
+            self.capillary_maxhs = 0.04
+            self.air_maxhs = 0.25
+            self.inner_core_maxhs = 0.25
+            self.glass_maxhs = 0.5
+            self.outer_maxhs = 0.5
+ 
         else:
             err_str = 'Fiber \'{:s}\' not implemented.'.format(self.name)
             raise NotImplementedError(err_str)
