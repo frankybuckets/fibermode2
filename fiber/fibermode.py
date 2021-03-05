@@ -449,7 +449,7 @@ class FiberMode:
                   **feastkwargs):
         """
         Compute leaky modes by solving a nonlinear eigenproblem derived
-        from a frequency-dependent PML formulated by [Nannen+Wess].
+        from a frequency-dependent PML.
 
         INPUTS:
 
@@ -462,11 +462,11 @@ class FiberMode:
             If True, then cladding is included in the domain, so PML
             is set in 'pml' region only.
             If False, then PML is set in the union 'pml|clad'.
-        * npts: number of quadrature points in the contour for FEAST.
-        * niter: number of FEAST iterations before restart.
-        * nspan: intial number of random vectors to start FEAST.
-        * verbose: when true, prints FEAST iteration details
+        * npts: number of quadrature points for SpectralProjNGPoly
         * inverse: type of sparse inverse to use (if more than one installed)
+        * nspan: intial number of random vectors to start FEAST.
+        * feastkwargs: additional arguments to be passed to FEAST iteration (as
+          documented in SpectralProj's feast(...) method).
 
         OUTPUTS:    z, yl, yr, P, Yl, Y
 
@@ -477,13 +477,12 @@ class FiberMode:
 
         METHOD:
 
-        [Nannen+Wess]'s method performs the complex coordinate transformation
+        The method performs the complex coordinate transformation
            mapped_x = x * η(r) / r,                   where
            η(r) = R + (r - R) * (1 + 1j * α) / Z
         and R is the radius where PML starts (the variable pmlbegin below).
-        (Note that Z takes the role of frequency, called ω in [Nannen+Wess].)
-        This then leads to a cubic eigenproblem. We solve it using our own
-        spectral projector facility for polynomial eigenproblems.
+        Reference: [Nannen+Wess].  This then leads to a cubic eigenproblem,
+        which we solve using SpectralProjNGPoly.
         """
 
         if self.m is None:
@@ -511,7 +510,6 @@ class FiberMode:
         r = ng.sqrt(x*x+y*y) + 0j
 
         self.X = H1(self.mesh, order=self.p, complex=True)
-
         u, v = self.X.TnT()
         ux, uy = grad(u)
         vx, vy = grad(v)
@@ -543,16 +541,8 @@ class FiberMode:
         P = SpectralProjNGPoly(AA, self.X, radius, center, npts,
                                inverse=inverse)
 
-        # A mass matrix for compound space  X x X x X
         X3 = ng.FESpace([self.X, self.X, self.X])
-        u0, u1, u2 = X3.TrialFunction()
-        v0, v1, v2 = X3.TestFunction()
-        B = BilinearForm(X3)
-        B += (u0 * v0 + u1 * v1 + u2 * v2) * dx
-        with ng.TaskManager():
-            B.Assemble()
-
-        Y = NGvecs(X3, nspan, M=B.mat)
+        Y = NGvecs(X3, nspan)
         Yl = Y.create()
         Y.setrandom(seed=1)
         Yl.setrandom(seed=1)
