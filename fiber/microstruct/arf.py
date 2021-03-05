@@ -289,7 +289,7 @@ class ARF:
             self.glass_maxhs = 0.5
             self.outer_maxhs = 0.5
 
-            self.refined = 0 
+            self.refined = 0
         else:
             err_str = 'Fiber \'{:s}\' not implemented.'.format(self.name)
             raise NotImplementedError(err_str)
