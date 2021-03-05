@@ -262,8 +262,8 @@ class ARF:
             self.inner_core_maxhs = 0.25
             self.glass_maxhs = 0.33
             self.outer_maxhs = 2.0
-            self.refined = 0
 
+            self.refined = 0
         elif self.name == 'kolyadin':
             self.Rc = 59.5                # core radius
             self.Rto = 31.5               # capillary outer radius
@@ -288,7 +288,8 @@ class ARF:
             self.inner_core_maxhs = 0.25
             self.glass_maxhs = 0.5
             self.outer_maxhs = 0.5
- 
+
+            self.refined = 0 
         else:
             err_str = 'Fiber \'{:s}\' not implemented.'.format(self.name)
             raise NotImplementedError(err_str)
