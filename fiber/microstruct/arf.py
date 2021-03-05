@@ -381,10 +381,10 @@ class ARF:
             # get pushed into the outer glass jacket.
             if self.e <= 0 or self.e > 1:
                 err_str = 'Current value of e = {:.3f}'.format(self.e) \
-                        + 'results in capillary tubes in invalid ' \
-                        + 'positions. The embedding fraction \'e\'' \
-                        + 'must be a real number satisfying ' \
-                        + '0 < e <= 1.'
+                    + 'results in capillary tubes in invalid ' \
+                    + 'positions. The embedding fraction \'e\'' \
+                    + 'must be a real number satisfying ' \
+                    + '0 < e <= 1.'
                 raise ValueError(err_str)
 
             # Next, given the current geometric parameters, compute
@@ -399,11 +399,11 @@ class ARF:
 
             if n > nub:
                 err_str = 'Specifying {0:d} capillary tube(s) '.format(n) \
-                        + 'results in tangent or overlapping capillary' \
-                        + 'subdomains. Consider making ' \
-                        + '\'num_capillary_tubes\' less than or equal to ' \
-                        + '{0:d}'.format(nub) \
-                        + 'or adjusting other geometric parameters.'
+                    + 'results in tangent or overlapping capillary' \
+                    + 'subdomains. Consider making ' \
+                    + '\'num_capillary_tubes\' less than or equal to ' \
+                    + '{0:d}'.format(nub) \
+                    + 'or adjusting other geometric parameters.'
                 raise ValueError(err_str)
 
     def geom_freestand_capillaries(self):
@@ -806,28 +806,19 @@ class ARF:
         AA += [ng.BilinearForm(X, check_unused=False)]
         AA[3] += -u * v * dx_int
 
-        # A mass matrix for X
-        u, v = X.TnT()
-        B = ng.BilinearForm(X)
-        B += u * v * dx
-
         with ng.TaskManager():
-            B.Assemble()
             for i in range(len(AA)):
                 AA[i].Assemble()
 
-        X3 = ng.FESpace([X, X, X])
-        B3 = ng.BlockMatrix([[B.mat, None, None],
-                             [None, B.mat, None],
-                             [None, None, B.mat]])
+        return AA, X
 
-        return AA, B.mat, X, B3, X3
-
-    def polyeig(self, p, alpha=10, stop_tol=1e-12, npts=8, initdim=5,
+    def polyeig(self, p, alpha=1, npts=8, nspan=5,
                 #    LP01,   LP11,  LP21   LP02
                 ctrs=(2.24,  3.57,  4.75,  5.09),
-                radi=(0.05,  0.01,  0.01,  0.01), **kwargs):
-        """Solve the Nannen-Wess nonlinear polynomial PML eigenproblem
+                radi=(0.05,  0.01,  0.01,  0.01),
+                **feastkwargs):
+        """
+        Solve the Nannen-Wess nonlinear polynomial PML eigenproblem
         to compute modes with losses. A custom polynomial feast uses
         the given centers and radii to search for the modes.
 
@@ -835,14 +826,13 @@ class ARF:
 
         p:        polynomial degree of finite elements
         alpha:    PML strength
-        stop_tol: quit feast when relative ew diff are smaller than this
-        npts:     number of quadrature points in feast
-        initdim:  dimension of initial span for feast
+        npts:     number of quadrature points in SpectralProjNGPoly
+        nspan:    dimension of initial span for feast
         ctrs, radi: repeat feast with a circular contour centered at
                   ctrs[i] of radius radi[i] for each i. Eigenvalues found by
                   feast for each i are returned in output Zs[i], and the
                   corresponding eigenspaces are in span object Ys[i].
-        kwargs: further keyword arguments passed to spectral projector.
+        feastkwargs: further keyword arguments passed to spectral projector.
 
         OUTPUTS:  Zs, Ys, betas
 
@@ -851,7 +841,8 @@ class ARF:
         eigenvalues in Zs[i].
         """
 
-        AA, B, X, B3, X3 = self.polypmlsystem(p=p, alpha=alpha)
+        AA, X = self.polypmlsystem(p=p, alpha=alpha)
+        X3 = ng.FESpace([X, X, X])
         print('Set PML with alpha=', alpha, 'and thickness=%.3f'
               % self.touters)
         Ys = []
@@ -862,7 +853,7 @@ class ARF:
         betas = []
 
         for rad, ctr in zip(radi, ctrs):
-            Y = NGvecs(X3, initdim, M=B3)
+            Y = NGvecs(X3, nspan)
             Yl = Y.create()
             Y.setrandom(seed=1)
             Yl.setrandom(seed=1)
@@ -874,10 +865,9 @@ class ARF:
                 return inside1 & inside2
 
             P = SpectralProjNGPoly(AA, X, radius=rad, center=ctr, npts=npts,
-                                   within=within, **kwargs)
-
+                                   within=within)
             Z, Y, _, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                  stop_tol=stop_tol)
+                                  **feastkwargs)
             y = P.first(Y)
             yl = P.last(Yl)
             y.centernormalize(self.mesh(0, 0))
