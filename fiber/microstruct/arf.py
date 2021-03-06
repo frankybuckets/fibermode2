@@ -257,20 +257,21 @@ class ARF:
             self.d = D - 2 * self.Rto
 
             # Set the (non-dimensional) mesh sizes.
-            self.capillary_maxhs = 0.05
+            self.capillary_maxhs = 0.04
             self.air_maxhs = 0.25
             self.inner_core_maxhs = 0.25
             self.glass_maxhs = 0.33
             self.outer_maxhs = 2.0
 
             self.refined = 0
+
         elif self.name == 'kolyadin':
             self.Rc = 59.5                # core radius
             self.Rto = 31.5               # capillary outer radius
             self.Rti = 25.5               # capillary inner radius
             self.t = self.Rto - self.Rti  # capillary thickness
             self.tclad = 1.2 * self.Rti   # glass jacket (cladding) thickness
-            self.touter = 30              # outer jacket (PML) thickness
+            self.touter = 100             # outer jacket (PML) thickness
             self.scaling = self.Rc        # scaling for the PDE
             self.num_capillary_tubes = 8  # number of capillaries
             self.s = 0.05
@@ -283,10 +284,10 @@ class ARF:
             self.d = D - 2 * self.Rto
 
             # Set the (non-dimensional) mesh sizes.
-            self.capillary_maxhs = 0.04
-            self.air_maxhs = 0.25
-            self.inner_core_maxhs = 0.25
-            self.glass_maxhs = 0.5
+            self.capillary_maxhs = 0.02
+            self.air_maxhs = 0.2
+            self.inner_core_maxhs = 0.1
+            self.glass_maxhs = 0.4
             self.outer_maxhs = 0.5
 
             self.refined = 0
@@ -454,7 +455,7 @@ class ARF:
         # Add the circle for the inner core. Since we are scaling back the
         # (original) distance to the capillary tube centers by (1 - s), we
         # necessarily need to do the same for the inner core region.
-        radius = 0.75 * self.Rcs * (1 - self.s)
+        radius = 0.9 * self.Rcs * (1 - self.s)
         geo.AddCircle(c=(0, 0), r=radius,
                       leftdomain=bdr['Inner'][0],
                       rightdomain=bdr['Inner'][1],
