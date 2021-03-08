@@ -1,8 +1,7 @@
 """
-This models one of the microstructured geometries suggested in the paper
-[Francesco Poletti. Nested antiresonant nodeless hollow core fiber (2014)].
-The fiber is an example of a hollow core Anti Resonant Fiber,
-an HC ARF, or ARF as called in the paper.
+This class models antiresonant hollow-core microstructured fibers
+(HC ARF or ARF).  They are typically made of 6 or 8 thin tubes
+surrounding a "core" region of air.
 """
 
 import netgen.geom2d as geom2d
@@ -79,7 +78,7 @@ class ARF:
                             'e', 's', 'scaling', 'refined']
 
         if self.freecapil:
-            # outer radius of glass sheath, where the geometry ends
+            # outer radius of glass sheath
             self.Rclado = self.Rcs + 2 * self.Rtos + self.tclads
             # radius where glass sheath (cladding) begins
             self.Rcladi = self.Rcs + 2 * self.Rtos
@@ -253,7 +252,7 @@ class ARF:
             self.Rti = 12.48              # capillary inner radius
             self.t = self.Rto - self.Rti  # capillary thickness
             self.tclad = 10               # glass jacket (cladding) thickness
-            self.touter = 30              # outer jacket (PML) thickness
+            self.touter = 50              # outer PML thickness
             self.touterair = 10
             self.scaling = self.Rc        # scaling for the PDE
             self.num_capillary_tubes = 6  # number of capillaries
@@ -269,7 +268,7 @@ class ARF:
             # Set the (non-dimensional) mesh sizes.
             self.capillary_maxhs = 0.04
             self.air_maxhs = 0.25
-            self.inner_core_maxhs = 0.25
+            self.inner_core_maxhs = 0.1
             self.glass_maxhs = 0.33
             self.outer_maxhs = 2.0
 
@@ -324,7 +323,7 @@ class ARF:
         s += '\n  Divide all lengths above by %g x 1e-6' % self.scaling
         s += '\n  to get the actual computational lengths used.'
         s += '\n  Cladding starts at Rcladi = %g' % self.Rcladi
-        s += '\n  PML starts at Rclado = %g and ends at Rout = %g' \
+        s += '\n  PML starts at Routair = %g and ends at Rout = %g' \
             % (self.Routair, self.Rout)
         s += '\n  Mesh sizes: %g (capillary), %g (air), %g (inner core)' \
             % (self.capillary_maxhs, self.air_maxhs, self.inner_core_maxhs)
@@ -800,7 +799,7 @@ class ARF:
         dx_pml = dx(definedon=self.mesh.Materials('Outer'))
         dx_int = dx(definedon=self.mesh.Materials
                     ('Si|CapillaryEncl|InnerCore|FillAir|OuterAir'))
-        R = self.Rclado  # PML starts right after cladding
+        R = self.Routair
         s = 1 + 1j * alpha
         x = ng.x
         y = ng.y
@@ -837,10 +836,7 @@ class ARF:
         return AA, X
 
     def polyeig(self, p, alpha=1, npts=8, nspan=5,
-                #    LP01,   LP11,  LP21   LP02
-                ctrs=(2.24,  3.57,  4.75,  5.09),
-                radi=(0.05,  0.01,  0.01,  0.01),
-                within=None, seed=1,
+                ctrs=(2.2,), radi=(0.1,), within=None, seed=1,
                 **feastkwargs):
         """
         Solve the Nannen-Wess nonlinear polynomial PML eigenproblem
@@ -905,13 +901,14 @@ class ARF:
             print(' CL dB/m:', 20 * beta.imag / np.log(10))
 
             # a posteriori checks
-            decayrate = alpha * (self.Rout - self.Rclado) + \
-                self.Rclado * Z.imag
+            decayrate = alpha * (self.Rout - self.Routair) + \
+                self.Routair * Z.imag
             bdryval = np.exp(-decayrate) / np.sqrt(np.abs(Z)*np.pi/2)
             bdrnrm0 = bdryval*2*np.pi*self.Rout
             print('PML guessed boundary norm ~ %.1e' % max(bdrnrm0))
             if np.max(bdrnrm0) > 1e-6:
-                print('*** Not enough PML decay for this Z!')
+                print('*** Estimated PML decay may not suffice for this Z!')
+                print('*** Check actual boundary norm of the mode.')
 
             def outint(u):
                 out = self.mesh.Boundaries('OuterCircle')
