@@ -46,7 +46,7 @@ class ARF:
         # Updatable length attributes. All lengths are in micrometers.
 
         self.updatablelengths = ['Rc', 'Rto', 'Rti', 't', 'd', 'tclad',
-                                 'touter']
+                                 'touter', 'touterair']
 
         # Physical parameters
 
@@ -90,24 +90,29 @@ class ARF:
             self.Rclado = self.Rcladi + self.tclads
 
         # final radius where geometry ends
-        self.Rout = self.Rclado + self.touters
+        self.Routair = self.Rclado + self.touterairs
+        self.Rout = self.Routair + self.touters
 
         # BOUNDARY & MATERIAL NAMES
 
         self.material = {
             'Outer': 1,          # outer most annular layer (PML)
-            'Si': 2,             # cladding & capillaries are glass
-            'CapillaryEncl': 3,  # air regions enclosed by capillaries
-            'InnerCore': 4,      # inner hollow core (air) region r < Rc
-            'FillAir': 5,        # remaining intervening spaces (air)
+            'OuterAir': 2,       # air outside jacket
+            'Si': 3,             # cladding & capillaries are glass
+            'CapillaryEncl': 4,  # air regions enclosed by capillaries
+            'InnerCore': 5,      # inner hollow core (air) region r < Rc
+            'FillAir': 6,        # remaining intervening spaces (air)
         }
         mat = self.material
         self.boundary = {
             #              [left domain, right domain]    while going ccw
             'OuterCircle': [mat['Outer'], 0],
 
+            #              [left domain, right domain]    while going ccw
+            'AirCircle': [mat['OuterAir'], mat['Outer']],
+
             # circle  separating outer most layer from cladding
-            'OuterClad':   [mat['Si'], mat['Outer']],
+            'OuterClad':   [mat['Si'], mat['OuterAir']],
 
             # inner circular boundary of capillary tubes
             'CapilInner':  [mat['CapillaryEncl'], mat['Si']],
@@ -147,6 +152,7 @@ class ARF:
 
         # Set the maximum mesh sizes in subdomains
         self.geo.SetDomainMaxH(mat['Outer'], self.outer_maxhs)
+        self.geo.SetDomainMaxH(mat['OuterAir'], self.outer_maxhs)
         self.geo.SetDomainMaxH(mat['Si'], self.glass_maxhs)
         self.geo.SetDomainMaxH(mat['CapillaryEncl'], self.air_maxhs)
         self.geo.SetDomainMaxH(mat['InnerCore'], self.inner_core_maxhs)
@@ -168,6 +174,7 @@ class ARF:
 
         # index of refraction
         index = {'Outer':         self.n_air,
+                 'OuterAir':      self.n_air,
                  'Si':            self.n_si,
                  'CapillaryEncl': self.n_air,
                  'InnerCore':     self.n_air,
@@ -200,10 +207,12 @@ class ARF:
         a = self.scaling * 1e-6
         k = self.wavenum()
         m = {'Outer':         0,
+             'OuterAir':      0,
              'Si':            self.n_si**2 - self.n_air**2,
              'CapillaryEncl': 0,
              'InnerCore':     0,
              'FillAir':       0}
+
         self.m = ng.CoefficientFunction(
             [(a*k)**2 * m[mat] for mat in self.mesh.GetMaterials()])
 
@@ -243,8 +252,9 @@ class ARF:
             self.Rto = 12.9               # capillary outer radius
             self.Rti = 12.48              # capillary inner radius
             self.t = self.Rto - self.Rti  # capillary thickness
-            self.tclad = 5                # glass jacket (cladding) thickness
+            self.tclad = 10               # glass jacket (cladding) thickness
             self.touter = 30              # outer jacket (PML) thickness
+            self.touterair = 10
             self.scaling = self.Rc        # scaling for the PDE
             self.num_capillary_tubes = 6  # number of capillaries
             self.s = 0.05
@@ -272,6 +282,7 @@ class ARF:
             self.t = self.Rto - self.Rti  # capillary thickness
             self.tclad = 1.2 * self.Rti   # glass jacket (cladding) thickness
             self.touter = 100             # outer jacket (PML) thickness
+            self.touterair = self.tclad
             self.scaling = self.Rc        # scaling for the PDE
             self.num_capillary_tubes = 8  # number of capillaries
             self.s = 0.05
@@ -314,7 +325,7 @@ class ARF:
         s += '\n  to get the actual computational lengths used.'
         s += '\n  Cladding starts at Rcladi = %g' % self.Rcladi
         s += '\n  PML starts at Rclado = %g and ends at Rout = %g' \
-            % (self.Rclado, self.Rout)
+            % (self.Routair, self.Rout)
         s += '\n  Mesh sizes: %g (capillary), %g (air), %g (inner core)' \
             % (self.capillary_maxhs, self.air_maxhs, self.inner_core_maxhs)
         s += '\n  Mesh sizes: %g (glass), %g (outer)'  \
@@ -417,6 +428,11 @@ class ARF:
                       leftdomain=bdr['OuterCircle'][0], rightdomain=0,
                       bc='OuterCircle')
 
+        # The air-pml interface
+        geo.AddCircle(c=(0, 0), r=self.Routair,
+                      leftdomain=bdr['AirCircle'][0],
+                      rightdomain=bdr['AirCircle'][1], bc='AirCircle')
+
         # The glass sheath
         geo.AddCircle(c=(0, 0), r=self.Rclado,
                       leftdomain=bdr['OuterClad'][0],
@@ -472,6 +488,11 @@ class ARF:
         geo.AddCircle(c=(0, 0), r=self.Rout,
                       leftdomain=bdr['OuterCircle'][0], rightdomain=0,
                       bc='OuterCircle')
+
+        # The air-pml interface
+        geo.AddCircle(c=(0, 0), r=self.Routair,
+                      leftdomain=bdr['AirCircle'][0],
+                      rightdomain=bdr['AirCircle'][1], bc='AirCircle')
 
         # Cladding begins here
         geo.AddCircle(c=(0, 0), r=self.Rclado,
@@ -672,7 +693,8 @@ class ARF:
         # account for micrometer lengths & any additional scaling in geometry
         a = self.scaling * 1e-6
         k = self.wavenum()
-        akn0 = a * k * self.n_air   # a number less whacky in size
+        akn0 = a * k * self.n_air
+        # akn0 = a * k * self.n_si
         return np.sqrt(akn0**2 - Z2) / a
 
     def sqrZfrom(self, betas):
@@ -682,6 +704,7 @@ class ARF:
         a = self.scaling * 1e-6
         k = self.wavenum()
         n0 = self.n_air
+        # n0 = self.n_si
         return (a*k*n0)**2 - (a*betas)**2
 
     def selfadjsystem(self, p):
@@ -776,7 +799,7 @@ class ARF:
         """
         dx_pml = dx(definedon=self.mesh.Materials('Outer'))
         dx_int = dx(definedon=self.mesh.Materials
-                    ('Si|CapillaryEncl|InnerCore|FillAir'))
+                    ('Si|CapillaryEncl|InnerCore|FillAir|OuterAir'))
         R = self.Rclado  # PML starts right after cladding
         s = 1 + 1j * alpha
         x = ng.x
@@ -817,6 +840,7 @@ class ARF:
                 #    LP01,   LP11,  LP21   LP02
                 ctrs=(2.24,  3.57,  4.75,  5.09),
                 radi=(0.05,  0.01,  0.01,  0.01),
+                within=None, seed=1,
                 **feastkwargs):
         """
         Solve the Nannen-Wess nonlinear polynomial PML eigenproblem
@@ -833,6 +857,9 @@ class ARF:
                   ctrs[i] of radius radi[i] for each i. Eigenvalues found by
                   feast for each i are returned in output Zs[i], and the
                   corresponding eigenspaces are in span object Ys[i].
+        within: give a custom function to remove some eigenvalues, say
+                  the ones with positive impaginary part.
+        seed: for random setting of initial span (may fix for reproducibility).
         feastkwargs: further keyword arguments passed to spectral projector.
 
         OUTPUTS:  Zs, Ys, betas
@@ -852,28 +879,30 @@ class ARF:
         longYls = []
         Zs = []
         betas = []
+        ewshistory = []
 
         for rad, ctr in zip(radi, ctrs):
             Y = NGvecs(X3, nspan)
             Yl = Y.create()
-            Y.setrandom(seed=1)
-            Yl.setrandom(seed=1)
-
-            def within(z):
-                # look below the real axis only
-                inside1 = abs(ctr - z)**2 < rad**2
-                inside2 = z.imag < 0
-                return inside1 & inside2
+            Y.setrandom(seed=seed)
+            Yl.setrandom(seed=seed)
 
             P = SpectralProjNGPoly(AA, X, radius=rad, center=ctr, npts=npts,
                                    within=within)
-            Z, Y, _, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                  **feastkwargs)
+            Z, Y, hist, Yl = P.feast(Y, Yl=Yl, hermitian=False,
+                                     **feastkwargs)
+            ews, cgd = hist[-2], hist[-1]
+            if not cgd:
+                print('*** Iterations did not converge')
+
             y = P.first(Y)
             yl = P.last(Yl)
             y.centernormalize(self.mesh(0, 0))
             yl.centernormalize(self.mesh(0, 0))
-            print('Computed Z =', Z)
+            print('Results:\n Z:', Z)
+            beta = self.betafrom(Z**2)
+            print(' beta:', beta)
+            print(' CL dB/m:', 20 * beta.imag / np.log(10))
 
             # a posteriori checks
             decayrate = alpha * (self.Rout - self.Rclado) + \
@@ -900,8 +929,9 @@ class ARF:
             longYls.append(Yl.copy())
             Zs.append(Z)
             betas.append(self.betafrom(Z**2))
+            ewshistory.append(ews)
 
-        return Zs, Ys, Yls, betas, P, longYs, longYls
+        return Zs, Ys, Yls, betas, P, longYs, longYls, ewshistory
 
     # SAVE & LOAD #####################################################
 
