@@ -102,7 +102,7 @@ class Fiber:
         V = self.fiberV() if v is None else v
         a = self.rcore
         ks = V / (self.numerical_aperture() * a)
-        return np.sqrt((ks*self.ncore)**2-(Z/a)**2)
+        return np.sqrt((ks*self.nclad)**2-(Z/a)**2)
 
     def visualize_mode(self, ll, m):
         """

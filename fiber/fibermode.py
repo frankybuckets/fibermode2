@@ -219,7 +219,7 @@ class FiberMode:
 
     def X2toBeta(self, X2, v=None):
         """Convert non-dimensional X² values to dimensional propagation
-        constants beta through the relation (ncore*k)² - X² = beta². """
+        constants beta through the relation (ncore*k)² - (X/a)² = beta². """
 
         V = self.fiber.fiberV() if v is None else v
         a = self.fiber.rcore
@@ -233,16 +233,6 @@ class FiberMode:
         complex propagation constant Beta. """
 
         return self.X2toBeta(self.Z2toX2(Z2, v=v), v=v)
-
-    def ZtoBeta(self, Z, v=None):
-        """Convert nondimensional Z in the complex plane to complex
-        propagation constant Beta. """
-
-        V = self.fiber.fiberV() if v is None else v
-        a = self.fiber.rcore
-        ks = V / (self.fiber.numerical_aperture() * a)
-        Z = np.array(Z)
-        return np.sqrt((ks*self.fiber.ncore)**2 - (Z/a)**2)
 
     def guidedmodes(self, interval=None, p=3, nquadpts=20,
                     nspan=15, stop_tol=1e-10, check_contour=2,
