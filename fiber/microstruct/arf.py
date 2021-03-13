@@ -15,7 +15,7 @@ import os
 import pickle
 
 
-class ARF:
+class ARF(object):
 
     def __init__(self, name=None, freecapil=False, **kwargs):
         """
@@ -49,18 +49,13 @@ class ARF:
 
         # Physical parameters
 
-        self.n_air = 1.00027717    # refractive index of air
-        self.n_si = 1.4545         # refractive index of glass
+        self.n_air = 1.00027717     # refractive index of air
+        self.setnsi(self._wavelength)  # refractive index of glass (self.n_si)
 
         # UPDATE attributes set in ARF.set() using given inputs
 
         for key, value in kwargs.items():
             setattr(self, key, value)
-
-        # TODO: Update remaining lengths dependent on the set attributes. If
-        # the user updates an arbitrary set of parameters, we need to perform
-        # a geometry check to make sure that the parameters the user set are
-        # not erroneous.
 
         # Set the scaling as requested by the user.
         if 'scaling' in kwargs:
@@ -198,7 +193,22 @@ class ARF:
     @wavelength.setter
     def wavelength(self, lam):
         self._wavelength = lam
+        self.setnsi(lam)
         self.setnondimmat()
+
+    def setnsi(self, lam):
+        """
+        Sets the (fused) silica refractive index based on the wavelength
+        lam = O(10**(-6)). Uses the Sellmeier formula for fused silica
+        at about 20 degrees centigrade (in the nieghborhood of
+        room temperature).
+        """
+
+        B = np.array([0.6961663, 0.4079426, 0.8974794])
+        L = np.array([0.0684043, 0.1162414, 9.0896161])
+        lam *= 1e6
+
+        self.n_si = np.sqrt(1 + np.sum((B*lam**2) / (lam**2 - L**2)))
 
     def setnondimmat(self):
         """ set the material cf """
@@ -964,7 +974,6 @@ class ARF:
         f = os.path.abspath(self.outfolder+'/'+fileprefix+'_mde.npz')
         print('Writing mode file ', f)
         np.savez(f, **d)
-
 
 # LOAD FROM FILE #####################################################
 
