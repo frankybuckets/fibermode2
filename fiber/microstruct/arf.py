@@ -184,8 +184,6 @@ class ARF(object):
         if os.path.isdir(self.outfolder) is not True:
             os.mkdir(self.outfolder)
 
-        print('\nInitialized: ', self)
-
     @property
     def wavelength(self):
         return self._wavelength
@@ -315,6 +313,8 @@ class ARF(object):
             err_str = 'Fiber \'{:s}\' not implemented.'.format(self.name)
             raise NotImplementedError(err_str)
 
+        self.epw = self.eltsperwave()
+
     def __str__(self):
         s = 'ARF Physical Parameters:' + \
             '\n  Rc = %g x %g x 1e-6 meters' % (self.Rcs, self.scaling)
@@ -340,13 +340,12 @@ class ARF(object):
         s += '\n  Mesh sizes: %g (glass), %g (outer)'  \
             % (self.glass_maxhs,   self.outer_maxhs)
         s += '\n  Elements/wavelength:'
+        epw = self.epw
         s += '%g (capillary), %g (air), %g (inner core)' \
-            % (self.wavelength*1e6/self.scaling/self.capillary_maxhs,
-               self.wavelength*1e6/self.scaling/self.air_maxhs,
-               self.wavelength*1e6/self.scaling/self.inner_core_maxhs)
+            % (epw['capillary'], epw['air'], epw['inner'])
         s += '\n  Elements/wavelength: %g (glass), %g (outer)'  \
-            % (self.wavelength*1e6/self.scaling/self.glass_maxhs,
-               self.wavelength*1e6/self.scaling/self.outer_maxhs)
+            % (epw['glass'], epw['outer'])
+
         if self.refined > 0:
             s += '\n  Uniformly refined %g times.' % self.refined
         if self.freecapil:
@@ -354,6 +353,16 @@ class ARF(object):
         else:
             s += '\n  With embedded capillaries, e/t = %g.' % self.e
         return s
+
+    def eltsperwave(self):
+        epw = {'capillary': 1/self.capillary_maxhs,
+               'air': 1/self.air_maxhs,
+               'inner': 1/self.inner_core_maxhs,
+               'glass': 1/self.glass_maxhs,
+               'outer': 1/self.outer_maxhs}
+        for key in epw:
+            epw[key] = epw[key] * self.wavelength*1e6/self.scaling
+        return epw
 
     # GEOMETRY ########################################################
 
@@ -686,6 +695,14 @@ class ARF(object):
         self.mesh.ngmesh.Refine()
         self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
         self.mesh.Curve(3)
+        for key in self.epw:
+            self.epw[key] = self.epw[key] * 2
+        s = '  Elements/wavelength revised:'
+        s += '%g (capillary), %g (air), %g (inner core)' \
+            % (self.epw['capillary'], self.epw['air'], self.epw['inner'])
+        s += '\n  Elements/wavelength revised: %g (glass), %g (outer)'  \
+            % (self.epw['glass'], self.epw['outer'])
+        print(s)
 
     # EIGENPROBLEM ####################################################
 
@@ -847,7 +864,7 @@ class ARF(object):
 
     def polyeig(self, p, alpha=1, npts=8, nspan=5,
                 ctrs=(2.2,), radi=(0.1,), within=None, seed=1,
-                **feastkwargs):
+                inverse=None, **feastkwargs):
         """
         Solve the Nannen-Wess nonlinear polynomial PML eigenproblem
         to compute modes with losses. A custom polynomial feast uses
@@ -875,9 +892,11 @@ class ARF(object):
         eigenvalues in Zs[i].
         """
 
+        print('\nARF.polyeig called on object with these settings:\n', self)
+
         AA, X = self.polypmlsystem(p=p, alpha=alpha)
         X3 = ng.FESpace([X, X, X])
-        print('Set PML with alpha=', alpha, 'and thickness=%.3f'
+        print('Set PML with p=', p, ' alpha=', alpha, 'and thickness=%.3f'
               % self.touters)
         Ys = []
         longYs = []
@@ -894,7 +913,7 @@ class ARF(object):
             Yl.setrandom(seed=seed)
 
             P = SpectralProjNGPoly(AA, X, radius=rad, center=ctr, npts=npts,
-                                   within=within)
+                                   within=within, inverse=inverse)
             Z, Y, hist, Yl = P.feast(Y, Yl=Yl, hermitian=False,
                                      **feastkwargs)
             ews, cgd = hist[-2], hist[-1]
@@ -910,16 +929,6 @@ class ARF(object):
             print(' beta:', beta)
             print(' CL dB/m:', 20 * beta.imag / np.log(10))
 
-            # a posteriori checks
-            decayrate = alpha * (self.Rout - self.Routair) + \
-                self.Routair * Z.imag
-            bdryval = np.exp(-decayrate) / np.sqrt(np.abs(Z)*np.pi/2)
-            bdrnrm0 = bdryval*2*np.pi*self.Rout
-            print('PML guessed boundary norm ~ %.1e' % max(bdrnrm0))
-            if np.max(bdrnrm0) > 1e-6:
-                print('*** Estimated PML decay may not suffice for this Z!')
-                print('*** Check actual boundary norm of the mode.')
-
             def outint(u):
                 out = self.mesh.Boundaries('OuterCircle')
                 s = ng.Integrate(u*ng.Conj(u), out, ng.BND).real
@@ -928,7 +937,13 @@ class ARF(object):
             bdrnrm = y.applyfnl(outint)
             print('Actual boundary norm = %.1e' % max(bdrnrm))
             if np.max(bdrnrm) > 1e-6:
-                print('*** Mode has not decayed in PML enough!')
+                print('*** Mode boundary L2 norm > 1e-6!')
+                decayrate = alpha * (self.Rout - self.Routair) + \
+                    self.Routair * Z.imag
+                bdryval = np.exp(-decayrate) / np.sqrt(np.abs(Z)*np.pi/2)
+                bdrnrm0 = bdryval*2*np.pi*self.Rout
+                print('PML decay estimates boundary norm ~ %.1e'
+                      % max(bdrnrm0))
 
             Ys.append(y.copy())
             Yls.append(yl.copy())
@@ -938,7 +953,7 @@ class ARF(object):
             betas.append(self.betafrom(Z**2))
             ewshistory.append(ews)
 
-        return Zs, Ys, Yls, betas, P, longYs, longYls, ewshistory
+        return Zs, Ys, Yls, betas, P, longYs, longYls, ewshistory, bdrnrm
 
     # SAVE & LOAD #####################################################
 
