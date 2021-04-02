@@ -82,7 +82,7 @@ class FiberMode:
         self.p = None        # degree of finite elements used in mode calc
         self.a = None
         self.b = None
-        self.m = None
+        self.V = None
         self.pml_ngs = None  # True if ngsolve pml set (then cant reuse mesh)
         self.X = None
         self.curvature = None
@@ -194,7 +194,7 @@ class FiberMode:
 
         if curvature == 0:
             V = fib.fiberV()
-            self.m = CoefficientFunction([0, 0, V*V])
+            self.V = CoefficientFunction([0, 0, -V*V])
         else:
             n = CoefficientFunction([fib.nclad, fib.nclad, fib.ncore])
             a = fib.rcore
@@ -203,8 +203,8 @@ class FiberMode:
 
             nbent = n * (1 + (ng.x * a * curvature/bendfactor))
 
-            m = ka2 * nbent * nbent - kan2
-            self.m = CoefficientFunction([0, m, m])
+            m = kan2 - ka2 * nbent * nbent
+            self.V = CoefficientFunction([0, m, m])
 
     # MODE CALCULATORS AND RELATED FUNCTIONALITIES  #########################
 
@@ -317,12 +317,12 @@ class FiberMode:
         self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
 
         V = self.fiber.fiberV(tone=tone)
-        if self.m is None:
+        if self.V is None:
             self.curvature = 0
             if tone:
-                self.m = CoefficientFunction([0, 0, V[0]*V[0]])
+                self.V = CoefficientFunction([0, 0, -V[0]*V[0]])
             else:
-                self.m = CoefficientFunction([0, 0, V*V])
+                self.V = CoefficientFunction([0, 0, -V*V])
         if self.pml_ngs is True:
             raise RuntimeError('Mesh pml trafo is set')
 
@@ -475,7 +475,7 @@ class FiberMode:
         which we solve using SpectralProjNGPoly.
         """
 
-        if self.m is None:
+        if self.V is None:
             self.setrefractiveindex(curvature=0)
         self.p = p
         print(self)
@@ -512,7 +512,7 @@ class FiberMode:
 
         AA += [BilinearForm(self.X)]
         AA[1] += grad(u) * grad(v) * dx_int
-        AA[1] += -self.m * u * v * dx_int
+        AA[1] += self.V * u * v * dx_int
         AA[1] += 2 * (r-R)/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
         AA[1] += 1/r**2 * (x*ux+y*uy) * v * dx_pml
         AA[1] += -2*s*s*(r-R)/r * u * v * dx_pml
@@ -610,7 +610,7 @@ class FiberMode:
             self.mesh.SetPML(radial, 'pml|clad')
             pmlbegin = 1
 
-        if self.m is None:
+        if self.V is None:
             self.setrefractiveindex(curvature=0)
 
         print(' PML (automatic, frequency-independent) starts at r=', pmlbegin)
@@ -622,7 +622,7 @@ class FiberMode:
         u, v = self.X.TnT()
         a = BilinearForm(self.X)
         b = BilinearForm(self.X)
-        a += (grad(u) * grad(v) - self.m * u * v) * dx
+        a += (grad(u) * grad(v) + self.V * u * v) * dx
         b += u * v * dx
         with ng.TaskManager():
             a.Assemble()
@@ -725,7 +725,7 @@ class FiberMode:
         self.pml_tt = tt
 
         # Make linear eigensystem
-        if self.m is None:
+        if self.V is None:
             self.setrefractiveindex(curvature=0)
         self.p = p
         print(' PML (smooth, k-independent) starts at r=', pmlbegin)
@@ -735,8 +735,8 @@ class FiberMode:
         u, v = self.X.TnT()
         a = BilinearForm(self.X)
         b = BilinearForm(self.X)
-        a += (self.pml_A * grad(u) * grad(v) -
-              self.m * self.pml_tt * u * v) * dx
+        a += (self.pml_A * grad(u) * grad(v) +
+              self.V * self.pml_tt * u * v) * dx
         b += self.pml_tt * u * v * dx
         with ng.TaskManager():
             a.Assemble()
@@ -764,7 +764,7 @@ class FiberMode:
                        verbose=True, inverse='umfpack'):
         """See docstring of leakymode(...)"""
 
-        if self.m is None:
+        if self.V is None:
             self.setrefractiveindex(curvature=0)
         self.p = p
         print(' PML (poly, k-dependent), includeclad =', includeclad)
@@ -811,7 +811,7 @@ class FiberMode:
         A += -s**3 * (r-R)**2/(R*r) * u0 * v2 * dx_pml
 
         A += grad(u1) * grad(v2) * dx_int
-        A += -self.m * u1 * v2 * dx_int
+        A += self.V * u1 * v2 * dx_int
         A += 2 * (r-R)/r**3 * (x*u1x+y*u1y) * (x*v2x+y*v2y) * dx_pml
         A += 1/r**2 * (x*u1x+y*u1y) * v2 * dx_pml
         A += -2*s*s*(r-R)/r * u1 * v2 * dx_pml
