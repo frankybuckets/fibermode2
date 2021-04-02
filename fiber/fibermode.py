@@ -164,7 +164,7 @@ class FiberMode:
                       leftdomain=2, rightdomain=1, bc='cladbdry')
         geo.AddCircle((0, 0), r=1,
                       leftdomain=3, rightdomain=2, bc='corebdry')
-        geo.SetMaterial(1, 'pml')
+        geo.SetMaterial(1, 'Outer')
         geo.SetMaterial(2, 'clad')
         geo.SetMaterial(3, 'core')
 
@@ -435,7 +435,7 @@ class FiberMode:
     # LEAKY MODES ###########################################################
 
     def leakymode(self, p, radius, center, npts=8, nspan=10,
-                  alpha=5, includeclad=True, inverse=None,
+                  alpha=5, inverse=None,
                   **feastkwargs):
         """
         Compute leaky modes by solving a nonlinear eigenproblem derived
@@ -448,10 +448,6 @@ class FiberMode:
             value Z (not Z²) is contained within the circular contour
             centered at "center" of radius "radius" in the complex plane.
         * alpha: Quantity α (PML strength) in the mapping formula below.
-        * includeclad:
-            If True, then cladding is included in the domain, so PML
-            is set in 'pml' region only.
-            If False, then PML is set in the union 'pml|clad'.
         * npts: number of quadrature points for SpectralProjNGPoly
         * inverse: type of sparse inverse to use (if more than one installed)
         * nspan: intial number of random vectors to start FEAST.
@@ -480,16 +476,11 @@ class FiberMode:
         self.p = p
         print(self)
 
-        if includeclad:
-            pmlbegin = self.Rpml
-            dx_pml = dx(definedon=self.mesh.Materials('pml'))
-            dx_int = dx(definedon=self.mesh.Materials('core|clad'))
-        else:
-            pmlbegin = 1
-            dx_pml = dx(definedon=self.mesh.Materials('pml|clad'))
-            dx_int = dx(definedon=self.mesh.Materials('core'))
+        pmlbegin = self.Rpml
+        dx_pml = dx(definedon=self.mesh.Materials('Outer'))
+        dx_int = dx(definedon=self.mesh.Materials('core|clad'))
 
-        print('Using frequency dependent PML with includeclad=', includeclad)
+        print('Using frequency dependent PML')
         print('PML of alpha=', alpha, ' starts at',
               pmlbegin, 'and ends at ', self.Rout)
 
@@ -571,7 +562,7 @@ class FiberMode:
         return z, yl, yr, P, Yl, Y, ews
 
     def leakymode_auto(self, p, radiusZ2, centerZ2,
-                       alpha=1, includeclad=False,
+                       alpha=1,
                        stop_tol=1e-10, npts=10, niter=50, nspan=10,
                        verbose=True, inverse='umfpack'):
         """Compute leaky modes by solving a linear eigenproblem using
@@ -600,15 +591,10 @@ class FiberMode:
         self.alpha = alpha
         self.pml_ngs = True
 
-        if includeclad:
-            radial = ng.pml.Radial(rad=self.Rpml,
-                                   alpha=alpha*1j, origin=(0, 0))
-            self.mesh.SetPML(radial, 'pml')
-            pmlbegin = self.Rpml
-        else:
-            radial = ng.pml.Radial(rad=1, alpha=alpha*1j, origin=(0, 0))
-            self.mesh.SetPML(radial, 'pml|clad')
-            pmlbegin = 1
+        radial = ng.pml.Radial(rad=self.Rpml,
+                               alpha=alpha*1j, origin=(0, 0))
+        self.mesh.SetPML(radial, 'Outer')
+        pmlbegin = self.Rpml
 
         if self.V is None:
             self.setrefractiveindex(curvature=0)
@@ -663,7 +649,7 @@ class FiberMode:
             plane.
         * pmlbegin, pmlend:  starting radius of the PML and ending radius
             of the transitional PML region, respectively. (The subdomains
-            'pml', 'clad' in the mesh are not used for this PML.)
+            'Outer', 'clad' in the mesh are not used for this PML.)
         * Remaining inputs are the as documented in leakymode(..).
 
         OUTPUTS:   zsqr, Yl, Y, P
@@ -759,7 +745,7 @@ class FiberMode:
         return zsqr, Yl, Y, P
 
     def leakymode_poly(self, p, radius, center,
-                       alpha=1, includeclad=False,
+                       alpha=1,
                        stop_tol=1e-10, npts=10, niter=50, nspan=10,
                        verbose=True, inverse='umfpack'):
         """See docstring of leakymode(...)"""
@@ -767,7 +753,7 @@ class FiberMode:
         if self.V is None:
             self.setrefractiveindex(curvature=0)
         self.p = p
-        print(' PML (poly, k-dependent), includeclad =', includeclad)
+        print(' PML (poly, k-dependent)')
         print(' Degree p = ', p, ' Curvature =', self.curvature)
 
         self.X = H1(self.mesh, order=self.p, complex=True)
@@ -784,14 +770,9 @@ class FiberMode:
         u2x, u2y = grad(u2)
         v2x, v2y = grad(v2)
 
-        if includeclad:
-            pmlbegin = self.Rpml
-            dx_pml = dx(definedon=self.mesh.Materials('pml'))
-            dx_int = dx(definedon=self.mesh.Materials('core|clad'))
-        else:
-            pmlbegin = 1
-            dx_pml = dx(definedon=self.mesh.Materials('pml|clad'))
-            dx_int = dx(definedon=self.mesh.Materials('core'))
+        pmlbegin = self.Rpml
+        dx_pml = dx(definedon=self.mesh.Materials('Outer'))
+        dx_int = dx(definedon=self.mesh.Materials('core|clad'))
 
         R = pmlbegin
         s = 1 + 1j * alpha
