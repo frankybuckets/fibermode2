@@ -1,8 +1,3 @@
-"""Facilities to NUMERICALLY compute transverse modes of a STEP-INDEX
-fiber using a nondimensional eigenproblem and FEAST. Guided modes,
-leaky modes, and bent modes can be computed.
-"""
-
 import ngsolve as ng
 import numpy as np
 from netgen.geom2d import SplineGeometry
@@ -22,12 +17,13 @@ from .spectralprojpoly import SpectralProjNGPoly
 
 class FiberMode:
 
-    """A class to compute (guided and leaky) modes of a fiber in a
-    nondimensional way. In nondimensional computations the core is
-    set to have radius one. """
+    """Class with facilities to numerically approximate transverse modes
+    of a STEP-INDEX fiber using a nondimensional eigenproblem and FEAST.
+    Guided modes and leaky modes can be computed.
+    """
 
     def __init__(self, fibername=None, fromfile=None,
-                 Rpml=None, Rout=None, geom=None,
+                 R=None, Rout=None, geom=None,
                  h=3, hcore=None, refine=0):
         """
         EITHER provide a prefix "filename" of a collection of files, e.g.,
@@ -39,9 +35,9 @@ class FiberMode:
         OR construct a new fiber geometry and mesh so that
 
           * region r < 1, in polar coords, is called "core",
-          * region 1 < r < Rpml   is called "clad",
-          * region Rpml < r < Rout   is called "pml",
-          * when "Rpml" is None, it is set to Rpml = (Rout+1)/2,
+          * region 1 < r < R   is called "clad",
+          * region R < r < Rout   is called "pml",
+          * when "R" is None, it is set to R = (Rout+1)/2,
           * index of refraction is set using Fiber("fibername")
           * when "Rout" is unspecified, it is taken to match the ratio
             of cladding radius to core radius from Fiber("fibername"),
@@ -49,7 +45,7 @@ class FiberMode:
             is "hcore" (set to a default of hcore = h/10),
           * degree "p" finite element space is set on the mesh.
 
-        (Variables beginning with capital R such as "Rpml", "Rout" are
+        (Variables beginning with capital R such as "R", "Rout" are
         nondimensional lengths -- in contrast, "rout" found in other classes
         is length in meters.)
         """
@@ -59,7 +55,7 @@ class FiberMode:
         if fromfile is None:
             if fibername is None:
                 raise ValueError('Need either a file or a fiber name')
-            self.makefibermode(fibername, Rpml=Rpml, Rout=Rout, geom=geom,
+            self.makefibermode(fibername, R=R, Rout=Rout, geom=geom,
                                h=h, hcore=hcore)
             self.makemesh(refine)
         else:
@@ -91,8 +87,8 @@ class FiberMode:
 
         s = '\nFiberMode Object: Nondimensional Computational Parameters:'
         s += '\n  Geometry consists of circular core (radius = 1), an annular'
-        s += '\n  layer 1<r<Rpml=%g, and another layer Rpml<r<Rout=%g.'\
-            % (self.Rpml, self.Rout)
+        s += '\n  layer 1<r<R=%g, and another layer R<r<Rout=%g.'\
+            % (self.R, self.Rout)
         s += '\n  Max mesh sizes: %g (core), %g (cladding), %g (pml)\n' \
             % (self.hcore, self.hclad, self.hpml)
         s += 'Physical Parameters:' + \
@@ -105,7 +101,7 @@ class FiberMode:
 
     # FURTHER INITIALIZATIONS & SETTERS #####################################
 
-    def makefibermode(self, fibername=None, Rpml=None, Rout=None,
+    def makefibermode(self, fibername=None, R=None, Rout=None,
                       geom=None, h=4, hcore=None):
 
         self.fibername = fibername
@@ -113,11 +109,11 @@ class FiberMode:
 
         if Rout is None:
             Rout = self.fiber.rclad / self.fiber.rcore
-        if Rpml is None:
-            Rpml = (Rout+1)/2
-        if Rpml < 1 or Rpml > Rout:
-            raise ValueError('Set Rpml between 1 and Rout')
-        self.Rpml = Rpml
+        if R is None:
+            R = (Rout+1)/2
+        if R < 1 or R > Rout:
+            raise ValueError('Set R between 1 and Rout')
+        self.R = R
         self.Rout = Rout
 
         if hcore is None:
@@ -126,7 +122,7 @@ class FiberMode:
         self.hclad = h
         self.hpml = h
 
-    def makemesh(self, refine):
+    def makemesh(self, refine=0):
         self.setstepindexgeom()  # sets self.geo
         ngmesh = self.geo.GenerateMesh()
         for i in range(refine):
@@ -143,7 +139,7 @@ class FiberMode:
         self.hcore = float(f['hcore'])
         self.hclad = float(f['hclad'])
         self.hpml = float(f['hpml'])
-        self.Rpml = float(f['Rpml'])
+        self.R = float(f['R'])
         self.Rout = float(f['Rout'])
 
         self.fiber = Fiber(self.fibername)
@@ -160,7 +156,7 @@ class FiberMode:
         geo = SplineGeometry()
         geo.AddCircle((0, 0), r=self.Rout,
                       leftdomain=1, rightdomain=0, bc='outer')
-        geo.AddCircle((0, 0), r=self.Rpml,
+        geo.AddCircle((0, 0), r=self.R,
                       leftdomain=2, rightdomain=1, bc='cladbdry')
         geo.AddCircle((0, 0), r=1,
                       leftdomain=3, rightdomain=2, bc='corebdry')
@@ -184,7 +180,7 @@ class FiberMode:
             nbent = n * (1 + (x * curvature/bendfactor))
 
         with "bendfactor" as input. This dimensional formula is used
-        non-dimensionally below to set the internal data member "m",
+        non-dimensionally below to set the internal data member "V",
         the non-dimensional coefficient function for the eigenproblem.
         """
 
@@ -476,7 +472,7 @@ class FiberMode:
         self.p = p
         print(self)
 
-        pmlbegin = self.Rpml
+        pmlbegin = self.R
         dx_pml = dx(definedon=self.mesh.Materials('Outer'))
         dx_int = dx(definedon=self.mesh.Materials('core|clad'))
 
@@ -591,10 +587,10 @@ class FiberMode:
         self.alpha = alpha
         self.pml_ngs = True
 
-        radial = ng.pml.Radial(rad=self.Rpml,
+        radial = ng.pml.Radial(rad=self.R,
                                alpha=alpha*1j, origin=(0, 0))
         self.mesh.SetPML(radial, 'Outer')
-        pmlbegin = self.Rpml
+        pmlbegin = self.R
 
         if self.V is None:
             self.setrefractiveindex(curvature=0)
@@ -770,7 +766,7 @@ class FiberMode:
         u2x, u2y = grad(u2)
         v2x, v2y = grad(v2)
 
-        pmlbegin = self.Rpml
+        pmlbegin = self.R
         dx_pml = dx(definedon=self.mesh.Materials('Outer'))
         dx_int = dx(definedon=self.mesh.Materials('core|clad'))
 
@@ -1014,7 +1010,7 @@ class FiberMode:
         np.savez(fbmfilename,
                  fibername=self.fibername,
                  hcore=self.hcore, hclad=self.hclad, hpml=self.hpml,
-                 Rpml=self.Rpml, Rout=self.Rout)
+                 R=self.R, Rout=self.Rout)
 
     def savemesh(self, fileprefix):
 
@@ -1040,14 +1036,14 @@ class FiberMode:
         if tone:
             np.savez(fullname, fibername=self.fibername,
                      hcore=self.hcore, hclad=self.hclad, hpml=self.hpml,
-                     p=self.p, Rpml=self.Rpml, Rout=self.Rout,
+                     p=self.p, R=self.R, Rout=self.Rout,
                      betas=betas, y=y,
                      exactbetas=exact, name2ind=name2ind,
                      firstmodeindex=self.firstmodeindex)
         else:
             np.savez(fullname, fibername=self.fibername,
                      hcore=self.hcore, hclad=self.hclad, hpml=self.hpml,
-                     p=self.p, Rpml=self.Rpml, Rout=self.Rout,
+                     p=self.p, R=self.R, Rout=self.Rout,
                      betas=betas, y=y,
                      exactbetas=exact, name2ind=name2ind)
 
@@ -1055,7 +1051,7 @@ class FiberMode:
         """Check if the loaded file has expected values of certain data"""
 
         for member in {'fibername', 'hcore', 'hclad', 'hpml',
-                       'Rpml', 'Rout'}:
+                       'R', 'Rout'}:
             print('  From file:', member, '=', f[member])
             assert self.__dict__[member] == f[member], \
                 'Load error! Data member %s does not match!' % member
