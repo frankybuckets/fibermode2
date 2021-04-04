@@ -80,7 +80,7 @@ class FiberMode(ModeSolver):
         self.a = None
         self.b = None
         self.V = None
-        self.pml_ngs = None  # True if ngsolve pml set (then cant reuse mesh)
+        self.ngspmlset = None  # True if ngsolve pml set (then cant reuse mesh)
         self.X = None
         self.curvature = None
 
@@ -327,7 +327,7 @@ class FiberMode(ModeSolver):
                 self.V = CoefficientFunction([0, 0, -V[0]*V[0]])
             else:
                 self.V = CoefficientFunction([0, 0, -V*V])
-        if self.pml_ngs is True:
+        if self.ngspmlset is True:
             raise RuntimeError('Mesh pml trafo is set')
 
         if tone:
@@ -438,74 +438,6 @@ class FiberMode(ModeSolver):
 
     # LEAKY MODES ###########################################################
 
-    def leakymode_auto(self, p, radiusZ2, centerZ2,
-                       alpha=1,
-                       stop_tol=1e-10, npts=10, niter=50, nspan=10,
-                       verbose=True, inverse='umfpack'):
-        """Compute leaky modes by solving a linear eigenproblem using
-        the frequency-independent automatic PML mesh map of NGSolve
-        and using non-selfadjoint FEAST.
-
-        INPUTS:
-
-        * radiusZ2, centerZ2:
-            Capture modes whose non-dimensional resonance value Z²
-            is such that Z*Z is contained within the circular contour
-            centered at "centerZ2" of radius "radiusZ2" in the complex
-            plane.
-        * Remaining inputs are the as documented in leakymode(..).
-
-        OUTPUTS:   zsqr, Yl, Y, P
-
-        * zsqr: computed resonance values Z²
-        * Yl, Y: left and right eigenspans
-        * P: spectral projector approximation
-        """
-
-        if abs(alpha.imag) > 0 or alpha < 0:
-            raise ValueError('Expecting PML strength alpha > 0')
-
-        self.alpha = alpha
-        self.pml_ngs = True
-
-        radial = ng.pml.Radial(rad=self.R,
-                               alpha=alpha*1j, origin=(0, 0))
-        self.mesh.SetPML(radial, 'Outer')
-        pmlbegin = self.R
-
-        if self.V is None:
-            self.setnondimmat(curvature=0)
-
-        print(' PML (automatic, frequency-independent) starts at r=', pmlbegin)
-        print(' Degree p = ', p, ' Fiber curvature =', self.curvature)
-
-        self.p = p
-        self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
-
-        u, v = self.X.TnT()
-        a = BilinearForm(self.X)
-        b = BilinearForm(self.X)
-        a += (grad(u) * grad(v) + self.V * u * v) * dx
-        b += u * v * dx
-        with ng.TaskManager():
-            a.Assemble()
-            b.Assemble()
-        self.a = a
-        self.b = b
-
-        P = SpectralProjNGGeneral(self.X, self.a.mat, self.b.mat,
-                                  radiusZ2, centerZ2, npts,
-                                  verbose=verbose, inverse=inverse)
-        Y = NGvecs(self.X, nspan)
-        Yl = Y.create()
-        Y.setrandom()
-        Yl.setrandom()
-        zsqr, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                       stop_tol=stop_tol,
-                                       check_contour=2,
-                                       niterations=niter, nrestarts=1)
-        return zsqr, Yl, Y, P
-
     def leakymode_smooth(self, p, radiusZ2, centerZ2,
                          alpha=1, pmlbegin=None, pmlend=None,
                          stop_tol=1e-10, npts=10, niter=50,
@@ -544,7 +476,7 @@ class FiberMode(ModeSolver):
             if pmlbegin > self.Rout or pmlbegin < 1:
                 raise ValueError('Select pmlbegin in interval [1, %g]'
                                  % self.Rout)
-            self.pml_ngs = False
+            self.ngspmlset = False
         if pmlend is None:
             pmlend = (self.Rout+pmlbegin) * 0.5
 

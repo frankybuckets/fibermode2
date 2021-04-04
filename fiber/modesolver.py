@@ -2,7 +2,7 @@ import ngsolve as ng
 from ngsolve import grad, dx
 import numpy as np
 from fiberamp.fiber.spectralprojpoly import SpectralProjNGPoly
-from pyeigfeast.spectralproj.ngs import NGvecs, SpectralProjNG
+from pyeigfeast.spectralproj.ngs import NGvecs, SpectralProjNGGeneral
 
 
 class ModeSolver:
@@ -54,8 +54,10 @@ class ModeSolver:
         self.L = L
         self.k = k
         self.n0 = n0
+        self.ngspmlset = False
 
-        # check if input satisfies tacit mesh assumptions
+        print('ModeSolver: Checking if mesh has required regions')
+
         if sum(self.mesh.Materials('Outer').Mask()) == 0:
             raise ValueError('Input mesh must have a region called Outer')
         if sum(self.mesh.Boundaries('OuterCircle').Mask()) == 0:
@@ -70,12 +72,19 @@ class ModeSolver:
 
         return np.sqrt((self.L*self.k*self.n0)**2 - Z2) / self.L
 
+    # ###################################################################
+    # FREQ-DEPENDENT PML BY POLYNOMIAL EIGENPROBLEM #####################
+
     def polypmlsystem(self, p, alpha=1):
         """
         Returns AA, X
 
           AA is a list of 4 cubic matrix polynomial coefficients on FE space X
         """
+
+        if self.ngspmlset:
+            raise RuntimeError('NGSolve pml set. Cannot combine with poly.')
+
         dx_pml = dx(definedon=self.mesh.Materials('Outer'))
         dx_int = dx(definedon=~self.mesh.Materials('Outer'))
         R = self.R
@@ -124,35 +133,34 @@ class ModeSolver:
 
         PARAMETERS:
 
-        p:        polynomial degree of finite elements
-        alpha:    PML strength
-        npts:     number of quadrature points in SpectralProjNGPoly
-        nspan:    dimension of initial span for feast
-        ctrs, radi: repeat feast with a circular contour centered at
-                  ctrs[i] of radius radi[i] for each i. Eigenvalues found by
-                  feast for each i are returned in output Zs[i], and the
-                  corresponding eigenspaces are in span object Ys[i].
-        within: give a custom function to remove some eigenvalues, say
-                  the ones with positive imaginary part.
-        rhoinv: determines the eccentricity in case of elliptical contours
-        seed: for random setting of initial span (may fix for reproducibility).
-        feastkwargs: further keyword arguments passed to spectral projector.
+        p:        Polynomial degree of finite elements.
+        alpha:    PML strength.
+        nspan:    Dimension of random initial eigenspace iterate.
+        seed:     Fix seed for reproducing random initial iterate.
+        npts, ctrs, radi, within, rhoinv, quadrule:
+                  These paramaters are passed to SpectralProjNGPoly
+                  constructor. See documentation there.
+        feastkwargs: Further keyword arguments passed to the feast(...)
+                  method of the spectral projector. See documentation there.
 
-        OUTPUTS:  Zs, Ys, betas
+        OUTPUTS:  Z, y, yl, beta, P, moreoutputs
 
-        Zs[i] and Ys[i] are as described above, and betas[i] give the
-        propagation constants corresponding to nondimensional
-        eigenvalues in Zs[i].
+        Z: nondimensional polynomial eigenvalue
+        y: right eigenspan
+        yl: left eigenspan
+        beta: physical propagation constant
+        P: the SpectralProjNGPoly object used to compute Z
+        moreoutputs: dictionary of more outputs
 
         """
 
-        print('\nModeSolver.leakymode called on object with these settings:\n',
+        print('ModeSolver.leakymode called on object with these settings:\n',
               self)
 
         AA, X = self.polypmlsystem(p=p, alpha=alpha)
         X3 = ng.FESpace([X, X, X])
-        print('Set PML with p=', p, ' alpha=', alpha, 'and thickness=%.3f'
-              % (self.Rout-self.R))
+        print('Set freq-dependent PML with p=', p, ' alpha=', alpha,
+              'and thickness=%.3f' % (self.Rout-self.R))
 
         Y = NGvecs(X3, nspan)
         Yl = Y.create()
@@ -199,3 +207,78 @@ class ModeSolver:
                        'ewshistory': ews, 'bdrnorm': bdrnrm}
 
         return Z, y, yl, beta, P, moreoutputs
+
+    # ###################################################################
+    # NGSOLVE AUTOMATIC PML #############################################
+
+    def autopmlsystem(self, p, alpha=1):
+        """
+        Set up PML using NGSolve's automatic PML using in-built
+        mesh transformations.
+        """
+        if abs(alpha.imag) > 0 or alpha < 0:
+            raise ValueError('Expecting PML strength alpha > 0')
+        self.ngspmlset = True
+
+        radial = ng.pml.Radial(rad=self.R,
+                               alpha=alpha*1j, origin=(0, 0))
+        self.mesh.SetPML(radial, 'Outer')
+        print('Set NGSolve automatic PML with p=', p, ' alpha=', alpha,
+              'and thickness=%.3f' % (self.Rout-self.R))
+        X = ng.H1(self.mesh, order=p, complex=True)
+
+        u, v = X.TnT()
+        a = ng.BilinearForm(X)
+        b = ng.BilinearForm(X)
+        a += (grad(u) * grad(v) + self.V * u * v) * dx
+        b += u * v * dx
+        with ng.TaskManager():
+            a.Assemble()
+            b.Assemble()
+
+        return a, b, X
+
+    def leakymode_auto(self, p, radiusZ2=0.1, centerZ2=4,
+                       alpha=1, npts=8, nspan=5, seed=1,
+                       inverse='umfpack', **feastkwargs):
+        """
+        Compute leaky modes by solving a linear eigenproblem using
+        the frequency-independent automatic PML mesh map of NGSolve
+        and using non-selfadjoint FEAST.
+
+        INPUTS:
+
+        * radiusZ2, centerZ2:
+            Capture modes whose non-dimensional resonance value Z²
+            is such that Z*Z is contained within the circular contour
+            centered at "centerZ2" of radius "radiusZ2" in the complex
+            plane.
+        * Remaining inputs are the as documented in leakymode(..).
+
+        OUTPUTS:   zsqr, Yl, Y, P
+
+        * zsqr: computed resonance values Z²
+        * Yl, Y: left and right eigenspans
+        * P: SpectralProjNGGeneral object that computed Y, Yl
+        """
+
+        print('ModeSolver.leakymode called on object with these settings:\n',
+              self)
+        a, b, X = self.autopmlsystem(p, alpha=alpha)
+
+        P = SpectralProjNGGeneral(X, a.mat, b.mat,
+                                  radiusZ2, centerZ2, npts,
+                                  inverse=inverse)
+        Y = NGvecs(X, nspan)
+        Yl = Y.create()
+        Y.setrandom(seed=seed)
+        Yl.setrandom(seed=seed)
+        zsqr, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
+                                       **feastkwargs)
+        beta = self.betafrom(zsqr)
+
+        print('Results:\n Z²:', zsqr)
+        print(' beta:', beta)
+        print(' CL dB/m:', 20 * beta.imag / np.log(10))
+
+        return zsqr, Yl, Y, beta, P

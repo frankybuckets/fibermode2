@@ -178,6 +178,10 @@ class ARF(ModeSolver):
             [index[mat] for mat in self.mesh.GetMaterials()])
 
         self.setnondimmat()  # coefficient for nondimensionalized eigenproblems
+        L = self.scaling * 1e-6
+        k = self.wavenum()
+        n0 = self.n_air
+        super().__init__(self.mesh, L, k, n0)
 
         # OUTPUT LOCATION
 
@@ -699,18 +703,6 @@ class ARF(ModeSolver):
 
         return 2 * np.pi / self.wavelength
 
-    def betafrom(self, Z2):
-        """ Return physical propagation constants (beta), given
-        nondimensional Z² values (input in Z2), per the formula
-        β = sqrt(k²n₀² - (Z/a)²). """
-
-        # account for micrometer lengths & any additional scaling in geometry
-        a = self.scaling * 1e-6
-        k = self.wavenum()
-        akn0 = a * k * self.n_air
-        # akn0 = a * k * self.n_si
-        return np.sqrt(akn0**2 - Z2) / a
-
     def sqrZfrom(self, betas):
         """ Return values of nondimensional Z squared, given physical
         propagation constants betas, ie, return Z² = a² (k²n₀² - β²). """
@@ -736,22 +728,6 @@ class ARF(ModeSolver):
             A.Assemble()
             B.Assemble()
 
-        return A, B, X
-
-    def autopmlsystem(self, p, alpha=1):
-
-        radial = ng.pml.Radial(rad=self.Rclado,
-                               alpha=alpha*1j, origin=(0, 0))
-        self.mesh.SetPML(radial, 'Outer')
-        X = ng.H1(self.mesh, order=p, complex=True)
-        u, v = X.TnT()
-        A = ng.BilinearForm(X)
-        B = ng.BilinearForm(X)
-        A += (grad(u) * grad(v) + self.V * u * v) * dx
-        B += u * v * dx
-        with ng.TaskManager():
-            A.Assemble()
-            B.Assemble()
         return A, B, X
 
     def lineareig(self, p, method='selfadjoint', initdim=5, stop_tol=1e-13,
