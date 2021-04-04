@@ -11,7 +11,7 @@ class ModeSolver:
 
     """This class contains algorithms to compute modes of various fibers.
 
-    METHOD FOR SCALAR MODES
+    HOW SCALAR MODES ARE COMPUTED:
 
     The Helmholtz mode in physical coordinates is given by
 
@@ -27,26 +27,39 @@ class ModeSolver:
 
          -Δu + V u = Z² u
 
-    where Z² = L² (k² n₀² - β²).   Here the nondimensional function V is
-    an index well, akin to a Schrödinger potential well, and is given in
-    terms of the physical material properties by
+    where Z² = L² (k² n₀² - β²) and the mode u (not to be confused with the
+    physical mode) is defined on a non-dimensional (unit sized) domain.
+    The nondimensional function V is an index well, akin  to a
+    Schrödinger potential well, and is given in terms of the
+    physical material properties by
 
           V = L²k² (n₀² - n²)   if r < R₀,
           V = 0                 if r > R₀.
 
     Here R₀ is the nondimensional radius such that n is constant
-    beyond L R₀ in the  physical domain.
+    beyond LR₀ in the  physical domain.
 
-    * R = radius marking the start of PML whenever PML is
+    CLASS ATTRIBUTES:
+
+    * self.L, self.k, self.n0: represent L, k, n₀ as described above.
+    * self.mesh: input mesh of non-dimensionalized transverse domain.
+
+    Attributes assumed to be set by derived classes:
+
+    * self.R = radius marking the start of PML whenever PML is
       used (for leaky modes). Note that R > R₀.
 
-    * Rout = final outer radius terminating the computational domain.
+    * self.Rout = final outer radius terminating the computational domain.
       The circle r = Rout is assumed to be a boundary region
       named 'OuterCircle' of  the given mesh.
 
     * When PML is used, it is put in the region R < r < Rout.
       The PML region R < r < Rout is assumed to be called 'Outer'
       in the given mesh.
+
+    * self.V represents the above-mentioned index well function V,
+      which must be set by a derived class before calling any of the
+      implemented algorithms.
 
     """
 
@@ -86,6 +99,7 @@ class ModeSolver:
             return ng.sqrt(s)
 
         bdrnrms = y.applyfnl(outint)
+        print('Mode boundary L² norm = %.1e' % np.max(bdrnrms))
         return bdrnrms
 
     def estimatepolypmldecay(self, Z, alpha):
@@ -217,14 +231,13 @@ class ModeSolver:
         print(' beta:', beta)
         print(' CL dB/m:', 20 * beta.imag / np.log(10))
 
-        maxbdrnrm = np.max(self.boundarynorm(y))
-        print('Mode boundary norm = %.1e' % maxbdrnrm)
-        if maxbdrnrm > 1e-6:
+        bdrnrm = self.boundarynorm(y)
+        if np.max(bdrnrm) > 1e-6:
             print('*** Mode boundary L2 norm > 1e-6!')
             self.estimatepolypmldecay(Z, alpha)
 
         moreoutputs = {'longY': Y, 'longYl': Yl,
-                       'ewshistory': ews, 'bdrnorm': maxbdrnrm}
+                       'ewshistory': ews, 'bdrnorm': bdrnrm}
 
         return Z, y, yl, beta, P, moreoutputs
 
@@ -244,6 +257,8 @@ class ModeSolver:
               self)
         print('Set freq-dependent PML with p=', p, ' alpha=', alpha,
               'and thickness=%.3f' % (self.Rout-self.R))
+        if self.ngspmlset:
+            raise RuntimeError('NGSolve pml set. Cannot combine with poly.')
 
         X = ng.H1(self.mesh, order=p, complex=True)
 
@@ -319,6 +334,10 @@ class ModeSolver:
             yl._mv[i].data = Ylg.components[0].vecs[i]
         y.centernormalize(self.mesh(0, 0))
         yl.centernormalize(self.mesh(0, 0))
+        maxbdrnrm = np.max(self.boundarynorm(y))
+        print('Mode boundary norm = %.1e' % maxbdrnrm)
+        if maxbdrnrm > 1e-6:
+            print('*** Mode boundary L2 norm > 1e-6!')
 
         return z, yl, y, P, Yl, Y
 
@@ -327,7 +346,7 @@ class ModeSolver:
 
     def autopmlsystem(self, p, alpha=1):
         """
-        Set up PML using NGSolve's automatic PML using in-built
+        Set up PML by NGSolve's automatic PML using in-built
         mesh transformations.
         """
         if abs(alpha.imag) > 0 or alpha < 0:
@@ -379,6 +398,7 @@ class ModeSolver:
 
         print('ModeSolver.leakymode called on object with these settings:\n',
               self)
+
         a, b, X = self.autopmlsystem(p, alpha=alpha)
 
         P = SpectralProjNGGeneral(X, a.mat, b.mat,
@@ -392,10 +412,12 @@ class ModeSolver:
         zsqr, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
                                        **feastkwargs)
         beta = self.betafrom(zsqr)
-
         print('Results:\n Z²:', zsqr)
         print(' beta:', beta)
         print(' CL dB/m:', 20 * beta.imag / np.log(10))
+        maxbdrnrm = np.max(self.boundarynorm(Y))
+        if maxbdrnrm > 1e-6:
+            print('*** Mode boundary L2 norm > 1e-6!')
 
         return zsqr, Yl, Y, beta, P
 
@@ -422,7 +444,8 @@ class ModeSolver:
 
         print('ModeSolver.leakymode_smooth called on:\n',
               self)
-
+        if self.ngspmlset:
+            raise RuntimeError('NGSolve pml set. Cannot combine with poly.')
         if abs(alpha.imag) > 0 or alpha < 0:
             raise ValueError('Expecting PML strength alpha > 0')
         if pmlbegin is None:
@@ -492,9 +515,11 @@ class ModeSolver:
         zsqr, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
                                        **feastkwargs)
         beta = self.betafrom(zsqr)
-
         print('Results:\n Z²:', zsqr)
         print(' beta:', beta)
         print(' CL dB/m:', 20 * beta.imag / np.log(10))
+        maxbdrnrm = np.max(self.boundarynorm(Y))
+        if maxbdrnrm > 1e-6:
+            print('*** Mode boundary L2 norm > 1e-6!')
 
         return zsqr, Yl, Y, beta, P
