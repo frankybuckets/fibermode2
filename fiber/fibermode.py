@@ -81,12 +81,10 @@ class FiberMode(ModeSolver):
         self.X = None
         self.curvature = None
 
-        self.setnondimmat(curvature=0)
-
+        self.setnondimmat(curvature=0)  # sets self.k and self.V
         L = self.fiber.rcore
-        k = self.fiber.ks
         n0 = self.fiber.nclad
-        super().__init__(self.mesh, L, k, n0)
+        super().__init__(self.mesh, L, n0)
 
     def __str__(self):
 
@@ -192,6 +190,7 @@ class FiberMode(ModeSolver):
         self.curvature = curvature
         self.bendfactor = bendfactor
         fib = self.fiber
+        self.k = fib.ks
 
         if curvature == 0:
             V = fib.fiberV()

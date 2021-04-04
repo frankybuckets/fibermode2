@@ -41,7 +41,7 @@ class ModeSolver:
 
     CLASS ATTRIBUTES:
 
-    * self.L, self.k, self.n0: represent L, k, n₀ as described above.
+    * self.L, self.n0: represent L, n₀ as described above.
     * self.mesh: input mesh of non-dimensionalized transverse domain.
 
     Attributes assumed to be set by derived classes:
@@ -61,13 +61,16 @@ class ModeSolver:
       which must be set by a derived class before calling any of the
       implemented algorithms.
 
+    * self.k represents the wavenumber k in the definition of V, which
+      must be set and can be changed by a derived class before calling
+      any of the implemented algorithms.
+
     """
 
-    def __init__(self, mesh, L, k, n0):
+    def __init__(self, mesh, L, n0):
 
         self.mesh = mesh
         self.L = L
-        self.k = k
         self.n0 = n0
         self.ngspmlset = False
 
