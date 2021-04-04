@@ -8,6 +8,7 @@ import fiberamp
 from pyeigfeast.spectralproj.ngs import SpectralProjNG, NGvecs
 from pyeigfeast.spectralproj.ngs import SpectralProjNGGeneral
 from pyeigfeast.spectralproj import splitzoom
+from fiberamp.fiber.modesolver import ModeSolver
 import sympy as sm
 import os
 from scipy.sparse import coo_matrix
@@ -15,7 +16,7 @@ import scipy.special as scf
 from .spectralprojpoly import SpectralProjNGPoly
 
 
-class FiberMode:
+class FiberMode(ModeSolver):
 
     """Class with facilities to numerically approximate transverse modes
     of a STEP-INDEX fiber using a nondimensional eigenproblem and FEAST.
@@ -82,6 +83,13 @@ class FiberMode:
         self.pml_ngs = None  # True if ngsolve pml set (then cant reuse mesh)
         self.X = None
         self.curvature = None
+
+        self.setnondimmat(curvature=0)
+
+        L = self.fiber.rcore
+        k = self.fiber.ks
+        n0 = self.fiber.nclad
+        super().__init__(self.mesh, L, k, n0)
 
     def __str__(self):
 
@@ -155,7 +163,7 @@ class FiberMode:
     def setstepindexgeom(self):
         geo = SplineGeometry()
         geo.AddCircle((0, 0), r=self.Rout,
-                      leftdomain=1, rightdomain=0, bc='outer')
+                      leftdomain=1, rightdomain=0, bc='OuterCircle')
         geo.AddCircle((0, 0), r=self.R,
                       leftdomain=2, rightdomain=1, bc='cladbdry')
         geo.AddCircle((0, 0), r=1,
@@ -170,7 +178,7 @@ class FiberMode:
 
         self.geo = geo
 
-    def setrefractiveindex(self, curvature=12, bendfactor=1.28):
+    def setnondimmat(self, curvature=12, bendfactor=1.28):
         """
         When a fiber of refractive index n is bent to have the
         input "curvature" (curvature = reciprocal of bending radius,
@@ -430,133 +438,6 @@ class FiberMode:
 
     # LEAKY MODES ###########################################################
 
-    def leakymode(self, p, radius, center, npts=8, nspan=10,
-                  alpha=5, inverse=None,
-                  **feastkwargs):
-        """
-        Compute leaky modes by solving a nonlinear eigenproblem derived
-        from a frequency-dependent PML.
-
-        INPUTS:
-
-        * p: degree of finite element to be used to compute modes.
-        * radius, center: Capture modes whose non-dimensional resonance
-            value Z (not Z²) is contained within the circular contour
-            centered at "center" of radius "radius" in the complex plane.
-        * alpha: Quantity α (PML strength) in the mapping formula below.
-        * npts: number of quadrature points for SpectralProjNGPoly
-        * inverse: type of sparse inverse to use (if more than one installed)
-        * nspan: intial number of random vectors to start FEAST.
-        * feastkwargs: additional arguments to be passed to FEAST iteration (as
-          documented in SpectralProj's feast(...) method).
-
-        OUTPUTS:    z, yl, yr, P, Yl, Y
-
-        * z: computed resonance values
-        * yl, yr: left and right eigenspans of nonlinear eigenproblem
-        * P: spectral projector approximation
-        * Yl, Y: left & right eigenspans of large linear eigenproblem
-
-        METHOD:
-
-        The method performs the complex coordinate transformation
-           mapped_x = x * η(r) / r,                   where
-           η(r) = R + (r - R) * (1 + 1j * α) / Z
-        and R is the radius where PML starts (the variable pmlbegin below).
-        Reference: [Nannen+Wess].  This then leads to a cubic eigenproblem,
-        which we solve using SpectralProjNGPoly.
-        """
-
-        if self.V is None:
-            self.setrefractiveindex(curvature=0)
-        self.p = p
-        print(self)
-
-        pmlbegin = self.R
-        dx_pml = dx(definedon=self.mesh.Materials('Outer'))
-        dx_int = dx(definedon=self.mesh.Materials('core|clad'))
-
-        print('Using frequency dependent PML')
-        print('PML of alpha=', alpha, ' starts at',
-              pmlbegin, 'and ends at ', self.Rout)
-
-        R = pmlbegin
-        s = 1 + 1j * alpha
-        x = ng.x
-        y = ng.y
-        r = ng.sqrt(x*x+y*y) + 0j
-
-        self.X = H1(self.mesh, order=self.p, complex=True)
-        u, v = self.X.TnT()
-        ux, uy = grad(u)
-        vx, vy = grad(v)
-
-        AA = [BilinearForm(self.X, check_unused=False)]
-        AA[0] += (s*r/R) * grad(u) * grad(v) * dx_pml
-        AA[0] += s * (r-R)/(R*r*r) * (x*ux+y*uy) * v * dx_pml
-        AA[0] += s * (R-2*r)/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
-        AA[0] += -s**3 * (r-R)**2/(R*r) * u * v * dx_pml
-
-        AA += [BilinearForm(self.X)]
-        AA[1] += grad(u) * grad(v) * dx_int
-        AA[1] += self.V * u * v * dx_int
-        AA[1] += 2 * (r-R)/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
-        AA[1] += 1/r**2 * (x*ux+y*uy) * v * dx_pml
-        AA[1] += -2*s*s*(r-R)/r * u * v * dx_pml
-
-        AA += [BilinearForm(self.X, check_unused=False)]
-        AA[2] += R/s/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
-        AA[2] += -R*s/r * u * v * dx_pml
-
-        AA += [BilinearForm(self.X, check_unused=False)]
-        AA[3] += -u * v * dx_int
-
-        with ng.TaskManager():
-            for i in range(4):
-                AA[i].Assemble()
-
-        P = SpectralProjNGPoly(AA, self.X, radius, center, npts,
-                               inverse=inverse)
-
-        X3 = ng.FESpace([self.X, self.X, self.X])
-        Y = NGvecs(X3, nspan)
-        Yl = Y.create()
-        Y.setrandom(seed=1)
-        Yl.setrandom(seed=1)
-
-        z, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                    **feastkwargs)
-
-        ews, cgd = history[-2], history[-1]
-        if not cgd:
-            print('*** Iterations did not converge')
-
-        yl = P.last(Yl)
-        yr = P.first(Y)
-        yr.centernormalize(self.mesh(0, 0))
-        yl.centernormalize(self.mesh(0, 0))
-        print('Computed Z =', z)
-
-        # a posteriori checks
-        decayrate = alpha * (self.Rout - pmlbegin) + pmlbegin * z.imag
-        bdryval = np.exp(-decayrate) / np.sqrt(np.abs(z)*np.pi/2)
-        bdrnrm0 = bdryval*2*np.pi*self.Rout
-        print('PML guessed boundary norm ~ %.1e' % max(bdrnrm0))
-        if np.max(bdrnrm0) > 1e-6:
-            print('*** Likely not enough PML decay for this Z!')
-
-        def outint(u):
-            out = self.mesh.Boundaries('outer')
-            s = ng.Integrate(u*ng.Conj(u), out, ng.BND).real
-            return ng.sqrt(s)
-
-        bdrnrm = yr.applyfnl(outint)
-        print('Actual max boundary norm = %.1e' % max(bdrnrm))
-        if np.max(bdrnrm) > 1e-5:
-            print('*** Mode has not decayed in PML enough!')
-
-        return z, yl, yr, P, Yl, Y, ews
-
     def leakymode_auto(self, p, radiusZ2, centerZ2,
                        alpha=1,
                        stop_tol=1e-10, npts=10, niter=50, nspan=10,
@@ -593,7 +474,7 @@ class FiberMode:
         pmlbegin = self.R
 
         if self.V is None:
-            self.setrefractiveindex(curvature=0)
+            self.setnondimmat(curvature=0)
 
         print(' PML (automatic, frequency-independent) starts at r=', pmlbegin)
         print(' Degree p = ', p, ' Fiber curvature =', self.curvature)
@@ -708,7 +589,7 @@ class FiberMode:
 
         # Make linear eigensystem
         if self.V is None:
-            self.setrefractiveindex(curvature=0)
+            self.setnondimmat(curvature=0)
         self.p = p
         print(' PML (smooth, k-independent) starts at r=', pmlbegin)
         print(' Degree p = ', p, ' Curvature =', self.curvature)
@@ -747,15 +628,15 @@ class FiberMode:
         """See docstring of leakymode(...)"""
 
         if self.V is None:
-            self.setrefractiveindex(curvature=0)
+            self.setnondimmat(curvature=0)
         self.p = p
         print(' PML (poly, k-dependent)')
         print(' Degree p = ', p, ' Curvature =', self.curvature)
 
         self.X = H1(self.mesh, order=self.p, complex=True)
 
-        # Our implementation of [Nannen+Wess]'s frequency-dependent PML is
-        # based on the idea to make a cubic eigenproblem using 3 copies of X:
+        # This implementation of [Nannen+Wess]'s frequency-dependent PML is
+        # makes a cubic eigenproblem using 3 copies of X:
 
         X3 = ng.FESpace([self.X, self.X, self.X])
 
@@ -832,7 +713,7 @@ class FiberMode:
     def bentmode(self, curvature, radiusZ, centerZ, p,
                  bendfactor=1.28, **kwargs):
 
-        self.setrefractiveindex(curvature=curvature, bendfactor=bendfactor)
+        self.setnondimmat(curvature=curvature, bendfactor=bendfactor)
 
         z, _, y, P, _, _ = self.leakymode(p, radiusZ, centerZ, **kwargs)
 
