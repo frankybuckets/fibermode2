@@ -1,8 +1,10 @@
 import ngsolve as ng
 from ngsolve import grad, dx
 import numpy as np
+import sympy as sm
 from fiberamp.fiber.spectralprojpoly import SpectralProjNGPoly
 from pyeigfeast.spectralproj.ngs import NGvecs, SpectralProjNGGeneral
+from pyeigfeast.spectralproj.ngs import SpectralProjNG
 
 
 class ModeSolver:
@@ -71,6 +73,34 @@ class ModeSolver:
         β = sqrt(L²k²n₀² - Z²) / L . """
 
         return np.sqrt((self.L*self.k*self.n0)**2 - Z2) / self.L
+
+    def boundarynorm(self, y):
+        """
+        Returns  L² norm of all functions in the span y restricted to
+        the outermost boundary r= Rout.
+        """
+
+        def outint(u):
+            out = self.mesh.Boundaries('OuterCircle')
+            s = ng.Integrate(u*ng.Conj(u), out, ng.BND).real
+            return ng.sqrt(s)
+
+        bdrnrms = y.applyfnl(outint)
+        return bdrnrms
+
+    def estimatepolypmldecay(self, Z, alpha):
+        """
+        Returns an estimate of mode boundary norm, per predicted decay of
+        the frequency dependent PML for given Z and alpha.
+        """
+
+        decayrate = alpha * (self.Rout - self.R) + \
+            self.R * Z.imag
+        bdryval = np.exp(-decayrate) / np.sqrt(np.abs(Z)*np.pi/2)
+        bdrnrm0 = bdryval*2*np.pi*self.Rout
+        print('PML decay estimates boundary norm ~ %.1e'
+              % max(bdrnrm0))
+        return bdrnrm0
 
     # ###################################################################
     # FREQ-DEPENDENT PML BY POLYNOMIAL EIGENPROBLEM #####################
@@ -187,26 +217,110 @@ class ModeSolver:
         print(' beta:', beta)
         print(' CL dB/m:', 20 * beta.imag / np.log(10))
 
-        def outint(u):
-            out = self.mesh.Boundaries('OuterCircle')
-            s = ng.Integrate(u*ng.Conj(u), out, ng.BND).real
-            return ng.sqrt(s)
-
-        bdrnrm = y.applyfnl(outint)
-        print('Actual boundary norm = %.1e' % max(bdrnrm))
-        if np.max(bdrnrm) > 1e-6:
+        maxbdrnrm = np.max(self.boundarynorm(y))
+        print('Mode boundary norm = %.1e' % maxbdrnrm)
+        if maxbdrnrm > 1e-6:
             print('*** Mode boundary L2 norm > 1e-6!')
-            decayrate = alpha * (self.Rout - self.R) + \
-                self.R * Z.imag
-            bdryval = np.exp(-decayrate) / np.sqrt(np.abs(Z)*np.pi/2)
-            bdrnrm0 = bdryval*2*np.pi*self.Rout
-            print('PML decay estimates boundary norm ~ %.1e'
-                  % max(bdrnrm0))
+            self.estimatepolypmldecay(Z, alpha)
 
         moreoutputs = {'longY': Y, 'longYl': Yl,
-                       'ewshistory': ews, 'bdrnorm': bdrnrm}
+                       'ewshistory': ews, 'bdrnorm': maxbdrnrm}
 
         return Z, y, yl, beta, P, moreoutputs
+
+    def leakymode_poly(self, p, ctr=2, rad=0.1, alpha=1, npts=8,
+                       within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
+                       nspan=5, seed=1, inverse=None, **feastkwargs):
+        """
+        This method is an alternate implementation of the polynomial
+        eigensolver using NGSolve bilinear forms in a product finite
+        element space. It has been useful sometimes in testing and
+        debugging. It should give the same results as leakymode(...),
+        and its arguments are as documented in leakymode(...).
+        It's more expensive than leakymode(...).
+        """
+
+        print('ModeSolver.leakymode_poly called on this object:\n',
+              self)
+        print('Set freq-dependent PML with p=', p, ' alpha=', alpha,
+              'and thickness=%.3f' % (self.Rout-self.R))
+
+        X = ng.H1(self.mesh, order=p, complex=True)
+
+        # This implementation of [Nannen+Wess]'s frequency-dependent PML is
+        # makes a cubic eigenproblem using 3 copies of X:
+
+        X3 = ng.FESpace([X, X, X])
+
+        u0, u1, u2 = X3.TrialFunction()
+        v0, v1, v2 = X3.TestFunction()
+        u0x, u0y = grad(u0)
+        u1x, u1y = grad(u1)
+        u2x, u2y = grad(u2)
+        v2x, v2y = grad(v2)
+
+        pmlbegin = self.R
+        dx_pml = dx(definedon=self.mesh.Materials('Outer'))
+        dx_int = dx(definedon=self.mesh.Materials('core|clad'))
+
+        R = pmlbegin
+        s = 1 + 1j * alpha
+        x = ng.x
+        y = ng.y
+        r = ng.sqrt(x*x+y*y) + 0j
+
+        A = ng.BilinearForm(X3)
+        B = ng.BilinearForm(X3)
+
+        A += u1 * v0 * dx
+        A += u2 * v1 * dx
+
+        A += (s*r/R) * grad(u0) * grad(v2) * dx_pml
+        A += s * (r-R)/(R*r*r) * (x*u0x+y*u0y) * v2 * dx_pml
+        A += s * (R-2*r)/r**3 * (x*u0x+y*u0y) * (x*v2x+y*v2y) * dx_pml
+        A += -s**3 * (r-R)**2/(R*r) * u0 * v2 * dx_pml
+
+        A += grad(u1) * grad(v2) * dx_int
+        A += self.V * u1 * v2 * dx_int
+        A += 2 * (r-R)/r**3 * (x*u1x+y*u1y) * (x*v2x+y*v2y) * dx_pml
+        A += 1/r**2 * (x*u1x+y*u1y) * v2 * dx_pml
+        A += -2*s*s*(r-R)/r * u1 * v2 * dx_pml
+
+        A += R/s/r**3 * (x*u2x+y*u2y) * (x*v2x+y*v2y) * dx_pml
+        A += -R*s/r * u2 * v2 * dx_pml
+
+        B += u0 * v0 * dx + u1 * v1 * dx
+        B += u2 * v2 * dx_int
+
+        with ng.TaskManager():
+            A.Assemble()
+            B.Assemble()
+
+        # Since B is selfadjoint, we do not use SpectralProjNGGeneral here:
+
+        P = SpectralProjNG(X3, A.mat, B.mat,
+                           radius=rad, center=ctr, npts=npts,
+                           within=within, rhoinv=rhoinv,
+                           quadrule=quadrule, inverse=inverse)
+        Y = NGvecs(X3, nspan, M=B.mat)
+        Yl = Y.create()
+        Y.setrandom()
+        Yl.setrandom()
+
+        z, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
+                                    **feastkwargs)
+
+        Yg = Y.gridfun()
+        Ylg = Y.gridfun()
+        y = NGvecs(X, Y.m)
+        yl = NGvecs(X, Y.m)
+        for i in range(Y.m):
+            y._mv[i].data = Yg.components[0].vecs[i]
+            yl._mv[i].data = Ylg.components[0].vecs[i]
+        y.centernormalize(self.mesh(0, 0))
+        yl.centernormalize(self.mesh(0, 0))
+
+        return z, yl, y, P, Yl, Y
 
     # ###################################################################
     # NGSOLVE AUTOMATIC PML #############################################
@@ -240,6 +354,7 @@ class ModeSolver:
 
     def leakymode_auto(self, p, radiusZ2=0.1, centerZ2=4,
                        alpha=1, npts=8, nspan=5, seed=1,
+                       within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
                        inverse='umfpack', **feastkwargs):
         """
         Compute leaky modes by solving a linear eigenproblem using
@@ -267,10 +382,111 @@ class ModeSolver:
         a, b, X = self.autopmlsystem(p, alpha=alpha)
 
         P = SpectralProjNGGeneral(X, a.mat, b.mat,
-                                  radiusZ2, centerZ2, npts,
-                                  inverse=inverse)
+                                  radius=radiusZ2, center=centerZ2, npts=npts,
+                                  within=within, rhoinv=rhoinv,
+                                  quadrule=quadrule, inverse=inverse)
         Y = NGvecs(X, nspan)
         Yl = Y.create()
+        Y.setrandom(seed=seed)
+        Yl.setrandom(seed=seed)
+        zsqr, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
+                                       **feastkwargs)
+        beta = self.betafrom(zsqr)
+
+        print('Results:\n Z²:', zsqr)
+        print(' beta:', beta)
+        print(' CL dB/m:', 20 * beta.imag / np.log(10))
+
+        return zsqr, Yl, Y, beta, P
+
+    # ###################################################################
+    # SMOOTHER HANDMADE PML #############################################
+
+    def leakymode_smooth(self, p, radiusZ2=0.1, centerZ2=4,
+                         pmlbegin=None, pmlend=None,
+                         alpha=1, npts=8, nspan=5, seed=1,
+                         within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
+                         inverse='umfpack', **feastkwargs):
+        """
+        Compute leaky modes by solving a linear eigenproblem using
+        the frequency-independent C²  PML map
+           mapped_x = x * (1 + 1j * α * φ(r))
+        where φ is a C² function of the radius r. The coefficients of
+        the mapped eigenproblem are used to make the eigensystem.
+        Then a non-selfadjoint FEAST is run on the system.
+
+        Inputs and outputs are as documented in leakymode_auto(...). The
+        only difference is that here you may override the starting and
+        ending radius of PML by providing pmlbegin, pmlend.
+        """
+
+        print('ModeSolver.leakymode_smooth called on:\n',
+              self)
+
+        if abs(alpha.imag) > 0 or alpha < 0:
+            raise ValueError('Expecting PML strength alpha > 0')
+        if pmlbegin is None:
+            pmlbegin = self.R
+        if pmlend is None:
+            pmlend = self.Rout
+
+        # symbolically derive the radial PML functions
+        s, t, R0, R1 = sm.symbols('s t R_0 R_1')
+        nr = sm.integrate((s-R0)**2 * (s-R1)**2, (s, R0, t)).factor()
+        dr = nr.subs(t, R1).factor()
+        sigmat = alpha * nr / dr    # called φ in the docstring
+        sigmat = sigmat.subs(R0, pmlbegin).subs(R1, pmlend)
+        sigma = sm.diff(t * sigmat, t).factor()
+        tau = 1 + 1j * sigma
+        taut = 1 + 1j * sigmat
+        G = (tau/taut).factor()
+
+        # symbolic -> ngsolve coefficient
+        x = ng.x
+        y = ng.y
+        r = ng.sqrt(x*x+y*y) + 0j
+        gstr = str(G).replace('I', '1j').replace('t', 'r')
+        ttstr = str(tau*taut).replace('I', '1j').replace('t', 'r')
+        g0 = eval(gstr)
+        tt0 = eval(ttstr)
+        g = ng.IfPos(r-pmlbegin, g0, 1)
+        tt = ng.IfPos(r-pmlbegin, tt0, 1)
+
+        gi = 1.0/g
+        cs = x/r
+        sn = y/r
+        A00 = gi*cs*cs+g*sn*sn
+        A01 = (gi-g)*cs*sn
+        A11 = gi*sn*sn+g*cs*cs
+        g.Compile()
+        gi.Compile()
+        tt.Compile()
+        A00.Compile()
+        A01.Compile()
+        A11.Compile()
+        A = ng.CoefficientFunction((A00, A01,
+                                    A01, A11), dims=(2, 2))
+        self.pml_A = A
+        self.pml_tt = tt
+
+        # Make linear eigensystem
+        X = ng.H1(self.mesh, order=p, complex=True)
+        u, v = X.TnT()
+        a = ng.BilinearForm(X)
+        b = ng.BilinearForm(X)
+        a += (self.pml_A * grad(u) * grad(v) +
+              self.V * self.pml_tt * u * v) * dx
+        b += self.pml_tt * u * v * dx
+        with ng.TaskManager():
+            a.Assemble()
+            b.Assemble()
+
+        P = SpectralProjNGGeneral(X, a.mat, b.mat,
+                                  radius=radiusZ2, center=centerZ2, npts=npts,
+                                  within=within, rhoinv=rhoinv,
+                                  quadrule=quadrule, inverse=inverse)
+        Y = NGvecs(X, 10)
+        Yl = NGvecs(X, 10)
         Y.setrandom(seed=seed)
         Yl.setrandom(seed=seed)
         zsqr, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
