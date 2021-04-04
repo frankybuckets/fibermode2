@@ -6,10 +6,8 @@ surrounding a "core" region of air.
 
 import netgen.geom2d as geom2d
 import ngsolve as ng
-from ngsolve import grad, dx
 import numpy as np
-from pyeigfeast.spectralproj.ngs import NGvecs, SpectralProjNG
-from pyeigfeast.spectralproj.ngs import SpectralProjNGGeneral
+from pyeigfeast.spectralproj.ngs import NGvecs
 from fiberamp.fiber.modesolver import ModeSolver
 from fiberamp.fiber import sellmeier
 import os
@@ -177,11 +175,10 @@ class ARF(ModeSolver):
         self.index = ng.CoefficientFunction(
             [index[mat] for mat in self.mesh.GetMaterials()])
 
-        self.setnondimmat()  # coefficient for nondimensionalized eigenproblems
+        self.setnondimmat()  # sets self.V and self.k
         L = self.scaling * 1e-6
-        k = self.wavenum()
         n0 = self.n_air
-        super().__init__(self.mesh, L, k, n0)
+        super().__init__(self.mesh, L, n0)
 
         # OUTPUT LOCATION
 
@@ -203,8 +200,7 @@ class ARF(ModeSolver):
         """ set the material cf """
 
         a = self.scaling * 1e-6
-        k = self.wavenum()
-        # potential well
+        k = 2 * np.pi / self.wavelength
         m = {'Outer':         0,
              'OuterAir':      0,
              'Si':            self.n_air**2 - self.n_si**2,
@@ -214,6 +210,7 @@ class ARF(ModeSolver):
 
         self.V = ng.CoefficientFunction(
             [(a*k)**2 * m[mat] for mat in self.mesh.GetMaterials()])
+        self.k = k
 
     def set(self, name=None):
         """
@@ -695,90 +692,6 @@ class ARF(ModeSolver):
         s += '\n  Elements/wavelength revised: %g (glass), %g (outer)'  \
             % (self.epw['glass'], self.epw['outer'])
         print(s)
-
-    # EIGENPROBLEM ####################################################
-
-    def wavenum(self):
-        """ Return wavenumber, otherwise known as k."""
-
-        return 2 * np.pi / self.wavelength
-
-    def sqrZfrom(self, betas):
-        """ Return values of nondimensional Z squared, given physical
-        propagation constants betas, ie, return Z² = a² (k²n₀² - β²). """
-
-        a = self.scaling * 1e-6
-        k = self.wavenum()
-        n0 = self.n_air
-        # n0 = self.n_si
-        return (a*k*n0)**2 - (a*betas)**2
-
-    def selfadjsystem(self, p):
-
-        X = ng.H1(self.mesh, order=p, complex=True)
-
-        u, v = X.TnT()
-
-        A = ng.BilinearForm(X)
-        A += grad(u)*grad(v) * dx + self.V*u*v * dx
-        B = ng.BilinearForm(X)
-        B += u * v * dx
-
-        with ng.TaskManager():
-            A.Assemble()
-            B.Assemble()
-
-        return A, B, X
-
-    def lineareig(self, p, method='selfadjoint', initdim=5, stop_tol=1e-13,
-                  #    LP01, LP11,  LP02
-                  ctrs=(5,   12.71, 25.9),
-                  radi=(0.1,  0.1,   0.2)):
-        """
-        Solve a linear eigenproblem to compute mode approximations.
-
-        If method='selfadjoint', then run selfadjoint feast with
-        the given centers and radii by solving a Dirichlet Helmholtz
-        eigenproblem. Loss factors cannot be computed with this method.
-
-        If method='auto', use NGSolve's mesh PML transformation to formulate
-        and solve a linear nonselfadjoint eigenproblem. Eigenvalues will
-        generally have imaginary parts, but we usually do not get as
-        good accuracy with this method as with the nonlinear method.
-
-        Default paramater values of ctrs and radii are appropriate
-        only for an ARF object with default constructor parameters. """
-
-        npts = 8
-        Ys = []
-        Zs = []
-        betas = []
-
-        if method == 'selfadjoint':
-            A, B, X = self.selfadjsystem(p)
-        elif method == 'auto':
-            A, B, X = self.autopmlsystem(p)
-        else:
-            raise ValueError('Unimplemented method=%s asked of lineareig'
-                             % method)
-
-        for rad, ctr in zip(radi, ctrs):
-            Y = NGvecs(X, initdim, B.mat)
-            Y.setrandom()
-            if method == 'selfadjoint':
-                P = SpectralProjNG(X, A.mat, B.mat, rad, ctr,
-                                   npts, reduce_sym=True)
-            else:
-                P = SpectralProjNGGeneral(X, A.mat, B.mat, rad, ctr, npts)
-
-            isherm = method == 'selfadjoint'
-            Zsqr, Y, history, Yl = P.feast(Y, hermitian=isherm,
-                                           stop_tol=stop_tol)
-            Ys.append(Y.copy())
-            Zs.append(Zsqr)
-            betas.append(self.betafrom(Zsqr))
-
-        return Zs, Ys, betas
 
     # SAVE & LOAD #####################################################
 
