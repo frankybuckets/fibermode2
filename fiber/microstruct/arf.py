@@ -11,6 +11,7 @@ import numpy as np
 from pyeigfeast.spectralproj.ngs import NGvecs, SpectralProjNG
 from pyeigfeast.spectralproj.ngs import SpectralProjNGGeneral
 from fiberamp.fiber.modesolver import ModeSolver
+from fiberamp.fiber import sellmeier
 import os
 import pickle
 
@@ -50,7 +51,7 @@ class ARF(ModeSolver):
         # Physical parameters
 
         self.n_air = 1.00027717     # refractive index of air
-        self.setnsi(self._wavelength)  # refractive index of glass (self.n_si)
+        self.n_si = sellmeier.index(self.wavelength, material='FusedSilica')
 
         # UPDATE attributes set in ARF.set() using given inputs
 
@@ -191,22 +192,8 @@ class ARF(ModeSolver):
     @wavelength.setter
     def wavelength(self, lam):
         self._wavelength = lam
-        self.setnsi(lam)
+        self.n_si = sellmeier.index(self.wavelength, material='FusedSilica')
         self.setnondimmat()
-
-    def setnsi(self, lam):
-        """
-        Sets the (fused) silica refractive index based on the wavelength
-        lam = O(10**(-6)). Uses the Sellmeier formula for fused silica
-        at about 20 degrees centigrade (in the neighborhood of
-        room temperature).
-        """
-
-        B = np.array([0.6961663, 0.4079426, 0.8974794])
-        L = np.array([0.0684043, 0.1162414, 9.0896161])
-        lam *= 1e6
-
-        self.n_si = np.sqrt(1 + np.sum((B*lam**2) / (lam**2 - L**2)))
 
     def setnondimmat(self):
         """ set the material cf """
