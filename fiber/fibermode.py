@@ -1,11 +1,11 @@
 import ngsolve as ng
 import numpy as np
 from netgen.geom2d import SplineGeometry
-from ngsolve import dx, BilinearForm, H1, CoefficientFunction, grad, IfPos
+from ngsolve import H1, CoefficientFunction, IfPos
 from ngsolve.special_functions import jv, kv
 from fiberamp.fiber import Fiber
 import fiberamp
-from pyeigfeast.spectralproj.ngs import SpectralProjNG, NGvecs
+from pyeigfeast.spectralproj.ngs import NGvecs
 from pyeigfeast.spectralproj import splitzoom
 from fiberamp.fiber.modesolver import ModeSolver
 import os
@@ -235,12 +235,10 @@ class FiberMode(ModeSolver):
 
         return self.X2toBeta(self.Z2toX2(Z2, v=v), v=v)
 
-    def guidedmodes(self, interval=None, p=3, nquadpts=20,
-                    nspan=15, stop_tol=1e-10, check_contour=2,
-                    niterations=50, verbose=True, tone=False):
+    def guidedmodes(self, interval=None, p=3, nquadpts=20, seed=1,
+                    nspan=15, verbose=True, tone=False, **feastkwargs):
         """
-        Search for guided modes in a given "interval" - which is to be
-        input as a tuple: interval=(left, right).  If interval is None,
+        Search for guided modes in interval=(left, right). If interval is None,
         then an automatic choice will be made to include all guided modes.
 
         The computation is done using Lagrangre finite elements of degree "p",
@@ -261,87 +259,46 @@ class FiberMode(ModeSolver):
         propagation constant for k-th tone wavelength.
         """
 
-        def compute(vnum):
-            """
-            solves the non-dimensional eigenproblem using FEAST
-            for a given V-number
-            INPUT:
-                vnum = V-number in float
-            OUTPUT:
-                betas, Zsqrs, Y: Same as guidemodes docstring
-            """
+        V = self.fiber.fiberV(tone=tone)
+        if tone:
+            k = [self.fiber.ks] + [self.fiber.ke]
+        else:
+            V = [V]
+            k = [self.fiber.ks]
+        betas = []
+        Zsqrs = []
+        Y = None
+        fmind = [0]
 
-            u, v = self.X.TnT()
-            m = CoefficientFunction([0, 0, vnum*vnum])
-            a = BilinearForm(self.X)
-            a += (grad(u) * grad(v) - m * u * v) * dx
+        for vnum, kk in zip(V, k):
 
-            b = BilinearForm(self.X)
-            b += u * v * dx
-
-            with ng.TaskManager():
-                a.Assemble()
-                b.Assemble()
-            self.a = a
-            self.b = b
+            self.V = CoefficientFunction([0, 0, -vnum*vnum])
+            self.k = kk
 
             if interval is None:
                 # We choose the interval for the nondimensional Z² variable
-                # recalling that  (a k₀ nclad)² < (β a)² < (a k₀ ncore)²,
-                # where a is any scaling factor - and here it is rcore.
+                # recalling that  for guided modes,
+                #         (L k₀ nclad)² < (β L)² < (L k₀ ncore)²,
+                # where L is the scaling factor used to nondimensionalize.
                 # It follows that Z² = (a α₀)² = (a k₀ nclad)² - (a β)²
-                # satisfies 0 > Z² > (a k₀ nclad)² - (a k₀ ncore)² = -V².
+                # satisfies
+                #         0 > Z² > (a k₀ nclad)² - (a k₀ ncore)² = -V².
+                interval = (-vnum*vnum, 0)
 
-                left = -vnum*vnum
-                right = 0
+            betas_, Zsqrs_, Y_ =  \
+                super().selfadjmodes(interval=interval, seed=seed, nspan=nspan,
+                                     npts=nquadpts, verbose=verbose)
+            betas = np.append(betas, betas_)
+            Zsqrs = np.append(Zsqrs, Zsqrs_)
+            if Y is None:
+                Y = Y_
             else:
-                left, right = interval
-            print("Running selfadjoint FEAST to capture guided modes in \
-            ({},{})".format(left, right))
-
-            print('assuming not more than %d modes in this interval' % nspan)
-
-            ctr = (right+left)/2
-            rad = (right-left)/2
-            P = SpectralProjNG(self.X, a.mat, b.mat,
-                               radius=rad, center=ctr, npts=nquadpts,
-                               reduce_sym=True, verbose=verbose)
-            Y = NGvecs(self.X, nspan)
-            Y.setrandom()
-            Zsqrs, Y, history, _ = P.feast(Y, stop_tol=stop_tol,
-                                           check_contour=check_contour,
-                                           niterations=niterations)
-            betas = np.array(self.Z2toBeta(Zsqrs, v=vnum))
-            return betas, Zsqrs, Y
-
-        self.p = p
-        self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
-
-        V = self.fiber.fiberV(tone=tone)
-        if self.V is None:
-            self.curvature = 0
-            if tone:
-                self.V = CoefficientFunction([0, 0, -V[0]*V[0]])
-            else:
-                self.V = CoefficientFunction([0, 0, -V*V])
-        if self.ngspmlset is True:
-            raise RuntimeError('Mesh pml trafo is set')
-
-        if tone:
-            betas, Zsqrs, Y = compute(V[0])
-            fmind = [0]
-            for VV in V[1:]:
-                betas_, Zsqrs_, Y_ = compute(VV)
-                betas = np.append(betas, betas_)
-                Zsqrs = np.append(Zsqrs, Zsqrs_)
                 for ind in range(len(betas_)):
                     Y._mv.Append(Y_._mv[ind])
                 Y.m += len(betas_)
-                fmind.append(fmind[-1] + len(betas_))
+            fmind.append(fmind[-1] + len(betas_))
             fmind.append(len(betas))
             self.firstmodeindex = fmind
-        else:
-            betas, Zsqrs, Y = compute(V)
 
         return betas, Zsqrs, Y
 

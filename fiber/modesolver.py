@@ -84,8 +84,12 @@ class ModeSolver:
         Returns physical propagation constants (β), given
         nondimensional Z² values, input in Z2, per the formula
         β = sqrt(L²k²n₀² - Z²) / L . """
-
         return np.sqrt((self.L*self.k*self.n0)**2 - Z2) / self.L
+
+    def sqrZfrom(self, betas):
+        """ Return values of nondimensional Z squared, given physical
+        propagation constants betas, ie, return Z² = L² (k²n₀² - β²). """
+        return (self.L*self.k*self.n0)**2 - (self.L*betas)**2
 
     def boundarynorm(self, y):
         """
@@ -97,7 +101,6 @@ class ModeSolver:
             out = self.mesh.Boundaries('OuterCircle')
             s = ng.Integrate(u*ng.Conj(u), out, ng.BND).real
             return ng.sqrt(s)
-
         bdrnrms = y.applyfnl(outint)
         print('Mode boundary L² norm = %.1e' % np.max(bdrnrms))
         return bdrnrms
@@ -523,3 +526,67 @@ class ModeSolver:
             print('*** Mode boundary L2 norm > 1e-6!')
 
         return zsqr, Yl, Y, beta, P
+
+    # ###################################################################
+    # GUIDED MODES FROM SELFADJOINT EIGENPROBLEM ########################
+
+    def selfadjsystem(self, p):
+
+        if self.ngspmlset:
+            raise RuntimeError('NGSolve pml mesh trafo set.')
+        X = ng.H1(self.mesh, order=p, dirichlet='OuterCircle', complex=True)
+        u, v = X.TnT()
+        A = ng.BilinearForm(X)
+        A += grad(u)*grad(v) * dx + self.V*u*v * dx
+        B = ng.BilinearForm(X)
+        B += u * v * dx
+        with ng.TaskManager():
+            A.Assemble()
+            B.Assemble()
+
+        return A, B, X
+
+    def selfadjmodes(self, interval=(-10, 0), p=3,  seed=1, npts=20, nspan=15,
+                     within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
+                     verbose=True, inverse='umfpack', **feastkwargs):
+        """
+        Search for guided modes in a given "interval", which is to be
+        input as a tuple: interval=(left, right). These modes solve
+
+        -Δu + V u = Z² u
+
+        with zero dirichlet boundary conditions (no PML, no loss) at the
+        outer boundary of the computational domain.
+
+        The computation is done using Lagrangre finite elements of degree "p"
+        (with no PML) using selfadjoint FEAST with a random span of "nspan"
+        vectors (and using the remaining parameters, which are simply
+        passed to feast).
+
+        OUTPUTS:
+
+        betas, Zsqrs, Y:
+            betas[i] give the i-th real-valued propagation constant, and
+            Zsqrs[i] gives the feast-computed i-th nondimensional Z² value
+            in "interval". The corresponding eigenmode is i-th component
+            of the span object Y.
+
+        """
+
+        a, b, X = self.selfadjsystem(p)
+        left, right = interval
+        print('Running selfadjoint FEAST to capture guided modes in ' +
+              '({},{})'.format(left, right))
+        print('assuming not more than %d modes in this interval' % nspan)
+        ctr = (right+left)/2
+        rad = (right-left)/2
+        P = SpectralProjNG(X, a.mat, b.mat,
+                           radius=rad, center=ctr, npts=npts,
+                           reduce_sym=True, within=within, rhoinv=rhoinv,
+                           quadrule=quadrule, inverse=inverse, verbose=verbose)
+        Y = NGvecs(X, nspan, M=b.mat)
+        Y.setrandom(seed=seed)
+        Zsqrs, Y, history, _ = P.feast(Y, hermitian=True, **feastkwargs)
+        betas = self.betafrom(Zsqrs)
+
+        return betas, Zsqrs, Y
