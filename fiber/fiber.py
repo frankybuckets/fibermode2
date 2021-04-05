@@ -47,7 +47,7 @@ class Fiber:
             self.ncore = ncore     # core refractive index
             self.ks = ks           # signal wavenumber
             if extra_wavelens:
-                # tone and/or ase wavenumbers
+                # wavenumbers in a list if considering tone/ase wavelengths
                 self.ke = [2*pi/lam for lam in extra_wavelens]
         else:
             self.set(case)

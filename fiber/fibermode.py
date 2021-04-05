@@ -70,7 +70,7 @@ class FiberMode(ModeSolver):
                 self.loadmesh(meshfname)
             else:
                 print('Specified mesh file not found -- creating it')
-                self.makemesh()
+                self.makemesh(refine)
                 self.savemesh(fromfile)
 
         self.p = None        # degree of finite elements used in mode calc
@@ -260,7 +260,7 @@ class FiberMode(ModeSolver):
 
         V = self.fiber.fiberV(tone=tone)
         if tone:
-            k = [self.fiber.ks] + [self.fiber.ke]
+            k = [self.fiber.ks] + self.fiber.ke
         else:
             V = [V]
             k = [self.fiber.ks]
@@ -298,10 +298,10 @@ class FiberMode(ModeSolver):
                 for ind in range(len(betas_)):
                     Y._mv.Append(Y_._mv[ind])
                 Y.m += len(betas_)
-            fmind.append(fmind[-1] + len(betas_))
-            fmind.append(len(betas))
-            self.firstmodeindex = fmind
-            self.X = Y.fes
+                fmind.append(fmind[-1] + len(betas_))
+        fmind.append(len(betas))
+        self.firstmodeindex = fmind
+        self.X = Y.fes
 
         return betas, Zsqrs, Y
 
