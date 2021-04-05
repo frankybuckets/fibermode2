@@ -268,6 +268,7 @@ class FiberMode(ModeSolver):
         Zsqrs = []
         Y = None
         fmind = [0]
+        self.p = p
 
         for vnum, kk in zip(V, k):
 
@@ -285,8 +286,10 @@ class FiberMode(ModeSolver):
                 interval = (-vnum*vnum, 0)
 
             betas_, Zsqrs_, Y_ =  \
-                super().selfadjmodes(interval=interval, seed=seed, nspan=nspan,
-                                     npts=nquadpts, verbose=verbose)
+                super().selfadjmodes(interval=interval, p=p, seed=seed,
+                                     nspan=nspan, npts=nquadpts,
+                                     verbose=verbose)
+
             betas = np.append(betas, betas_)
             Zsqrs = np.append(Zsqrs, Zsqrs_)
             if Y is None:
@@ -298,6 +301,7 @@ class FiberMode(ModeSolver):
             fmind.append(fmind[-1] + len(betas_))
             fmind.append(len(betas))
             self.firstmodeindex = fmind
+            self.X = Y.fes
 
         return betas, Zsqrs, Y
 
@@ -415,7 +419,7 @@ class FiberMode(ModeSolver):
         LLMA Yb-doped: 23 modes and betas
         """
         self.p = p
-        self.X = H1(self.mesh, order=p, dirichlet='outer', complex=True)
+        self.X = H1(self.mesh, order=p, dirichlet='OuterCircle', complex=True)
 
         if self.fibername == 'LLMA_Yb':
             simple = list(range(4))
@@ -590,6 +594,7 @@ class FiberMode(ModeSolver):
             self.savemesh(fileprefix)
 
         y = Y.tonumpy()
+
         if os.path.isdir(self.outfolder) is not True:
             os.mkdir(self.outfolder)
         suffix = '_imde.npz' if interp else '_mde.npz'
@@ -628,7 +633,7 @@ class FiberMode(ModeSolver):
             self.checkload(f)
             self.p = int(f['p'])
             print('  Degree %d modes found in file' % self.p)
-            self.X = H1(self.mesh, order=self.p,
+            self.X = H1(self.mesh, order=self.p, dirichlet='OuterCircle',
                         complex=True)
             y = f['y']
             betas = f['betas']
