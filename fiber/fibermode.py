@@ -1,33 +1,27 @@
-"""Facilities to NUMERICALLY compute transverse modes of a STEP-INDEX
-fiber using a nondimensional eigenproblem and FEAST. Guided modes,
-leaky modes, and bent modes can be computed.
-"""
-
 import ngsolve as ng
 import numpy as np
 from netgen.geom2d import SplineGeometry
-from ngsolve import dx, BilinearForm, H1, CoefficientFunction, grad, IfPos
+from ngsolve import H1, CoefficientFunction, IfPos
 from ngsolve.special_functions import jv, kv
 from fiberamp.fiber import Fiber
 import fiberamp
-from pyeigfeast.spectralproj.ngs import SpectralProjNG, NGvecs
-from pyeigfeast.spectralproj.ngs import SpectralProjNGGeneral
+from pyeigfeast.spectralproj.ngs import NGvecs
 from pyeigfeast.spectralproj import splitzoom
-import sympy as sm
+from fiberamp.fiber.modesolver import ModeSolver
 import os
 from scipy.sparse import coo_matrix
 import scipy.special as scf
-from .spectralprojpoly import SpectralProjNGPoly
 
 
-class FiberMode:
+class FiberMode(ModeSolver):
 
-    """A class to compute (guided and leaky) modes of a fiber in a
-    nondimensional way. In nondimensional computations the core is
-    set to have radius one. """
+    """Class with facilities to numerically approximate transverse modes
+    of a STEP-INDEX fiber using a nondimensional eigenproblem and FEAST.
+    Guided modes and leaky modes can be computed.
+    """
 
     def __init__(self, fibername=None, fromfile=None,
-                 Rpml=None, Rout=None, geom=None,
+                 R=None, Rout=None, geom=None,
                  h=3, hcore=None, refine=0):
         """
         EITHER provide a prefix "filename" of a collection of files, e.g.,
@@ -39,9 +33,9 @@ class FiberMode:
         OR construct a new fiber geometry and mesh so that
 
           * region r < 1, in polar coords, is called "core",
-          * region 1 < r < Rpml   is called "clad",
-          * region Rpml < r < Rout   is called "pml",
-          * when "Rpml" is None, it is set to Rpml = (Rout+1)/2,
+          * region 1 < r < R   is called "clad",
+          * region R < r < Rout   is called "pml",
+          * when "R" is None, it is set to R = (Rout+1)/2,
           * index of refraction is set using Fiber("fibername")
           * when "Rout" is unspecified, it is taken to match the ratio
             of cladding radius to core radius from Fiber("fibername"),
@@ -49,7 +43,7 @@ class FiberMode:
             is "hcore" (set to a default of hcore = h/10),
           * degree "p" finite element space is set on the mesh.
 
-        (Variables beginning with capital R such as "Rpml", "Rout" are
+        (Variables beginning with capital R such as "R", "Rout" are
         nondimensional lengths -- in contrast, "rout" found in other classes
         is length in meters.)
         """
@@ -59,7 +53,7 @@ class FiberMode:
         if fromfile is None:
             if fibername is None:
                 raise ValueError('Need either a file or a fiber name')
-            self.makefibermode(fibername, Rpml=Rpml, Rout=Rout, geom=geom,
+            self.makefibermode(fibername, R=R, Rout=Rout, geom=geom,
                                h=h, hcore=hcore)
             self.makemesh(refine)
         else:
@@ -82,17 +76,22 @@ class FiberMode:
         self.p = None        # degree of finite elements used in mode calc
         self.a = None
         self.b = None
-        self.m = None
-        self.pml_ngs = None  # True if ngsolve pml set (then cant reuse mesh)
+        self.V = None
+        self.ngspmlset = None  # True if ngsolve pml set (then cant reuse mesh)
         self.X = None
         self.curvature = None
+
+        self.setnondimmat(curvature=0)  # sets self.k and self.V
+        L = self.fiber.rcore
+        n0 = self.fiber.nclad
+        super().__init__(self.mesh, L, n0)
 
     def __str__(self):
 
         s = '\nFiberMode Object: Nondimensional Computational Parameters:'
         s += '\n  Geometry consists of circular core (radius = 1), an annular'
-        s += '\n  layer 1<r<Rpml=%g, and another layer Rpml<r<Rout=%g.'\
-            % (self.Rpml, self.Rout)
+        s += '\n  layer 1<r<R=%g, and another layer R<r<Rout=%g.'\
+            % (self.R, self.Rout)
         s += '\n  Max mesh sizes: %g (core), %g (cladding), %g (pml)\n' \
             % (self.hcore, self.hclad, self.hpml)
         s += 'Physical Parameters:' + \
@@ -105,7 +104,7 @@ class FiberMode:
 
     # FURTHER INITIALIZATIONS & SETTERS #####################################
 
-    def makefibermode(self, fibername=None, Rpml=None, Rout=None,
+    def makefibermode(self, fibername=None, R=None, Rout=None,
                       geom=None, h=4, hcore=None):
 
         self.fibername = fibername
@@ -113,11 +112,11 @@ class FiberMode:
 
         if Rout is None:
             Rout = self.fiber.rclad / self.fiber.rcore
-        if Rpml is None:
-            Rpml = (Rout+1)/2
-        if Rpml < 1 or Rpml > Rout:
-            raise ValueError('Set Rpml between 1 and Rout')
-        self.Rpml = Rpml
+        if R is None:
+            R = (Rout+1)/2
+        if R < 1 or R > Rout:
+            raise ValueError('Set R between 1 and Rout')
+        self.R = R
         self.Rout = Rout
 
         if hcore is None:
@@ -126,7 +125,7 @@ class FiberMode:
         self.hclad = h
         self.hpml = h
 
-    def makemesh(self, refine):
+    def makemesh(self, refine=0):
         self.setstepindexgeom()  # sets self.geo
         ngmesh = self.geo.GenerateMesh()
         for i in range(refine):
@@ -143,7 +142,7 @@ class FiberMode:
         self.hcore = float(f['hcore'])
         self.hclad = float(f['hclad'])
         self.hpml = float(f['hpml'])
-        self.Rpml = float(f['Rpml'])
+        self.R = float(f['R'])
         self.Rout = float(f['Rout'])
 
         self.fiber = Fiber(self.fibername)
@@ -159,12 +158,12 @@ class FiberMode:
     def setstepindexgeom(self):
         geo = SplineGeometry()
         geo.AddCircle((0, 0), r=self.Rout,
-                      leftdomain=1, rightdomain=0, bc='outer')
-        geo.AddCircle((0, 0), r=self.Rpml,
+                      leftdomain=1, rightdomain=0, bc='OuterCircle')
+        geo.AddCircle((0, 0), r=self.R,
                       leftdomain=2, rightdomain=1, bc='cladbdry')
         geo.AddCircle((0, 0), r=1,
                       leftdomain=3, rightdomain=2, bc='corebdry')
-        geo.SetMaterial(1, 'pml')
+        geo.SetMaterial(1, 'Outer')
         geo.SetMaterial(2, 'clad')
         geo.SetMaterial(3, 'core')
 
@@ -174,7 +173,7 @@ class FiberMode:
 
         self.geo = geo
 
-    def setrefractiveindex(self, curvature=12, bendfactor=1.28):
+    def setnondimmat(self, curvature=12, bendfactor=1.28):
         """
         When a fiber of refractive index n is bent to have the
         input "curvature" (curvature = reciprocal of bending radius,
@@ -184,17 +183,18 @@ class FiberMode:
             nbent = n * (1 + (x * curvature/bendfactor))
 
         with "bendfactor" as input. This dimensional formula is used
-        non-dimensionally below to set the internal data member "m",
+        non-dimensionally below to set the internal data member "V",
         the non-dimensional coefficient function for the eigenproblem.
         """
 
         self.curvature = curvature
         self.bendfactor = bendfactor
         fib = self.fiber
+        self.k = fib.ks
 
         if curvature == 0:
             V = fib.fiberV()
-            self.m = CoefficientFunction([0, 0, V*V])
+            self.V = CoefficientFunction([0, 0, -V*V])
         else:
             n = CoefficientFunction([fib.nclad, fib.nclad, fib.ncore])
             a = fib.rcore
@@ -203,8 +203,8 @@ class FiberMode:
 
             nbent = n * (1 + (ng.x * a * curvature/bendfactor))
 
-            m = ka2 * nbent * nbent - kan2
-            self.m = CoefficientFunction([0, m, m])
+            m = kan2 - ka2 * nbent * nbent
+            self.V = CoefficientFunction([0, m, m])
 
     # MODE CALCULATORS AND RELATED FUNCTIONALITIES  #########################
 
@@ -234,12 +234,10 @@ class FiberMode:
 
         return self.X2toBeta(self.Z2toX2(Z2, v=v), v=v)
 
-    def guidedmodes(self, interval=None, p=3, nquadpts=20,
-                    nspan=15, stop_tol=1e-10, check_contour=2,
-                    niterations=50, verbose=True, tone=False):
+    def guidedmodes(self, interval=None, p=3, nquadpts=20, seed=1,
+                    nspan=15, verbose=True, tone=False, **feastkwargs):
         """
-        Search for guided modes in a given "interval" - which is to be
-        input as a tuple: interval=(left, right).  If interval is None,
+        Search for guided modes in interval=(left, right). If interval is None,
         then an automatic choice will be made to include all guided modes.
 
         The computation is done using Lagrangre finite elements of degree "p",
@@ -260,87 +258,50 @@ class FiberMode:
         propagation constant for k-th tone wavelength.
         """
 
-        def compute(vnum):
-            """
-            solves the non-dimensional eigenproblem using FEAST
-            for a given V-number
-            INPUT:
-                vnum = V-number in float
-            OUTPUT:
-                betas, Zsqrs, Y: Same as guidemodes docstring
-            """
+        V = self.fiber.fiberV(tone=tone)
+        if tone:
+            k = [self.fiber.ks] + [self.fiber.ke]
+        else:
+            V = [V]
+            k = [self.fiber.ks]
+        betas = []
+        Zsqrs = []
+        Y = None
+        fmind = [0]
+        self.p = p
 
-            u, v = self.X.TnT()
-            m = CoefficientFunction([0, 0, vnum*vnum])
-            a = BilinearForm(self.X)
-            a += (grad(u) * grad(v) - m * u * v) * dx
+        for vnum, kk in zip(V, k):
 
-            b = BilinearForm(self.X)
-            b += u * v * dx
-
-            with ng.TaskManager():
-                a.Assemble()
-                b.Assemble()
-            self.a = a
-            self.b = b
+            self.V = CoefficientFunction([0, 0, -vnum*vnum])
+            self.k = kk
 
             if interval is None:
                 # We choose the interval for the nondimensional Z² variable
-                # recalling that  (a k₀ nclad)² < (β a)² < (a k₀ ncore)²,
-                # where a is any scaling factor - and here it is rcore.
+                # recalling that  for guided modes,
+                #         (L k₀ nclad)² < (β L)² < (L k₀ ncore)²,
+                # where L is the scaling factor used to nondimensionalize.
                 # It follows that Z² = (a α₀)² = (a k₀ nclad)² - (a β)²
-                # satisfies 0 > Z² > (a k₀ nclad)² - (a k₀ ncore)² = -V².
+                # satisfies
+                #         0 > Z² > (a k₀ nclad)² - (a k₀ ncore)² = -V².
+                interval = (-vnum*vnum, 0)
 
-                left = -vnum*vnum
-                right = 0
+            betas_, Zsqrs_, Y_ =  \
+                super().selfadjmodes(interval=interval, p=p, seed=seed,
+                                     nspan=nspan, npts=nquadpts,
+                                     verbose=verbose)
+
+            betas = np.append(betas, betas_)
+            Zsqrs = np.append(Zsqrs, Zsqrs_)
+            if Y is None:
+                Y = Y_
             else:
-                left, right = interval
-            print("Running selfadjoint FEAST to capture guided modes in \
-            ({},{})".format(left, right))
-
-            print('assuming not more than %d modes in this interval' % nspan)
-
-            ctr = (right+left)/2
-            rad = (right-left)/2
-            P = SpectralProjNG(self.X, a.mat, b.mat,
-                               radius=rad, center=ctr, npts=nquadpts,
-                               reduce_sym=True, verbose=verbose)
-            Y = NGvecs(self.X, nspan)
-            Y.setrandom()
-            Zsqrs, Y, history, _ = P.feast(Y, stop_tol=stop_tol,
-                                           check_contour=check_contour,
-                                           niterations=niterations)
-            betas = np.array(self.Z2toBeta(Zsqrs, v=vnum))
-            return betas, Zsqrs, Y
-
-        self.p = p
-        self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
-
-        V = self.fiber.fiberV(tone=tone)
-        if self.m is None:
-            self.curvature = 0
-            if tone:
-                self.m = CoefficientFunction([0, 0, V[0]*V[0]])
-            else:
-                self.m = CoefficientFunction([0, 0, V*V])
-        if self.pml_ngs is True:
-            raise RuntimeError('Mesh pml trafo is set')
-
-        if tone:
-            betas, Zsqrs, Y = compute(V[0])
-            fmind = [0]
-            for VV in V[1:]:
-                betas_, Zsqrs_, Y_ = compute(VV)
-                betas = np.append(betas, betas_)
-                Zsqrs = np.append(Zsqrs, Zsqrs_)
                 for ind in range(len(betas_)):
                     Y._mv.Append(Y_._mv[ind])
                 Y.m += len(betas_)
-                fmind.append(fmind[-1] + len(betas_))
+            fmind.append(fmind[-1] + len(betas_))
             fmind.append(len(betas))
             self.firstmodeindex = fmind
-        else:
-            betas, Zsqrs, Y = compute(V)
+            self.X = Y.fes
 
         return betas, Zsqrs, Y
 
@@ -432,430 +393,12 @@ class FiberMode:
             name2ind, exact = construct_names(V, betas)
         return name2ind, exact
 
-    # LEAKY MODES ###########################################################
-
-    def leakymode(self, p, radius, center, npts=8, nspan=10,
-                  alpha=5, includeclad=True, inverse=None,
-                  **feastkwargs):
-        """
-        Compute leaky modes by solving a nonlinear eigenproblem derived
-        from a frequency-dependent PML.
-
-        INPUTS:
-
-        * p: degree of finite element to be used to compute modes.
-        * radius, center: Capture modes whose non-dimensional resonance
-            value Z (not Z²) is contained within the circular contour
-            centered at "center" of radius "radius" in the complex plane.
-        * alpha: Quantity α (PML strength) in the mapping formula below.
-        * includeclad:
-            If True, then cladding is included in the domain, so PML
-            is set in 'pml' region only.
-            If False, then PML is set in the union 'pml|clad'.
-        * npts: number of quadrature points for SpectralProjNGPoly
-        * inverse: type of sparse inverse to use (if more than one installed)
-        * nspan: intial number of random vectors to start FEAST.
-        * feastkwargs: additional arguments to be passed to FEAST iteration (as
-          documented in SpectralProj's feast(...) method).
-
-        OUTPUTS:    z, yl, yr, P, Yl, Y
-
-        * z: computed resonance values
-        * yl, yr: left and right eigenspans of nonlinear eigenproblem
-        * P: spectral projector approximation
-        * Yl, Y: left & right eigenspans of large linear eigenproblem
-
-        METHOD:
-
-        The method performs the complex coordinate transformation
-           mapped_x = x * η(r) / r,                   where
-           η(r) = R + (r - R) * (1 + 1j * α) / Z
-        and R is the radius where PML starts (the variable pmlbegin below).
-        Reference: [Nannen+Wess].  This then leads to a cubic eigenproblem,
-        which we solve using SpectralProjNGPoly.
-        """
-
-        if self.m is None:
-            self.setrefractiveindex(curvature=0)
-        self.p = p
-        print(self)
-
-        if includeclad:
-            pmlbegin = self.Rpml
-            dx_pml = dx(definedon=self.mesh.Materials('pml'))
-            dx_int = dx(definedon=self.mesh.Materials('core|clad'))
-        else:
-            pmlbegin = 1
-            dx_pml = dx(definedon=self.mesh.Materials('pml|clad'))
-            dx_int = dx(definedon=self.mesh.Materials('core'))
-
-        print('Using frequency dependent PML with includeclad=', includeclad)
-        print('PML of alpha=', alpha, ' starts at',
-              pmlbegin, 'and ends at ', self.Rout)
-
-        R = pmlbegin
-        s = 1 + 1j * alpha
-        x = ng.x
-        y = ng.y
-        r = ng.sqrt(x*x+y*y) + 0j
-
-        self.X = H1(self.mesh, order=self.p, complex=True)
-        u, v = self.X.TnT()
-        ux, uy = grad(u)
-        vx, vy = grad(v)
-
-        AA = [BilinearForm(self.X, check_unused=False)]
-        AA[0] += (s*r/R) * grad(u) * grad(v) * dx_pml
-        AA[0] += s * (r-R)/(R*r*r) * (x*ux+y*uy) * v * dx_pml
-        AA[0] += s * (R-2*r)/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
-        AA[0] += -s**3 * (r-R)**2/(R*r) * u * v * dx_pml
-
-        AA += [BilinearForm(self.X)]
-        AA[1] += grad(u) * grad(v) * dx_int
-        AA[1] += -self.m * u * v * dx_int
-        AA[1] += 2 * (r-R)/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
-        AA[1] += 1/r**2 * (x*ux+y*uy) * v * dx_pml
-        AA[1] += -2*s*s*(r-R)/r * u * v * dx_pml
-
-        AA += [BilinearForm(self.X, check_unused=False)]
-        AA[2] += R/s/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
-        AA[2] += -R*s/r * u * v * dx_pml
-
-        AA += [BilinearForm(self.X, check_unused=False)]
-        AA[3] += -u * v * dx_int
-
-        with ng.TaskManager():
-            for i in range(4):
-                AA[i].Assemble()
-
-        P = SpectralProjNGPoly(AA, self.X, radius, center, npts,
-                               inverse=inverse)
-
-        X3 = ng.FESpace([self.X, self.X, self.X])
-        Y = NGvecs(X3, nspan)
-        Yl = Y.create()
-        Y.setrandom(seed=1)
-        Yl.setrandom(seed=1)
-
-        z, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                    **feastkwargs)
-
-        ews, cgd = history[-2], history[-1]
-        if not cgd:
-            print('*** Iterations did not converge')
-
-        yl = P.last(Yl)
-        yr = P.first(Y)
-        yr.centernormalize(self.mesh(0, 0))
-        yl.centernormalize(self.mesh(0, 0))
-        print('Computed Z =', z)
-
-        # a posteriori checks
-        decayrate = alpha * (self.Rout - pmlbegin) + pmlbegin * z.imag
-        bdryval = np.exp(-decayrate) / np.sqrt(np.abs(z)*np.pi/2)
-        bdrnrm0 = bdryval*2*np.pi*self.Rout
-        print('PML guessed boundary norm ~ %.1e' % max(bdrnrm0))
-        if np.max(bdrnrm0) > 1e-6:
-            print('*** Likely not enough PML decay for this Z!')
-
-        def outint(u):
-            out = self.mesh.Boundaries('outer')
-            s = ng.Integrate(u*ng.Conj(u), out, ng.BND).real
-            return ng.sqrt(s)
-
-        bdrnrm = yr.applyfnl(outint)
-        print('Actual max boundary norm = %.1e' % max(bdrnrm))
-        if np.max(bdrnrm) > 1e-5:
-            print('*** Mode has not decayed in PML enough!')
-
-        return z, yl, yr, P, Yl, Y, ews
-
-    def leakymode_auto(self, p, radiusZ2, centerZ2,
-                       alpha=1, includeclad=False,
-                       stop_tol=1e-10, npts=10, niter=50, nspan=10,
-                       verbose=True, inverse='umfpack'):
-        """Compute leaky modes by solving a linear eigenproblem using
-        the frequency-independent automatic PML mesh map of NGSolve
-        and using non-selfadjoint FEAST.
-
-        INPUTS:
-
-        * radiusZ2, centerZ2:
-            Capture modes whose non-dimensional resonance value Z²
-            is such that Z*Z is contained within the circular contour
-            centered at "centerZ2" of radius "radiusZ2" in the complex
-            plane.
-        * Remaining inputs are the as documented in leakymode(..).
-
-        OUTPUTS:   zsqr, Yl, Y, P
-
-        * zsqr: computed resonance values Z²
-        * Yl, Y: left and right eigenspans
-        * P: spectral projector approximation
-        """
-
-        if abs(alpha.imag) > 0 or alpha < 0:
-            raise ValueError('Expecting PML strength alpha > 0')
-
-        self.alpha = alpha
-        self.pml_ngs = True
-
-        if includeclad:
-            radial = ng.pml.Radial(rad=self.Rpml,
-                                   alpha=alpha*1j, origin=(0, 0))
-            self.mesh.SetPML(radial, 'pml')
-            pmlbegin = self.Rpml
-        else:
-            radial = ng.pml.Radial(rad=1, alpha=alpha*1j, origin=(0, 0))
-            self.mesh.SetPML(radial, 'pml|clad')
-            pmlbegin = 1
-
-        if self.m is None:
-            self.setrefractiveindex(curvature=0)
-
-        print(' PML (automatic, frequency-independent) starts at r=', pmlbegin)
-        print(' Degree p = ', p, ' Fiber curvature =', self.curvature)
-
-        self.p = p
-        self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
-
-        u, v = self.X.TnT()
-        a = BilinearForm(self.X)
-        b = BilinearForm(self.X)
-        a += (grad(u) * grad(v) - self.m * u * v) * dx
-        b += u * v * dx
-        with ng.TaskManager():
-            a.Assemble()
-            b.Assemble()
-        self.a = a
-        self.b = b
-
-        P = SpectralProjNGGeneral(self.X, self.a.mat, self.b.mat,
-                                  radiusZ2, centerZ2, npts,
-                                  verbose=verbose, inverse=inverse)
-        Y = NGvecs(self.X, nspan)
-        Yl = Y.create()
-        Y.setrandom()
-        Yl.setrandom()
-        zsqr, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                       stop_tol=stop_tol,
-                                       check_contour=2,
-                                       niterations=niter, nrestarts=1)
-        return zsqr, Yl, Y, P
-
-    def leakymode_smooth(self, p, radiusZ2, centerZ2,
-                         alpha=1, pmlbegin=None, pmlend=None,
-                         stop_tol=1e-10, npts=10, niter=50,
-                         verbose=True, inverse='umfpack'):
-        """Compute leaky modes by solving a linear eigenproblem using
-        the frequency-independent C²  PML map
-           mapped_x = x * (1 + 1j * α * φ(r))
-        where φ is a C² function of the radius r. The coefficients of
-        the mapped eigenproblem are used to make the eigensystem.
-        Then a non-selfadjoint FEAST is run on the system.
-
-        INPUTS:
-
-        * radiusZ2, centerZ2:
-            Capture modes whose non-dimensional resonance value Z²
-            is such that Z*Z is contained within the circular contour
-            centered at "centerZ2" of radius "radiusZ2" in the complex
-            plane.
-        * pmlbegin, pmlend:  starting radius of the PML and ending radius
-            of the transitional PML region, respectively. (The subdomains
-            'pml', 'clad' in the mesh are not used for this PML.)
-        * Remaining inputs are the as documented in leakymode(..).
-
-        OUTPUTS:   zsqr, Yl, Y, P
-
-        * zsqr: computed resonance values Z²
-        * Yl, Y: left and right eigenspans
-        * P: spectral projector approximation
-        """
-
-        if abs(alpha.imag) > 0 or alpha < 0:
-            raise ValueError('Expecting PML strength alpha > 0')
-        if pmlbegin is None:
-            pmlbegin = 1
-        else:
-            if pmlbegin > self.Rout or pmlbegin < 1:
-                raise ValueError('Select pmlbegin in interval [1, %g]'
-                                 % self.Rout)
-            self.pml_ngs = False
-        if pmlend is None:
-            pmlend = (self.Rout+pmlbegin) * 0.5
-
-        # symbolically derive the radial PML functions
-        s, t, R0, R1 = sm.symbols('s t R_0 R_1')
-        nr = sm.integrate((s-R0)**2 * (s-R1)**2, (s, R0, t)).factor()
-        dr = nr.subs(t, R1).factor()
-        sigmat = alpha * nr / dr    # called φ in the docstring
-        sigmat = sigmat.subs(R0, pmlbegin).subs(R1, pmlend)
-        sigma = sm.diff(t * sigmat, t).factor()
-        tau = 1 + 1j * sigma
-        taut = 1 + 1j * sigmat
-        G = (tau/taut).factor()
-
-        # symbolic -> ngsolve coefficient
-        x = ng.x
-        y = ng.y
-        r = ng.sqrt(x*x+y*y) + 0j
-        gstr = str(G).replace('I', '1j').replace('t', 'r')
-        ttstr = str(tau*taut).replace('I', '1j').replace('t', 'r')
-        g0 = eval(gstr)
-        tt0 = eval(ttstr)
-        g = IfPos(r-pmlbegin, g0, 1)
-        tt = IfPos(r-pmlbegin, tt0, 1)
-
-        gi = 1.0/g
-        cs = x/r
-        sn = y/r
-        A00 = gi*cs*cs+g*sn*sn
-        A01 = (gi-g)*cs*sn
-        A11 = gi*sn*sn+g*cs*cs
-        g.Compile()
-        gi.Compile()
-        tt.Compile()
-        A00.Compile()
-        A01.Compile()
-        A11.Compile()
-        A = CoefficientFunction((A00, A01,
-                                 A01, A11), dims=(2, 2))
-        self.pml_A = A
-        self.pml_tt = tt
-
-        # Make linear eigensystem
-        if self.m is None:
-            self.setrefractiveindex(curvature=0)
-        self.p = p
-        print(' PML (smooth, k-independent) starts at r=', pmlbegin)
-        print(' Degree p = ', p, ' Curvature =', self.curvature)
-
-        self.X = H1(self.mesh, order=self.p, dirichlet='outer', complex=True)
-        u, v = self.X.TnT()
-        a = BilinearForm(self.X)
-        b = BilinearForm(self.X)
-        a += (self.pml_A * grad(u) * grad(v) -
-              self.m * self.pml_tt * u * v) * dx
-        b += self.pml_tt * u * v * dx
-        with ng.TaskManager():
-            a.Assemble()
-            b.Assemble()
-        self.a = a
-        self.b = b
-
-        # Use spectral projector to find the resonance values squared
-        P = SpectralProjNGGeneral(self.X, self.a.mat, self.b.mat,
-                                  radiusZ2, centerZ2, npts=npts,
-                                  verbose=verbose, inverse=inverse)
-        Y = NGvecs(self.X, 10)
-        Yl = NGvecs(self.X, 10)
-        Y.setrandom()
-        Yl.setrandom()
-        zsqr, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                       stop_tol=stop_tol,
-                                       check_contour=2,
-                                       niterations=niter, nrestarts=1)
-        return zsqr, Yl, Y, P
-
-    def leakymode_poly(self, p, radius, center,
-                       alpha=1, includeclad=False,
-                       stop_tol=1e-10, npts=10, niter=50, nspan=10,
-                       verbose=True, inverse='umfpack'):
-        """See docstring of leakymode(...)"""
-
-        if self.m is None:
-            self.setrefractiveindex(curvature=0)
-        self.p = p
-        print(' PML (poly, k-dependent), includeclad =', includeclad)
-        print(' Degree p = ', p, ' Curvature =', self.curvature)
-
-        self.X = H1(self.mesh, order=self.p, complex=True)
-
-        # Our implementation of [Nannen+Wess]'s frequency-dependent PML is
-        # based on the idea to make a cubic eigenproblem using 3 copies of X:
-
-        X3 = ng.FESpace([self.X, self.X, self.X])
-
-        u0, u1, u2 = X3.TrialFunction()
-        v0, v1, v2 = X3.TestFunction()
-        u0x, u0y = grad(u0)
-        u1x, u1y = grad(u1)
-        u2x, u2y = grad(u2)
-        v2x, v2y = grad(v2)
-
-        if includeclad:
-            pmlbegin = self.Rpml
-            dx_pml = dx(definedon=self.mesh.Materials('pml'))
-            dx_int = dx(definedon=self.mesh.Materials('core|clad'))
-        else:
-            pmlbegin = 1
-            dx_pml = dx(definedon=self.mesh.Materials('pml|clad'))
-            dx_int = dx(definedon=self.mesh.Materials('core'))
-
-        R = pmlbegin
-        s = 1 + 1j * alpha
-        x = ng.x
-        y = ng.y
-        r = ng.sqrt(x*x+y*y) + 0j
-
-        A = BilinearForm(X3)
-        B = BilinearForm(X3)
-
-        A += u1 * v0 * dx
-        A += u2 * v1 * dx
-
-        A += (s*r/R) * grad(u0) * grad(v2) * dx_pml
-        A += s * (r-R)/(R*r*r) * (x*u0x+y*u0y) * v2 * dx_pml
-        A += s * (R-2*r)/r**3 * (x*u0x+y*u0y) * (x*v2x+y*v2y) * dx_pml
-        A += -s**3 * (r-R)**2/(R*r) * u0 * v2 * dx_pml
-
-        A += grad(u1) * grad(v2) * dx_int
-        A += -self.m * u1 * v2 * dx_int
-        A += 2 * (r-R)/r**3 * (x*u1x+y*u1y) * (x*v2x+y*v2y) * dx_pml
-        A += 1/r**2 * (x*u1x+y*u1y) * v2 * dx_pml
-        A += -2*s*s*(r-R)/r * u1 * v2 * dx_pml
-
-        A += R/s/r**3 * (x*u2x+y*u2y) * (x*v2x+y*v2y) * dx_pml
-        A += -R*s/r * u2 * v2 * dx_pml
-
-        B += u0 * v0 * dx + u1 * v1 * dx
-        B += u2 * v2 * dx_int
-
-        with ng.TaskManager():
-            A.Assemble()
-            B.Assemble()
-
-        # Since B is selfadjoint, we do not use SpectralProjNGGeneral here:
-
-        P = SpectralProjNG(X3, A.mat, B.mat,
-                           radius=radius, center=center, npts=npts,
-                           verbose=verbose, inverse=inverse)
-        Y = NGvecs(X3, nspan, M=B.mat)
-        Yl = Y.create()
-        Y.setrandom()
-        Yl.setrandom()
-
-        z, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                    stop_tol=stop_tol,
-                                    check_contour=2,
-                                    niterations=niter, nrestarts=1)
-        Yg = Y.gridfun()
-        Ylg = Y.gridfun()
-        y = NGvecs(self.X, Y.m)
-        yl = NGvecs(self.X, Y.m)
-        for i in range(Y.m):
-            y._mv[i].data = Yg.components[0].vecs[i]
-            yl._mv[i].data = Ylg.components[0].vecs[i]
-
-        return z, yl, y, P, Yl, Y
-
     # BENT MODES ############################################################
 
     def bentmode(self, curvature, radiusZ, centerZ, p,
                  bendfactor=1.28, **kwargs):
 
-        self.setrefractiveindex(curvature=curvature, bendfactor=bendfactor)
+        self.setnondimmat(curvature=curvature, bendfactor=bendfactor)
 
         z, _, y, P, _, _ = self.leakymode(p, radiusZ, centerZ, **kwargs)
 
@@ -876,7 +419,7 @@ class FiberMode:
         LLMA Yb-doped: 23 modes and betas
         """
         self.p = p
-        self.X = H1(self.mesh, order=p, dirichlet='outer', complex=True)
+        self.X = H1(self.mesh, order=p, dirichlet='OuterCircle', complex=True)
 
         if self.fibername == 'LLMA_Yb':
             simple = list(range(4))
@@ -1033,7 +576,7 @@ class FiberMode:
         np.savez(fbmfilename,
                  fibername=self.fibername,
                  hcore=self.hcore, hclad=self.hclad, hpml=self.hpml,
-                 Rpml=self.Rpml, Rout=self.Rout)
+                 R=self.R, Rout=self.Rout)
 
     def savemesh(self, fileprefix):
 
@@ -1051,6 +594,7 @@ class FiberMode:
             self.savemesh(fileprefix)
 
         y = Y.tonumpy()
+
         if os.path.isdir(self.outfolder) is not True:
             os.mkdir(self.outfolder)
         suffix = '_imde.npz' if interp else '_mde.npz'
@@ -1059,14 +603,14 @@ class FiberMode:
         if tone:
             np.savez(fullname, fibername=self.fibername,
                      hcore=self.hcore, hclad=self.hclad, hpml=self.hpml,
-                     p=self.p, Rpml=self.Rpml, Rout=self.Rout,
+                     p=self.p, R=self.R, Rout=self.Rout,
                      betas=betas, y=y,
                      exactbetas=exact, name2ind=name2ind,
                      firstmodeindex=self.firstmodeindex)
         else:
             np.savez(fullname, fibername=self.fibername,
                      hcore=self.hcore, hclad=self.hclad, hpml=self.hpml,
-                     p=self.p, Rpml=self.Rpml, Rout=self.Rout,
+                     p=self.p, R=self.R, Rout=self.Rout,
                      betas=betas, y=y,
                      exactbetas=exact, name2ind=name2ind)
 
@@ -1074,7 +618,7 @@ class FiberMode:
         """Check if the loaded file has expected values of certain data"""
 
         for member in {'fibername', 'hcore', 'hclad', 'hpml',
-                       'Rpml', 'Rout'}:
+                       'R', 'Rout'}:
             print('  From file:', member, '=', f[member])
             assert self.__dict__[member] == f[member], \
                 'Load error! Data member %s does not match!' % member
@@ -1089,7 +633,7 @@ class FiberMode:
             self.checkload(f)
             self.p = int(f['p'])
             print('  Degree %d modes found in file' % self.p)
-            self.X = H1(self.mesh, order=self.p,
+            self.X = H1(self.mesh, order=self.p, dirichlet='OuterCircle',
                         complex=True)
             y = f['y']
             betas = f['betas']
