@@ -399,7 +399,6 @@ class FiberMode(ModeSolver):
             name2ind, exact = construct_names(V, betas)
         return name2ind, exact
 
-
     # MESH REFINEMENT AND CURVING ###########################################
 
     def Refine(self, curveorder=3):
