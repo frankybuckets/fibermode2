@@ -76,7 +76,7 @@ class FiberMode(ModeSolver):
                 self.loadmesh(meshfname)
             else:
                 print('Specified mesh file not found -- creating it')
-                self.makemesh()
+                self.makemesh(refine)
                 self.savemesh(fromfile)
 
         self.p = None        # degree of finite elements used in mode calc
