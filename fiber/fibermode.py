@@ -67,6 +67,11 @@ class FiberMode(ModeSolver):
 
             meshfname = self.outfolder+'/'+fromfile+'_msh.vol.gz'
             if os.path.isfile(meshfname):
+                if geom is None:
+                    self.setstepindexgeom()
+                else:
+                    self.geo = geom
+
                 self.loadmesh(meshfname)
             else:
                 print('Specified mesh file not found -- creating it')
@@ -392,6 +397,17 @@ class FiberMode(ModeSolver):
         else:
             name2ind, exact = construct_names(V, betas)
         return name2ind, exact
+
+    # MESH REFINEMENT AND CURVING ###########################################
+
+    def Refine(self, curveorder=3):
+        ngmesh = self.mesh.ngmesh
+        ngmesh.Refine()
+        self.mesh = ng.Mesh(ngmesh)
+        self.Curve(curveorder=curveorder)
+
+    def Curve(self, curveorder=3):
+        self.mesh.Curve(curveorder)
 
     # BENT MODES ############################################################
 
