@@ -68,7 +68,11 @@ class FiberMode(ModeSolver):
 
             meshfname = self.outfolder+'/'+fromfile+'_msh.vol.gz'
             if os.path.isfile(meshfname):
-                # Add a call to setstepindexgeom() here.
+                if geom is None:
+                    self.setstepindexgeom()
+                else:
+                    self.geo = geom
+
                 self.loadmesh(meshfname)
             else:
                 print('Specified mesh file not found -- creating it')
