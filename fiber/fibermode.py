@@ -62,11 +62,13 @@ class FiberMode(ModeSolver):
                 self.loadfibermode(fbmfilename)
             else:
                 print('Specified fibermode file not found -- creating it')
-                self.makefibermode(fromfile)
+                self.makefibermode(fibername=fibername, R=R, Rout=Rout,
+                                   geom=geom, h=h, hcore=hcore)
                 self.savefbm(fromfile)
 
             meshfname = self.outfolder+'/'+fromfile+'_msh.vol.gz'
             if os.path.isfile(meshfname):
+                # Add a call to setstepindexgeom() here.
                 self.loadmesh(meshfname)
             else:
                 print('Specified mesh file not found -- creating it')
@@ -144,6 +146,14 @@ class FiberMode(ModeSolver):
         self.hpml = float(f['hpml'])
         self.R = float(f['R'])
         self.Rout = float(f['Rout'])
+
+        print('Loaded Fibermode metadata:')
+        print('self.fibername =', self.fibername)
+        print('self.hcore =', self.hcore)
+        print('self.hclad =', self.hclad)
+        print('self.hpml=', self.hpml)
+        print('self.R =', self.R)
+        print('self.Rout =', self.Rout)
 
         self.fiber = Fiber(self.fibername)
         self.setstepindexgeom()  # sets self.geo
