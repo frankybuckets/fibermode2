@@ -151,14 +151,6 @@ class FiberMode(ModeSolver):
         self.R = float(f['R'])
         self.Rout = float(f['Rout'])
 
-        print('Loaded Fibermode metadata:')
-        print('self.fibername =', self.fibername)
-        print('self.hcore =', self.hcore)
-        print('self.hclad =', self.hclad)
-        print('self.hpml=', self.hpml)
-        print('self.R =', self.R)
-        print('self.Rout =', self.Rout)
-
         self.fiber = Fiber(self.fibername)
         self.setstepindexgeom()  # sets self.geo
 
