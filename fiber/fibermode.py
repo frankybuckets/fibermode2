@@ -62,8 +62,7 @@ class FiberMode(ModeSolver):
                 self.loadfibermode(fbmfilename)
             else:
                 print('Specified fibermode file not found -- creating it')
-                self.makefibermode(fibername=fibername, R=R, Rout=Rout,
-                                   geom=geom, h=h, hcore=hcore)
+                self.makefibermode(fromfile)
                 self.savefbm(fromfile)
 
             meshfname = self.outfolder+'/'+fromfile+'_msh.vol.gz'
