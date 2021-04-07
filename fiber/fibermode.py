@@ -399,6 +399,18 @@ class FiberMode(ModeSolver):
             name2ind, exact = construct_names(V, betas)
         return name2ind, exact
 
+
+    # MESH REFINEMENT AND CURVING ###########################################
+
+    def Refine(self, curveorder=3):
+        ngmesh = self.mesh.ngmesh
+        ngmesh.Refine()
+        self.mesh = ng.Mesh(ngmesh)
+        self.Curve(curveorder=curveorder)
+
+    def Curve(self, curveorder=3):
+        self.mesh.Curve(curveorder)
+
     # BENT MODES ############################################################
 
     def bentmode(self, curvature, radiusZ, centerZ, p,
