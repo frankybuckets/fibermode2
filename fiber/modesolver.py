@@ -169,7 +169,12 @@ class ModeSolver:
 
         with ng.TaskManager():
             for i in range(len(AA)):
-                AA[i].Assemble()
+                try:
+                    AA[i].Assemble()
+                except Exception:
+                    print('*** Trying again with larger heap')
+                    ng.SetHeapSize(int(1e9))
+                    AA[i].Assemble()
 
         return AA, X
 
