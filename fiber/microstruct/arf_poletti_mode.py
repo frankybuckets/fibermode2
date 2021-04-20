@@ -2,7 +2,7 @@
 Computing some modes of a 6-tube ARF structure in Poletti's paper
 """
 
-from arf import ARF
+from fiberamp.fiber.microstruct import ARF
 
 a = ARF(name='poletti', freecapil=False)
 p = 2         # finite element degree
