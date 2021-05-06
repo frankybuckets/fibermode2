@@ -11,10 +11,7 @@ class PBG(ModeSolver):
         for key, value in fiber_param_dict.items():
             setattr(self, key, value)
 
-        if self.scale == 0:
-            raise ValueError("Scaling set to zero will yield infinite domain.")
-
-        self.k = 2 * np.pi / self.wavelength
+        self.n0 = 1.00027717
 
         # Set non-dimensional radii for geometry
 
@@ -30,12 +27,10 @@ class PBG(ModeSolver):
 
         # Set the materials for the domain.
 
-        self.mat = {
-            'Outer': 4,
-            'air': 3,
-            'tube': 2,
-            'clad': 1,
-        }
+        self.mat = {'Outer': 4, 'air': 3, 'tube': 2, 'clad': 1, 'core': 5}
+
+        if self.skip == 0:
+            del self.mat['core']
 
         for material, domain in self.mat.items():
             self.geo.SetMaterial(domain, material)
@@ -46,6 +41,9 @@ class PBG(ModeSolver):
         self.geo.SetDomainMaxH(self.mat['air'], self.air_maxh)
         self.geo.SetDomainMaxH(self.mat['tube'], self.tube_maxh)
         self.geo.SetDomainMaxH(self.mat['clad'], self.clad_maxh)
+
+        if self.skip != 0:
+            self.geo.SetDomainMaxH(self.mat['core'], self.core_maxh)
 
         self.mesh = ng.Mesh(self.geo.GenerateMesh())
         self.mesh.Curve(3)
@@ -59,31 +57,58 @@ class PBG(ModeSolver):
         m = {'Outer':     0,
              'clad':  self.n0**2 - self.n_clad**2,
              'tube':    self.n0**2 - self.n_tube**2,
-             'air':       0}
+             'air':       0,
+             'core': self.n0**2 - self.n_clad**2}
 
         self.V = ng.CoefficientFunction(
             [(self.scale*self.k)**2 * m[mat] for mat in
              self.mesh.GetMaterials()])
 
-    def geometry(self, sep, r, R0, R_air, Rout,
-                 layers=6, skip=1, p=6, scale=10**6, pattern=None):
+    @property
+    def wavelength(self):
+        return self._wavelength
+
+    @wavelength.setter
+    def wavelength(self, lam):
+        self._wavelength = lam
+        self.k = 2 * np.pi / self._wavelength
+
+    def geometry(self, sep, r, R0, R_air, Rout, layers=6, skip=1, p=6,
+                 scale=10**6, pattern=[]):
         """Construct and return non-dimensionalized geometry."""
 
         geo = geom2d.SplineGeometry()
 
         # Non-Dimensionalize needed physical parameters
+
         sep /= scale
         r /= scale
 
-        for i in range(layers):
+        # Create core region
 
+        if skip == 0:
+            pass
+
+        else:
+            R = .8 * (sep * skip - r)
+            coords = [(R * np.cos(i * 2 * np.pi / p),
+                       R * np.sin(i * 2 * np.pi / p)) for i in range(p)]
+            pts = [geo.AppendPoint(x, y) for x, y in coords]
+
+            for i in range(p-1):
+                geo.Append(["line", pts[i], pts[i+1]], leftdomain=5,
+                           rightdomain=1)
+
+            geo.Append(["line", pts[-1], pts[0]], leftdomain=5,
+                       rightdomain=1)
+
+        for i in range(layers):
             index_layer = skip + i
             R = index_layer * sep
 
-            if pattern is not None:
-                self.add_layer(
-                    geo, r, R, p=p, innerpoints=index_layer - 1,
-                    mask=pattern[i])
+            if len(pattern) > 0:
+                self.add_layer(geo, r, R, p=p, innerpoints=index_layer - 1,
+                               mask=pattern[i])
             else:
                 self.add_layer(geo, r, R, p=p, innerpoints=index_layer - 1)
 
@@ -112,6 +137,7 @@ class PBG(ModeSolver):
         else:
             xs = []
             ys = []
+
             for i in range(p):    # get vertex points of polygon
                 x0, y0 = R * np.cos(i * 2 * np.pi / p), R * \
                     np.sin(i * 2 * np.pi / p)
