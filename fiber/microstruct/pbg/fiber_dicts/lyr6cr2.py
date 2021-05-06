@@ -14,6 +14,7 @@ scale = .8 * (sep * skip - r)
 
 n_tube = 1.48
 n_clad = 1.45
+wavelength = 1.55e-6
 
 # PML Parameters.  Dimensional
 
@@ -23,11 +24,11 @@ alpha = 5
 
 # Mesh Parameters. Non-Dimensional
 
-pml_maxh = .5 / scale
-air_maxh = .1 / scale
-tube_maxh = .05 / scale
-clad_maxh = .1 / scale
-core_maxh = .08 / scale
+pml_maxh = .5 * S / scale
+air_maxh = .1 * S / scale
+tube_maxh = .025 * S / scale
+clad_maxh = .1 * S / scale
+core_maxh = .02 * S / scale
 
 
 params = {
@@ -43,6 +44,7 @@ params = {
 
     'n_tube': n_tube,
     'n_clad': n_clad,
+    'wavelength': wavelength,
 
     't_air': t_air,
     't_outer': t_outer,

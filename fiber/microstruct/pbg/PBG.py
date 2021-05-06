@@ -11,7 +11,6 @@ class PBG(ModeSolver):
         for key, value in fiber_param_dict.items():
             setattr(self, key, value)
 
-        self.wavelength = 1.8e-6
         self.n0 = 1.00027717
 
         # Set non-dimensional radii for geometry
