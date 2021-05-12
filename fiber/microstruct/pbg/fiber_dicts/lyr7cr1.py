@@ -6,31 +6,52 @@ layers = 7
 skip = 1
 pattern = []
 sep = 7 * 10**-6
-r = .5 * .4 * sep
-S = (skip + layers + 1) * sep
-scale = .8 * (sep * skip - r)
+r_tube = .5 * .4 * sep
+r_fiber = (skip + layers + 1) * sep
+r_core = .5 * (sep * skip - r_tube)
+scale = r_core
 
 
 # Physical Parameters
 
+n_air = 1.00027717
 n_tube = 1.48
 n_clad = 1.45
+n_core = n_clad
+n_outer = n_clad
+n_base = n_clad
 wavelength = 1.55e-6
 
 
 # PML Parameters.  Dimensional
 
-t_air = 2 * sep
+t_air = 0
 t_outer = 6 * sep
 alpha = 5
 
+# Non-Dimensional radii
+
+R0 = r_core / scale
+R = (r_fiber + t_air) / scale
+Rout = (r_fiber + t_air + t_outer) / scale
+R_fiber = r_fiber / scale
+
 # Mesh Parameters. Non-Dimensional
 
-pml_maxh = .5 * S / scale
-air_maxh = .1 * S / scale
-tube_maxh = .025 * S / scale
-clad_maxh = .1 * S / scale
-core_maxh = .02 * S / scale
+pml_maxh = .5 * r_fiber / scale
+air_maxh = .1 * r_fiber / scale
+tube_maxh = .05 * r_fiber / scale
+clad_maxh = .4 * r_fiber / scale
+core_maxh = .1 * r_fiber / scale
+
+# Refractive index dictionary
+
+n_dict = {'Outer': n_outer,
+          'clad': n_clad,
+          'tube': n_tube,
+          'air': n_air,
+          'core': n_core
+          }
 
 
 params = {
@@ -40,22 +61,32 @@ params = {
     'skip': skip,
     'pattern': pattern,
     'sep': sep,
-    'r': r,
-    'S': S,
+    'r_tube': r_tube,
+    'r_core': r_core,
+    'r_fiber': r_fiber,
     'scale': scale,
 
+    'n_air': n_air,
     'n_tube': n_tube,
     'n_clad': n_clad,
+    'n_core': n_core,
+    'n_outer': n_outer,
+    'n_base': n_base,
     'wavelength': wavelength,
 
     't_air': t_air,
     't_outer': t_outer,
     'alpha': alpha,
 
+    'R0': R0,
+    'R': R,
+    'Rout': Rout,
+    'R_fiber': R_fiber,
+
     'pml_maxh': pml_maxh,
     'air_maxh': air_maxh,
     'tube_maxh': tube_maxh,
     'clad_maxh': clad_maxh,
-    'core_maxh': core_maxh
-
+    'core_maxh': core_maxh,
+    'n_dict': n_dict
 }
