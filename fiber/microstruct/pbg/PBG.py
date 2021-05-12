@@ -14,6 +14,7 @@ class PBG(ModeSolver):
         for key, value in fiber_param_dict.items():
             setattr(self, key, value)
 
+        self.exp = 1
         self.n0 = self.n_air
         self.outfolder = outfolder
 
