@@ -192,7 +192,7 @@ class PBG(ModeSolver):
         r /= scale
 
         # Create core region
-        if skip == 0:
+        if skip == 0 or r_core == 0:
             pass
 
         else:
@@ -327,6 +327,7 @@ class PBG(ModeSolver):
                   longY=None, longYl=None, pbgpickle=False):
         """
         Save an NGVecs span object Y containing modes of FE degree p.
+
         Include any solver parameters to be saved together with the
         modes in the input dictionary "solverparams". If "pbgpickle"
         is True, then the pbg object is also saved under the same "name".
@@ -352,7 +353,8 @@ class PBG(ModeSolver):
         longY : ndarray, optional
             Long eigenvectors from linearized problem. The default is None.
         longYl : ndarray, optional
-            Long left eigenvectors from linearized problem. The default is None.
+            Long left eigenvectors from linearized problem. The default is
+            None.
         pbgpickle : boolean, optional
             If set to True, this function will also save the associated PBG
             object under the same name (with suffix '_npg.pkl' attached).
@@ -429,7 +431,7 @@ def load_pbg_mode(mode_prefix, pbg_prefix, mode_folder='', pbg_folder=''):
     """
     a = load_pbg(pbg_prefix, pbg_folder)   # load PBG object
 
-    mode_path = os.path.relpath(mode_folder + '/' + mode_prefix + '_mde.npz')
+    mode_path = os.path.relpath(mode_folder + '/' + mode_prefix + '_mode.npz')
     d = dict(np.load(mode_path, allow_pickle=True))  # load saved dictionary
 
     # Extract entries

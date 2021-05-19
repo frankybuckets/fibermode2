@@ -9,9 +9,10 @@ pattern = []               # pattern determining microstructure
 sep = 7 * 10**-6                          # separation between layers
 r_tube = .5 * .4 * sep                    # radius of inner tubes
 r_fiber = (skip + layers + 1) * sep       # radius of fiber
-r_core = .5 * (sep * skip - r_tube)       # radius of core region
-scale = r_core             # scaling factor
+r_core = .7 * (sep * skip - r_tube)       # radius of core region
+scale = .5 * (sep * skip - r_tube)        # scaling factor
 
+# Note: avoid changing scaling parameter.  Changing it moves your eigenvalues
 
 # Physical Parameters
 
@@ -37,7 +38,7 @@ pml_maxh = .5 * r_fiber / scale
 buffer_maxh = .1 * r_fiber / scale
 tube_maxh = .05 * r_fiber / scale
 clad_maxh = .4 * r_fiber / scale
-core_maxh = .1 * r_fiber / scale
+core_maxh = .02 * r_fiber / scale
 
 params = {
 
