@@ -178,7 +178,8 @@ class PBG(ModeSolver):
         p : int, optional
             Number of sides of polygon determining lattice. The default is 6.
         pattern : list, optional
-            List of 0's and 1's determining pattern of tubes. The default is [].
+            List of 0's and 1's determining pattern of tubes. The default is
+            [].
 
         Returns
         -------
@@ -231,8 +232,9 @@ class PBG(ModeSolver):
 
     def add_layer(self, geo, r, R, p=6, innerpoints=0, mask=None):
         """
-        Adds a single layer of small circles of radius r at vertices of
-        p-sided polygon (inscribed in circle of radius R) to geometry geo.
+        Add a single layer of small circles of radius r at vertices of p-sided\
+        polygon (inscribed in circle of radius R) to geometry geo.
+
         If innerpoints is greater than zero, also adds circles along edges of
         polygon.
 
@@ -258,7 +260,6 @@ class PBG(ModeSolver):
             Number of polygon sides must be at least 2.
 
         """
-
         if p == 0 or p == 1:
             raise ValueError("Please specify a p of 2 or greater.")
 
@@ -302,7 +303,7 @@ class PBG(ModeSolver):
     # SAVE & LOAD #####################################################
 
     def save(self, name, folder):
-        """ Save PBG object.
+        """Save PBG object.
 
         Parameters
         ----------
@@ -312,7 +313,6 @@ class PBG(ModeSolver):
             Path to destination folder.  May be absolute or relative to current
             directory.  Exception is raised if folder does not exist.
         """
-
         filename = os.path.relpath(folder + '/' + name + '_pbg.pkl')
         if os.path.isdir(folder):
 
