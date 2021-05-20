@@ -197,7 +197,7 @@ class PBG(ModeSolver):
             pass
 
         else:
-            R_core = r_core / scale      # default core radius
+            R_core = r_core / scale
             geo.AddCircle(c=(0, 0), r=R_core, leftdomain=1, rightdomain=2)
 
         # Add the layers of tubes
