@@ -1,8 +1,16 @@
-
 from fiberamp.fiber.microstruct.pbg import PBG
-from fiberamp.fiber.microstruct.pbg.fiber_dicts.lyr7cr1 import params
+from fiberamp.fiber.microstruct.pbg.fiber_dicts.lyr6cr2 import params
 
-A = PBG(params)
+if __name__ == '__main__':
 
-z2, y2, yl2, beta2, P2, _ = A.leakymode(2, ctr=3.56545193-0.00913029j,
-                                        rad=.01)
+    A = PBG(params)
+
+    center = 1.242933-2.471929e-09j
+    radius = .01
+    p = 2
+
+    z, y, yl, beta, P, _ = A.leakymode(p, rad=radius, ctr=center,
+                                       alpha=A.alpha, niterations=50, npts=4,
+                                       nspan=2)
+
+    y.draw()

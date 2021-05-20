@@ -1,36 +1,33 @@
-
 # Geometric Parameters.  Dimensional
 
 p = 6                      # number of sides of polygonal lattice
-layers = 6                 # number of layers of lattice
-skip = 2                   # number of layers to skip before beginning lattice
+layers = 1                 # number of layers of lattice
+skip = 0                   # number of layers to skip before beginning lattice
 pattern = []               # pattern determining microstructure
 
-sep = 7 * 10**-6                          # separation between layers
-r_tube = .5 * .4 * sep                    # radius of inner tubes
-r_fiber = (skip + layers + 1) * sep       # radius of fiber
-r_core = .7 * (sep * skip - r_tube)       # radius of core region
-scale = .5 * (sep * skip - r_tube)        # scaling factor
+sep = 7 * 10**-6           # separation between layers
+r_tube = 12.5e-6           # radius of inner tubes
+r_core = r_tube            # radius of core region
+r_fiber = 2 * r_core       # radius of fiber
+scale = r_core             # scaling factor
 
-# Note: avoid changing scaling parameter.  Changing it moves your eigenvalues
 
 # Physical Parameters
 
-n_tube = 1.48                       # refractive index of tube material
-n_clad = 1.45                       # refractive index of cladding material
+n_tube = 1.45097                    # refractive index of tube material
+n_clad = 1.44973                    # refractive index of cladding material
 n_core = n_clad                     # refractive index of core
 n_buffer = n_clad                   # refractive index of buffer region
 n_outer = n_clad                    # refractive index of outer PML region
 n0 = n_clad                         # base refractive index for V function
-wavelength = 1.55e-6
+wavelength = 1.064e-6
 
 
 # PML Parameters.  Dimensional
 
-t_buffer = 0                   # thickness of buffer region (between R0 and R)
-t_outer = 15 * sep             # thickness of outer region (between R and Rout)
-alpha = 5                      # PML factor
-
+t_buffer = 0             # thickness of buffer region (between R_fiber and R)
+t_outer = 14 * r_core    # thickness of outer region (between R and Rout)
+alpha = 5                # PML factor
 
 # Mesh Parameters. Non-Dimensional
 
@@ -39,6 +36,7 @@ buffer_maxh = .1 * r_fiber / scale
 tube_maxh = .05 * r_fiber / scale
 clad_maxh = .4 * r_fiber / scale
 core_maxh = .02 * r_fiber / scale
+
 
 params = {
 
