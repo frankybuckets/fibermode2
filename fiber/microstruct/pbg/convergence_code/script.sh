@@ -8,8 +8,13 @@
 #SBATCH --partition himem
 #SBATCH --mail-user piet2@pdx.edu
 #SBATCH --mail-type ALL
-#SBATCH --output slurm_outputs/
-#SBATCH --error slurm_errors/
+#SBATCH --output=PBG_convergence.log
+#SBATCH --error=PBG_convergence.err
+
+pwd; hostname;
+echo "Starting at wall clock time:"
+date
+echo "Running CMT on $SLURM_CPUS_ON_NODE CPU cores"
 
 # Load needed modules.
 module load ngsolve/serial
@@ -18,6 +23,8 @@ module load intel
 
 
 # Run the code.
-echo "Starting PBG convergence study: `date`"
+echo "Starting PBG convergence study: "
+date
 python3 convergence_study.py
-echo "Ending PBG convergence study: `date`"
+echo "Ending PBG convergence study:"
+date

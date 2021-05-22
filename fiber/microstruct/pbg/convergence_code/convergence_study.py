@@ -41,17 +41,19 @@ if __name__ == '__main__':
     center = 1.242933-2.471929e-09j
     radius = .01
 
-    folder = '/home/pv/local/fiberamp/fiber/microstruct/pbg/\
+    folder = '/home/piet2/local/fiberamp/fiber/microstruct/pbg/\
 outputs/lyr6cr2/convergence_studies'
-
+    print(folder,'\n')
     if not os.path.isdir(os.path.relpath(folder)):
-        raise ValueError(
+	    print('folder error.\n')
+	    raise ValueError(
             "Given folder is not a directory.  Make this directory and begin\
  again.")
 
     else:
         for p in ps:
             for ref in refs:
+                print('building A')
                 A = PBG(params)
                 z, _, beta = modefind(A, center, radius, p, ref)
                 CL = 20 * beta.imag / np.log(10)
@@ -63,4 +65,6 @@ outputs/lyr6cr2/convergence_studies'
 
                     d = {'z': z, 'beta': beta,
                          'p': p, 'ref': ref, 'CL': CL}
+                    print('saving\n')
                     np.savez(filepath, **d)
+                    print('saving done, see if it worked.\n')
