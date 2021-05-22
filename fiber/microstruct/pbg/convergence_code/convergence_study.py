@@ -53,7 +53,7 @@ outputs/lyr6cr2/convergence_studies'
         for p in ps:
             for ref in refs:
                 A = PBG(params)
-                z, y, beta = modefind(A, center, radius, p, ref)
+                z, _, beta = modefind(A, center, radius, p, ref)
                 CL = 20 * beta.imag / np.log(10)
 
                 if z is not None:
@@ -61,6 +61,6 @@ outputs/lyr6cr2/convergence_studies'
                     filename = 'p' + str(p) + '_refs' + str(ref)
                     filepath = os.path.abspath(folder + '/' + filename)
 
-                    d = {'z': z, 'y': y, 'beta': beta,
+                    d = {'z': z, 'beta': beta,
                          'p': p, 'ref': ref, 'CL': CL}
                     np.savez(filepath, **d)
