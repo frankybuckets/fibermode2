@@ -15,22 +15,13 @@ import os
 
 def modefind(fiber_obj, center, radius, p, ref, nspan=2, npts=4):
     """Compute modes of fiber object."""
-    try:
-        for i in range(ref):
-            fiber_obj.mesh.Refine()
-    except MemoryError:
-        print("Unable to perform mesh refinements due to MemoryError.")
-        return None, None, None, None
+    for i in range(ref):
+        fiber_obj.refine()
 
-    try:
-        z, y, _, beta, P, _ = fiber_obj.leakymode(p, rad=radius, ctr=center,
-                                                  alpha=fiber_obj.alpha,
-                                                  niterations=20, npts=npts,
-                                                  nspan=nspan, nrestarts=1)
-    except MemoryError:
-        print("Modefinding encoutered MemoryError.")
-        return None, None, None, None
-
+    z, y, _, beta, P, _ = fiber_obj.leakymode(p, rad=radius, ctr=center,
+                                                alpha=fiber_obj.alpha,
+                                                niterations=20, npts=npts,
+                                                nspan=nspan, nrestarts=1)
     return z, y, beta, P.fes.ndof
 
 
@@ -53,17 +44,19 @@ outputs/lyr6cr2/convergence_studies'
     else:
         for p in ps:
             for ref in refs:
+
                 print('building fiber object.\n')
                 A = PBG(params)
+
+                print('Refining mesh and finding modes.\n')
                 z, _, beta, ndof = modefind(A, center, radius, p, ref)
 
-                if z is not None:
-                    print("Found modes.\n")
-                    CL = 20 * beta.imag / np.log(10)
-                    filename = 'p' + str(p) + '_refs' + str(ref)
-                    filepath = os.path.abspath(folder + '/' + filename)
+                print("Found modes.\n")
+                CL = 20 * beta.imag / np.log(10)
+                filename = 'p' + str(p) + '_refs' + str(ref)
+                filepath = os.path.abspath(folder + '/' + filename)
 
-                    d = {'z': z, 'beta': beta,
-                         'p': p, 'ref': ref, 'CL': CL, 'ndofs': ndof}
-                    print('saving\n')
-                    np.savez(filepath, **d)
+                d = {'z': z, 'beta': beta,
+                     'p': p, 'ref': ref, 'CL': CL, 'ndofs': ndof}
+                print('Saving data.\n')
+                np.savez(filepath, **d)
