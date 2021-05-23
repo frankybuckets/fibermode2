@@ -6,6 +6,7 @@ Created on Fri May 21 14:26:16 2021.
 @author: pv
 
 A general convergence study code for our fibers.
+
 """
 from fiberamp.fiber.microstruct.pbg import PBG
 from fiberamp.fiber.microstruct.pbg.fiber_dicts.lyr6cr2 import params
@@ -19,21 +20,23 @@ def modefind(fiber_obj, center, radius, p, ref, nspan=2, npts=4):
         fiber_obj.refine()
 
     z, y, _, beta, P, _ = fiber_obj.leakymode(p, rad=radius, ctr=center,
-                                                alpha=fiber_obj.alpha,
-                                                niterations=20, npts=npts,
-                                                nspan=nspan, nrestarts=1)
+                                              alpha=fiber_obj.alpha,
+                                              niterations=20, npts=npts,
+                                              nspan=nspan, nrestarts=1)
     return z, y, beta, P.fes.ndof
 
 
 if __name__ == '__main__':
 
-    ps = [2, 3, 4, 5] 
-    refs = [3]
-    center = 1.242933-2.471929e-09j
-    radius = .01
+    ps = [2, 3, 4, 5]         # Polynomial degrees to cycle through
+    refs = [3]                # Refinements to cycle through
 
-    folder = '/home/piet2/local/fiberamp/fiber/microstruct/pbg/\
-outputs/lyr6cr2/convergence_studies'
+    center = 1.242933-2.471929e-09j    # Center for FEAST
+    radius = .01                       # Radius for FEAST
+    nspan = 2                          # Number of vectors for initial span
+
+    folder = '/home/pv/local/fiberamp/fiber/microstruct/pbg/outputs/lyr6cr2/\
+fund_mode/convergence'               # Folder for outputs
 
     if not os.path.isdir(os.path.relpath(folder)):
 
@@ -44,12 +47,13 @@ outputs/lyr6cr2/convergence_studies'
     else:
         for p in ps:
             for ref in refs:
-                print('Polynomial degree %i, with %i refinements: ' %(p, ref))
+                print('Polynomial degree %i, with %i refinements: ' % (p, ref))
                 print('Building fiber object.\n')
                 A = PBG(params)
 
                 print('Refining mesh and finding modes.\n')
-                z, _, beta, ndof = modefind(A, center, radius, p, ref)
+                z, _, beta, ndof = modefind(A, center, radius, p, ref,
+                                            nspan=nspan)
 
                 print("Found modes.\n")
                 CL = 20 * beta.imag / np.log(10)
