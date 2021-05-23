@@ -1,6 +1,5 @@
 #!/usr/bin/bash
 #SBATCH --job-name PBG_convergence
-#SBATCH --array 0-3
 #SBATCH --nodes 1
 #SBATCH --tasks-per-node 1
 #SBATCH --cpus-per-task 24
@@ -11,7 +10,6 @@
 #SBATCH --output=PBG_convergence.log
 #SBATCH --error=PBG_convergence.err
 
-pwd; hostname;
 echo "Starting at wall clock time:"
 date
 echo "Running CMT on $SLURM_CPUS_ON_NODE CPU cores"

@@ -27,8 +27,8 @@ def modefind(fiber_obj, center, radius, p, ref, nspan=2, npts=4):
 
 if __name__ == '__main__':
 
-    ps = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-    refs = [1]
+    ps = [2, 3, 4, 5] 
+    refs = [3]
     center = 1.242933-2.471929e-09j
     radius = .01
 
@@ -44,8 +44,8 @@ outputs/lyr6cr2/convergence_studies'
     else:
         for p in ps:
             for ref in refs:
-
-                print('building fiber object.\n')
+                print('Polynomial degree %i, with %i refinements: ' %(p, ref))
+                print('Building fiber object.\n')
                 A = PBG(params)
 
                 print('Refining mesh and finding modes.\n')
