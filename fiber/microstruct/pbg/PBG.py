@@ -93,13 +93,14 @@ class PBG(ModeSolver):
                                  self.layers, self.skip, self.p, self.pattern)
 
         # Create Mesh
-        self.mesh = self.mesh()
+        self.mesh = self.create_mesh()
+        self.refinements = 0
 
         # Initialize parent class ModeSolver
         super().__init__(self.mesh, self.scale, self.n0)
 
         # Set V function
-        self.V = self.VFunction()
+        self.V = self.create_V_function()
 
     @property
     def wavelength(self):
@@ -111,7 +112,7 @@ class PBG(ModeSolver):
         self._wavelength = lam
         self.k = 2 * np.pi / self._wavelength
 
-    def VFunction(self):
+    def create_V_function(self):
         """Create coefficient function (V) for mesh."""
         n_dict = {'Outer': self.n_outer,
                   'clad': self.n_clad,
@@ -127,7 +128,7 @@ class PBG(ModeSolver):
 
         return V
 
-    def mesh(self):
+    def create_mesh(self):
         """Set materials, max diameters and create mesh."""
         # Set the materials for the domain.
         mat = {5: 'Outer', 4: 'buffer', 3: 'tube', 2: 'clad', 1: 'core'}
@@ -306,13 +307,20 @@ class PBG(ModeSolver):
         d = deepcopy(self.mesh)  # make independent copy of mesh
 
         for r in range(refs):
-            self.mesh.Refine()  # refine own mesh
+            self.refine()  # refine own mesh
 
         _, X = self.polypmlsystem(p, self.alpha)   # find FEM space
 
         self.mesh = d   # restore original mesh
 
         return X.ndof  # return ndofs
+
+    def refine(self):
+        """Refine mesh by dividing each triangle into four."""
+        self.refinements += 1
+        self.mesh.ngmesh.Refine()
+        self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
+        self.mesh.Curve(3)
 
     # SAVE & LOAD #####################################################
 
