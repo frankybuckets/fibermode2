@@ -29,7 +29,7 @@ def modefind(fiber_obj, center, radius, p, ref, nspan=2, npts=4):
                                                   nspan=nspan, nrestarts=1)
     except MemoryError:
         print("Modefinding encoutered MemoryError.")
-        return z, y, beta, P.fes.ndof
+        return None, None, None, None
 
     return z, y, beta, P.fes.ndof
 
