@@ -5,12 +5,18 @@ Created on Sat May 22 11:10:31 2021.
 
 @author: pv
 """
+import netgen.gui
+from fiberamp.fiber.microstruct.pbg.fiber_dicts.lyr6cr2 import params
+from fiberamp.fiber.microstruct.pbg import PBG
 import numpy as np
 import os
+import ngsolve as ng
 from prettytable import PrettyTable
 
+# %%
+
 table = PrettyTable(padding_width=5)
-headers = ['Degree', 'Confinement Loss (dB/m)']
+headers = ['Degree', 'DoFs', 'Confinement Loss (dB/m)']
 # table.field_names = headers
 
 ps = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
@@ -36,5 +42,31 @@ for ref in refs:
     all_data.append(data)
 
 table.add_column(headers[0], ps)
-table.add_column(headers[1], all_data[0])
+table.add_column(headers[2], all_data[0])
+
+
+# %%
+center = 1.242933-2.471929e-09j
+radius = .01
+p = 2
+
+A = PBG(params)
+ng.Draw(A.mesh)
+
+
+# %%
+
+print(A.check_ndof(3, 3))
+ng.Draw(A.mesh)
+
+# %%
+
+dofs = []
+for p in ps:
+    _, X = A.polypmlsystem(p=p, alpha=A.alpha)
+    dofs.append(X.ndof)
+
+# %%
+
+table.add_column(headers[1], dofs)
 print(table)

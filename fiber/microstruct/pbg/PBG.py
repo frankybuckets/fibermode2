@@ -5,6 +5,7 @@ import os
 import pickle
 from fiberamp.fiber.modesolver import ModeSolver
 from pyeigfeast.spectralproj.ngs import NGvecs
+from copy import deepcopy
 
 
 class PBG(ModeSolver):
@@ -299,6 +300,19 @@ class PBG(ModeSolver):
 
                 # Add the circles
                 geo.AddCircle(c=(x, y), r=r, leftdomain=3, rightdomain=2)
+
+    def check_ndof(self, p, refs):
+        """Determine number of dofs for FEM space order p on mesh with refs."""
+        d = deepcopy(self.mesh)  # make independent copy of mesh
+
+        for r in range(refs):
+            self.mesh.Refine()  # refine own mesh
+
+        _, X = self.polypmlsystem(p, self.alpha)   # find FEM space
+
+        self.mesh = d   # restore original mesh
+
+        return X.ndof  # return ndofs
 
     # SAVE & LOAD #####################################################
 
