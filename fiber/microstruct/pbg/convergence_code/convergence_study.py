@@ -28,8 +28,8 @@ def modefind(fiber_obj, center, radius, p, ref, nspan=2, npts=4):
                                                   niterations=20, npts=npts,
                                                   nspan=nspan, nrestarts=1)
     except MemoryError:
-        print("Unable to complete modefinding due to MemoryError.")
-        return None, None, None, None
+        print("Modefinding encoutered MemoryError.")
+        return z, y, beta, P.fes.ndof
 
     return z, y, beta, P.fes.ndof
 
@@ -56,10 +56,10 @@ outputs/lyr6cr2/convergence_studies'
                 print('building fiber object.\n')
                 A = PBG(params)
                 z, _, beta, ndof = modefind(A, center, radius, p, ref)
-                CL = 20 * beta.imag / np.log(10)
 
                 if z is not None:
                     print("Found modes.\n")
+                    CL = 20 * beta.imag / np.log(10)
                     filename = 'p' + str(p) + '_refs' + str(ref)
                     filepath = os.path.abspath(folder + '/' + filename)
 
