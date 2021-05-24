@@ -57,8 +57,8 @@ refs = [0]
 # Center, radius and span size for FEAST. ##############################
 center = centers[mode_name]
 radius = .001
-nspan = 2
-npts = 4                                  # number of quadrature points
+nspan = 2                      # Number of initial eigenvectors
+npts = 4                       # Number of quadrature points
 
 
 if __name__ == '__main__':
