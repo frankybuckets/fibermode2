@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+General convergence study code.
 
-"""
-from fiberamp.fiber.microstruct.pbg import PBG
-from fiberamp.fiber.microstruct.pbg.fiber_dicts.lyr6cr2 import params
-import numpy as np
-import os
-
-"""
-General convergence study code. To use:
+    To use:
 
     1: Enter desired fiber name and mode you wish to study. Make sure the
     correct center is listed.  Change import of parameters (above) to reflect
@@ -30,14 +24,20 @@ General convergence study code. To use:
 After saving, alter script.h file appropriately and run sbatch script.h.
 """
 
+from fiberamp.fiber.microstruct.pbg import PBG
+from fiberamp.fiber.microstruct.pbg.fiber_dicts.lyr6cr2 import params
+import numpy as np
+import os
+
+
 # Fiber and mode names on which to perform convergence study. ##
 fiber_name = 'lyr6cr2'   # Note: change import above to correspond.
 mode_name = 'LP01'
 
 
 # Starting location for eigenvalue iterations. #########################
-centers = {'LP01': 1.242933-2.471929e-09j,
-           'LP11': 1.93487063-8.699515e-08j}
+centers = {'LP01': 1.242933 - 2.471929e-09j,
+           'LP11': 1.93487063 - 8.699515e-08j}
 
 
 # Folder setup.  Enter your path to pbg folder. ##################
@@ -47,7 +47,7 @@ folder = pbg_home + '/outputs/' + fiber_name + \
 
 if not os.path.isdir(os.path.relpath(folder)):
     raise FileNotFoundError("Given folder is not a directory. Make this \
-                            directory and begin again.")
+directory and begin again.")
 
 # Polynomial Degrees and Refinements to cycle through. #################
 ps = [1]
