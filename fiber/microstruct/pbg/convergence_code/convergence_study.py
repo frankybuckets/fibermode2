@@ -6,7 +6,7 @@ General convergence study code.
     To use:
 
     1: Enter desired fiber name and mode you wish to study. Make sure the
-    correct center is listed.  Change import of parameters (above) to reflect
+    correct center is listed.  Change import of parameters (below) to reflect
     fiber name.
 
     2: Enter your path to the pbg folder in fiberamp and create the output
@@ -74,7 +74,7 @@ if __name__ == '__main__':
 
             print('Finding modes.\n')
             try:
-                z, y, _, beta, P, _ = A.leakymode(p, rad=radius, ctr=center,
+                z, _, _, beta, P, _ = A.leakymode(p, rad=radius, ctr=center,
                                                   alpha=A.alpha,
                                                   niterations=20, npts=npts,
                                                   nspan=nspan, nrestarts=1)

@@ -10,9 +10,13 @@ import os
 from prettytable import PrettyTable
 
 # %%
-mode = 'LP01'
+mode_types = ['A', 'B']
+mode = 'LP11'
+mode_type = 'B'
+mode_type_index = mode_types.index(mode_type)
+
 ps = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-refs = [1, 2, 3]
+refs = [0, 1, 2, 3]
 
 folder = '/home/pv/local/fiberamp/fiber/microstruct/pbg/\
 outputs/lyr6cr2/' + mode + '/convergence'
@@ -34,7 +38,9 @@ for ref in refs:
             filename = 'p' + str(p) + '_refs' + str(ref) + '.npz'
             filepath = os.path.abspath(folder + '/' + filename)
             d = np.load(filepath)
-            CL.append(d['CL'][0])
+            if mode_type_index + 1 > len(d['z']):
+                raise IndexError("Chosen mode does not have this mode type.")
+            CL.append(d['CL'][mode_type_index])
             ndofs.append(d['ndofs'])
 
         except FileNotFoundError:
@@ -45,10 +51,11 @@ for ref in refs:
     ref_D['ndofs'] = ndofs
     D[ref] = ref_D
 
-# %%
-r = 3
+r = 0
+name = mode + '-' + mode_type
+title = 'Mode: ' + name + ', Refinements: ' + str(r)
 
-table = PrettyTable(title='Refinements: ' + str(r), padding_width=5)
+table = PrettyTable(title=title, padding_width=5)
 fields = ['Refinements', 'Degree', 'Confinement Loss (dB/m)', 'DoFs']
 
 table.add_column(fields[1], ps)
