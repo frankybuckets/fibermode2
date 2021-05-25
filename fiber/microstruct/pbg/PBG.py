@@ -5,6 +5,7 @@ import os
 import pickle
 from fiberamp.fiber.modesolver import ModeSolver
 from pyeigfeast.spectralproj.ngs import NGvecs
+from copy import deepcopy
 
 
 class PBG(ModeSolver):
@@ -92,13 +93,14 @@ class PBG(ModeSolver):
                                  self.layers, self.skip, self.p, self.pattern)
 
         # Create Mesh
-        self.mesh = self.mesh()
+        self.mesh = self.create_mesh()
+        self.refinements = 0
 
         # Initialize parent class ModeSolver
         super().__init__(self.mesh, self.scale, self.n0)
 
         # Set V function
-        self.V = self.VFunction()
+        self.V = self.create_V_function()
 
     @property
     def wavelength(self):
@@ -110,7 +112,7 @@ class PBG(ModeSolver):
         self._wavelength = lam
         self.k = 2 * np.pi / self._wavelength
 
-    def VFunction(self):
+    def create_V_function(self):
         """Create coefficient function (V) for mesh."""
         n_dict = {'Outer': self.n_outer,
                   'clad': self.n_clad,
@@ -126,7 +128,7 @@ class PBG(ModeSolver):
 
         return V
 
-    def mesh(self):
+    def create_mesh(self):
         """Set materials, max diameters and create mesh."""
         # Set the materials for the domain.
         mat = {5: 'Outer', 4: 'buffer', 3: 'tube', 2: 'clad', 1: 'core'}
@@ -299,6 +301,32 @@ class PBG(ModeSolver):
 
                 # Add the circles
                 geo.AddCircle(c=(x, y), r=r, leftdomain=3, rightdomain=2)
+
+    def check_ndof(self, p, refs):
+        """Determine number of dofs for FEM space order p on mesh with refs."""
+        d = deepcopy(self.mesh)  # make independent copy of mesh
+
+        for r in range(refs):
+            self.refine()  # refine own mesh
+
+        _, X = self.polypmlsystem(p, self.alpha)   # find FEM space
+
+        self.mesh = d   # restore original mesh
+
+        return X.ndof  # return ndofs
+
+    def check_ndof2(self, p, refs):
+        """Estimate ndofs using algebra."""
+        base_degree = (p + 2) * (p + 1)  # Dimension of P^p_2
+        bdedge = 2 * self.mesh.nedge - 3 * self.mesh.ne
+        return None
+
+    def refine(self):
+        """Refine mesh by dividing each triangle into four."""
+        self.refinements += 1
+        self.mesh.ngmesh.Refine()
+        self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
+        self.mesh.Curve(3)
 
     # SAVE & LOAD #####################################################
 
