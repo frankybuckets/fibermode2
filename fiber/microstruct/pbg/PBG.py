@@ -315,11 +315,11 @@ class PBG(ModeSolver):
 
         return X.ndof  # return ndofs
 
-    def check_ndof2(self, p, refs):
-        """Estimate ndofs using algebra."""
-        base_degree = (p + 2) * (p + 1)  # Dimension of P^p_2
-        bdedge = 2 * self.mesh.nedge - 3 * self.mesh.ne
-        return None
+#    def check_ndof2(self, p, refs):
+#        """Estimate ndofs using algebra."""
+#        base_degree = (p + 2) * (p + 1)  # Dimension of P^p_2
+#        bdedge = 2 * self.mesh.nedge - 3 * self.mesh.ne
+#        return None
 
     def refine(self):
         """Refine mesh by dividing each triangle into four."""
