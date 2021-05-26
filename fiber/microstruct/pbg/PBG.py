@@ -5,7 +5,6 @@ import os
 import pickle
 from fiberamp.fiber.modesolver import ModeSolver
 from pyeigfeast.spectralproj.ngs import NGvecs
-from copy import deepcopy
 
 
 class PBG(ModeSolver):
@@ -45,7 +44,9 @@ class PBG(ModeSolver):
     - scale: float
         Factor by which to scale the fiber parameters to make a
         non-dimensional geometry.  Frequently chosen to make the core
-        region unit radius.
+        region unit radius.  Note: resetting scale does NOT reset attributes
+        derived from it (including geo, mesh, V).  If you change the scale you
+        need to rebuild the object.
     - n_tube, n_clad: float
         Refractive indices of the tube and cladding material respectively.
     - n_core, n_buffer, n_outer: float
@@ -65,11 +66,22 @@ class PBG(ModeSolver):
         Non-Dimensional radii indicating the beginning and end of the PML
         region.
     - wavelength, k: floats
-        Wavelength and wavenumber of light for which we seek modes.
+        Wavelength and wavenumber of light for which we seek modes. Setting
+        wavelength automatically sets k and V (see below).
     - geo, mesh: NGsolve objects
         Geometry and mesh of fiber.
+    - refractive_index_dict: dict
+        Dictionary giving refractive index of fiber materials.
     - V: NGsolve CoefficientFunction object
-        Refractive index function of fiber.
+        Coefficient function based on refractive index function N, used in
+        differential equation to be solved.
+    - N: NGsolve CoefficientFunction object
+        The refractive index function of the fiber. Often referred to as 'n'
+        in the literature. By default this is a piecewise constant function
+        equal to the refractive index of the material. Can be updated to any
+        desired coefficient function defined on the mesh materials.  To reset
+        to original values use self.reset_N method.  Note: updating N updates
+        V function.
 
     Methods
     -------
@@ -98,9 +110,16 @@ class PBG(ModeSolver):
         # Create Mesh
         self.mesh = self.create_mesh()
         self.refinements = 0
+        self.refractive_index_dict = {'Outer': self.n_outer,
+                                      'clad': self.n_clad,
+                                      'tube': self.n_tube,
+                                      'buffer': self.n_buffer,
+                                      'core': self.n_core
+                                      }
 
-        # Set wavelength (which sets k and V function)
+        # Set wavelength and base coefficent function (these then set k and V)
         self.wavelength = fiber_param_dict['wavelength']
+        self.N = self.refractive_index_dict
 
         # Initialize parent class ModeSolver
         super().__init__(self.mesh, self.scale, self.n0)
@@ -114,23 +133,43 @@ class PBG(ModeSolver):
     def wavelength(self, lam):
         self._wavelength = lam
         self.k = 2 * np.pi / self._wavelength
-        self.V = self.create_V_function()
+        try:
+            self.V = self.set_V(self.N, self.k)
+        except AttributeError:
+            pass
 
-    def create_V_function(self):
-        """Create coefficient function (V) for mesh."""
-        n_dict = {'Outer': self.n_outer,
-                  'clad': self.n_clad,
-                  'tube': self.n_tube,
-                  'buffer': self.n_buffer,
-                  'core': self.n_core
-                  }
+    @property
+    def N(self):
+        """Get N."""
+        return self._N
 
-        V = ng.CoefficientFunction(
-            [(self.scale * self.k) ** 2 *
-             (self.n0 ** 2 - n_dict[mat] ** 2)
-             for mat in self.mesh.GetMaterials()])
+    @N.setter
+    def N(self, ref_coeff_info):
+        """Set base refractive coefficient function."""
+        if type(ref_coeff_info) == dict:
+            mats = self.mesh.GetMaterials()
+            self._N = ng.CoefficientFunction(
+                [ref_coeff_info[mat] for mat in mats])
+
+        elif type(ref_coeff_info) == ng.CoefficientFunction:
+            self._N = ref_coeff_info
+
+        else:
+            raise NotImplementedError("Only dictionaries or coefficient\
+                                      functions can be used to set base\
+                                    refractive index function N.")
+
+        self.V = self.set_V(self._N, self.k)
+
+    def set_V(self, N, k):
+        """Set coefficient function (V) for mesh."""
+        V = (self.scale * k) ** 2 * (self.n0 ** 2 - N ** 2)
 
         return V
+
+    def reset_N(self):
+        """Reset N to piecewise constant refractive index function."""
+        self.N = self.refractive_index_dict
 
     def create_mesh(self):
         """Set materials, max diameters and create mesh."""
