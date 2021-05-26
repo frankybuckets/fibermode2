@@ -12,10 +12,11 @@ from prettytable import PrettyTable
 # %%
 mode_types = ['A', 'B']
 mode = 'LP11'
-mode_type = 'B'
+mode_type = 'A'
+r = 1
 mode_type_index = mode_types.index(mode_type)
 
-ps = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+ps = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 refs = [0, 1, 2, 3]
 
 folder = '/home/pv/local/fiberamp/fiber/microstruct/pbg/\
@@ -51,7 +52,6 @@ for ref in refs:
     ref_D['ndofs'] = ndofs
     D[ref] = ref_D
 
-r = 0
 name = mode + '-' + mode_type
 title = 'Mode: ' + name + ', Refinements: ' + str(r)
 

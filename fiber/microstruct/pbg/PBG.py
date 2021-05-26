@@ -302,24 +302,28 @@ class PBG(ModeSolver):
                 # Add the circles
                 geo.AddCircle(c=(x, y), r=r, leftdomain=3, rightdomain=2)
 
-    def check_ndof(self, p, refs):
-        """Determine number of dofs for FEM space order p on mesh with refs."""
-        d = deepcopy(self.mesh)  # make independent copy of mesh
+    def ndofs(self, p, refs):
+        """Find number of dofs of fes (order=p) of mesh (with\
+        refinements=refs)."""
+        # Find number of edges elts and verts after refinements
+        edges = self.mesh.nedge
+        elts = self.mesh.ne
+        verts = self.mesh.nv
 
         for r in range(refs):
-            self.refine()  # refine own mesh
+            verts = verts + edges
+            edges = 2 * edges + 3 * elts
+            elts = 4 * elts
 
-        _, X = self.polypmlsystem(p, self.alpha)   # find FEM space
+        # Total grid points for poly is p + d choose d so (p + 2) * (p + 1) / 2
+        # strictly interior points is given by (p - 1) * (p - 2) / 2.
+        interior_points = (p - 1) * (p - 2) * elts / 2
 
-        self.mesh = d   # restore original mesh
+        # edge interiors contribute p-1 each
+        edge_interior_points = (p - 1) * edges
 
-        return X.ndof  # return ndofs
-
-#    def check_ndof2(self, p, refs):
-#        """Estimate ndofs using algebra."""
-#        base_degree = (p + 2) * (p + 1)  # Dimension of P^p_2
-#        bdedge = 2 * self.mesh.nedge - 3 * self.mesh.ne
-#        return None
+        # each vert gives one too, so in total:
+        return verts + interior_points + edge_interior_points
 
     def refine(self):
         """Refine mesh by dividing each triangle into four."""
