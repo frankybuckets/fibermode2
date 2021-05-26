@@ -80,7 +80,10 @@ class PBG(ModeSolver):
     def __init__(self, fiber_param_dict):
 
         for key, value in fiber_param_dict.items():
-            setattr(self, key, value)
+            if key == 'wavelength':  # set later to update k and V
+                pass
+            else:
+                setattr(self, key, value)
 
         # Create Non-Dimensional Radii
         self.R_fiber = self.r_fiber / self.scale
@@ -96,11 +99,11 @@ class PBG(ModeSolver):
         self.mesh = self.create_mesh()
         self.refinements = 0
 
+        # Set wavelength (which sets k and V function)
+        self.wavelength = fiber_param_dict['wavelength']
+
         # Initialize parent class ModeSolver
         super().__init__(self.mesh, self.scale, self.n0)
-
-        # Set V function
-        self.V = self.create_V_function()
 
     @property
     def wavelength(self):
@@ -111,6 +114,7 @@ class PBG(ModeSolver):
     def wavelength(self, lam):
         self._wavelength = lam
         self.k = 2 * np.pi / self._wavelength
+        self.V = self.create_V_function()
 
     def create_V_function(self):
         """Create coefficient function (V) for mesh."""
