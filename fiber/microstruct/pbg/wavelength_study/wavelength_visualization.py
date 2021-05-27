@@ -48,6 +48,6 @@ wavelengths = d['wavelengths']
 
 plt.plot(wavelengths, CLs, 'b-', linewidth=2.5)
 plt.title('Confinment Loss vs. Wavelength.\n')
-plt.xlabel('$\lambda$ (m)')
+# plt.xlabel('$\lambda$ (m)')
 plt.ylabel("CL (dB/m)")
 plt.yscale("log")
