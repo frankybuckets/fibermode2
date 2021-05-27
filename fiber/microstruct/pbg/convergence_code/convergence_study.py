@@ -32,7 +32,7 @@ import os
 
 # Fiber and mode names on which to perform convergence study. ##
 fiber_name = 'lyr6cr2'   # Note: change import above to correspond.
-mode_name = 'LP01'
+mode_name = 'LP11'
 
 
 # Starting location for eigenvalue iterations. #########################
@@ -50,7 +50,7 @@ if not os.path.isdir(os.path.relpath(folder)):
 directory and begin again.")
 
 # Polynomial Degrees and Refinements to cycle through. #################
-ps = [1]
+ps = [3]
 refs = [0]
 
 
