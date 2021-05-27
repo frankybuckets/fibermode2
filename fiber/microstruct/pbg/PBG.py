@@ -171,6 +171,14 @@ class PBG(ModeSolver):
         """Reset N to piecewise constant refractive index function."""
         self.N = self.refractive_index_dict
 
+    def rotate(self, angle):
+        """Rotate fiber by 'angle' (radians)."""
+        self.geo = self.geometry(self.sep, self.r_tube, self.R_fiber, self.R,
+                                 self.Rout, self.scale, self.r_core,
+                                 self.layers, self.skip, self.p,
+                                 self.pattern, rot=angle)
+        self.mesh = self.create_mesh()
+
     def create_mesh(self):
         """Set materials, max diameters and create mesh."""
         # Set the materials for the domain.
@@ -195,8 +203,16 @@ class PBG(ModeSolver):
 
         return mesh
 
+    def reset_mesh(self):
+        """Reset to original mesh."""
+        self.geo = self.geometry(self.sep, self.r_tube, self.R_fiber, self.R,
+                                 self.Rout, self.scale, self.r_core,
+                                 self.layers, self.skip, self.p,
+                                 self.pattern)
+        self.mesh = self.create_mesh()
+
     def geometry(self, sep, r, R_fiber, R, Rout, scale, r_core, layers=6,
-                 skip=1, p=6, pattern=[]):
+                 skip=1, p=6, pattern=[], rot=0):
         """
         Construct and return Non-Dimensionalized geometry.
 
@@ -253,9 +269,10 @@ class PBG(ModeSolver):
 
             if len(pattern) > 0:
                 self.add_layer(geo, r, Ri, p=p, innerpoints=index_layer - 1,
-                               mask=pattern[i])
+                               mask=pattern[i], rot=rot)
             else:
-                self.add_layer(geo, r, Ri, p=p, innerpoints=index_layer - 1)
+                self.add_layer(geo, r, Ri, p=p, innerpoints=index_layer - 1,
+                               rot=rot)
 
         # Create boundary of fiber and PML region
 
@@ -275,7 +292,7 @@ class PBG(ModeSolver):
 
         return geo
 
-    def add_layer(self, geo, r, R, p=6, innerpoints=0, mask=None):
+    def add_layer(self, geo, r, R, p=6, innerpoints=0, mask=None, rot=0):
         """
         Add a single layer of small circles of radius r at vertices of p-sided\
         polygon (inscribed in circle of radius R) to geometry geo.
@@ -298,6 +315,8 @@ class PBG(ModeSolver):
             is 0.
         mask : list, optional
             List of zeros and ones. Used to form pattern. The default is None.
+        rot: float, optional
+            Rotate polygon by 'rot' radians. The default is 0.
 
         Raises
         ------
@@ -321,10 +340,10 @@ class PBG(ModeSolver):
 
                 # Get vertex points of polygon
 
-                x0, y0 = R * np.cos(i * 2 * np.pi / p), R * \
-                    np.sin(i * 2 * np.pi / p)
-                x1, y1 = R * np.cos((i + 1) * 2 * np.pi / p), R * \
-                    np.sin((i + 1) * 2 * np.pi / p)
+                x0, y0 = R * np.cos(i * 2 * np.pi / p + rot), R * \
+                    np.sin(i * 2 * np.pi / p + rot)
+                x1, y1 = R * np.cos((i + 1) * 2 * np.pi / p + rot), R * \
+                    np.sin((i + 1) * 2 * np.pi / p + rot)
 
                 for s in range(innerpoints + 1):
 
