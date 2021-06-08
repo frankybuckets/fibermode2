@@ -5,7 +5,6 @@ import os
 import pickle
 from fiberamp.fiber.modesolver import ModeSolver
 from pyeigfeast.spectralproj.ngs import NGvecs
-from copy import deepcopy
 
 
 class PBG(ModeSolver):
@@ -45,7 +44,9 @@ class PBG(ModeSolver):
     - scale: float
         Factor by which to scale the fiber parameters to make a
         non-dimensional geometry.  Frequently chosen to make the core
-        region unit radius.
+        region unit radius.  Note: resetting scale does NOT reset attributes
+        derived from it (including geo, mesh, V).  If you change the scale you
+        need to rebuild the object.
     - n_tube, n_clad: float
         Refractive indices of the tube and cladding material respectively.
     - n_core, n_buffer, n_outer: float
@@ -65,11 +66,22 @@ class PBG(ModeSolver):
         Non-Dimensional radii indicating the beginning and end of the PML
         region.
     - wavelength, k: floats
-        Wavelength and wavenumber of light for which we seek modes.
+        Wavelength and wavenumber of light for which we seek modes. Setting
+        wavelength automatically sets k and V (see below).
     - geo, mesh: NGsolve objects
         Geometry and mesh of fiber.
+    - refractive_index_dict: dict
+        Dictionary giving refractive index of fiber materials.
     - V: NGsolve CoefficientFunction object
-        Refractive index function of fiber.
+        Coefficient function based on refractive index function N, used in
+        differential equation to be solved.
+    - N: NGsolve CoefficientFunction object
+        The refractive index function of the fiber. Often referred to as 'n'
+        in the literature. By default this is a piecewise constant function
+        equal to the refractive index of the material. Can be updated to any
+        desired coefficient function defined on the mesh materials.  To reset
+        to original values use self.reset_N method.  Note: updating N updates
+        V function.
 
     Methods
     -------
@@ -80,7 +92,10 @@ class PBG(ModeSolver):
     def __init__(self, fiber_param_dict):
 
         for key, value in fiber_param_dict.items():
-            setattr(self, key, value)
+            if key == 'wavelength':  # set later to update k and V
+                pass
+            else:
+                setattr(self, key, value)
 
         # Create Non-Dimensional Radii
         self.R_fiber = self.r_fiber / self.scale
@@ -95,12 +110,19 @@ class PBG(ModeSolver):
         # Create Mesh
         self.mesh = self.create_mesh()
         self.refinements = 0
+        self.refractive_index_dict = {'Outer': self.n_outer,
+                                      'clad': self.n_clad,
+                                      'tube': self.n_tube,
+                                      'buffer': self.n_buffer,
+                                      'core': self.n_core
+                                      }
+
+        # Set wavelength and base coefficent function (these then set k and V)
+        self.wavelength = fiber_param_dict['wavelength']
+        self.N = self.refractive_index_dict
 
         # Initialize parent class ModeSolver
         super().__init__(self.mesh, self.scale, self.n0)
-
-        # Set V function
-        self.V = self.create_V_function()
 
     @property
     def wavelength(self):
@@ -111,22 +133,51 @@ class PBG(ModeSolver):
     def wavelength(self, lam):
         self._wavelength = lam
         self.k = 2 * np.pi / self._wavelength
+        try:
+            self.V = self.set_V(self.N, self.k)
+        except AttributeError:
+            pass
 
-    def create_V_function(self):
-        """Create coefficient function (V) for mesh."""
-        n_dict = {'Outer': self.n_outer,
-                  'clad': self.n_clad,
-                  'tube': self.n_tube,
-                  'buffer': self.n_buffer,
-                  'core': self.n_core
-                  }
+    @property
+    def N(self):
+        """Get N."""
+        return self._N
 
-        V = ng.CoefficientFunction(
-            [(self.scale * self.k) ** 2 *
-             (self.n0 ** 2 - n_dict[mat] ** 2)
-             for mat in self.mesh.GetMaterials()])
+    @N.setter
+    def N(self, ref_coeff_info):
+        """Set base refractive coefficient function."""
+        if type(ref_coeff_info) == dict:
+            mats = self.mesh.GetMaterials()
+            self._N = ng.CoefficientFunction(
+                [ref_coeff_info[mat] for mat in mats])
+
+        elif type(ref_coeff_info) == ng.CoefficientFunction:
+            self._N = ref_coeff_info
+
+        else:
+            raise NotImplementedError("Only dictionaries or coefficient\
+                                      functions can be used to set base\
+                                    refractive index function N.")
+
+        self.V = self.set_V(self._N, self.k)
+
+    def set_V(self, N, k):
+        """Set coefficient function (V) for mesh."""
+        V = (self.scale * k) ** 2 * (self.n0 ** 2 - N ** 2)
 
         return V
+
+    def reset_N(self):
+        """Reset N to piecewise constant refractive index function."""
+        self.N = self.refractive_index_dict
+
+    def rotate(self, angle):
+        """Rotate fiber by 'angle' (radians)."""
+        self.geo = self.geometry(self.sep, self.r_tube, self.R_fiber, self.R,
+                                 self.Rout, self.scale, self.r_core,
+                                 self.layers, self.skip, self.p,
+                                 self.pattern, rot=angle)
+        self.mesh = self.create_mesh()
 
     def create_mesh(self):
         """Set materials, max diameters and create mesh."""
@@ -152,8 +203,16 @@ class PBG(ModeSolver):
 
         return mesh
 
+    def reset_mesh(self):
+        """Reset to original mesh."""
+        self.geo = self.geometry(self.sep, self.r_tube, self.R_fiber, self.R,
+                                 self.Rout, self.scale, self.r_core,
+                                 self.layers, self.skip, self.p,
+                                 self.pattern)
+        self.mesh = self.create_mesh()
+
     def geometry(self, sep, r, R_fiber, R, Rout, scale, r_core, layers=6,
-                 skip=1, p=6, pattern=[]):
+                 skip=1, p=6, pattern=[], rot=0):
         """
         Construct and return Non-Dimensionalized geometry.
 
@@ -210,9 +269,10 @@ class PBG(ModeSolver):
 
             if len(pattern) > 0:
                 self.add_layer(geo, r, Ri, p=p, innerpoints=index_layer - 1,
-                               mask=pattern[i])
+                               mask=pattern[i], rot=rot)
             else:
-                self.add_layer(geo, r, Ri, p=p, innerpoints=index_layer - 1)
+                self.add_layer(geo, r, Ri, p=p, innerpoints=index_layer - 1,
+                               rot=rot)
 
         # Create boundary of fiber and PML region
 
@@ -232,7 +292,7 @@ class PBG(ModeSolver):
 
         return geo
 
-    def add_layer(self, geo, r, R, p=6, innerpoints=0, mask=None):
+    def add_layer(self, geo, r, R, p=6, innerpoints=0, mask=None, rot=0):
         """
         Add a single layer of small circles of radius r at vertices of p-sided\
         polygon (inscribed in circle of radius R) to geometry geo.
@@ -255,6 +315,8 @@ class PBG(ModeSolver):
             is 0.
         mask : list, optional
             List of zeros and ones. Used to form pattern. The default is None.
+        rot: float, optional
+            Rotate polygon by 'rot' radians. The default is 0.
 
         Raises
         ------
@@ -278,10 +340,10 @@ class PBG(ModeSolver):
 
                 # Get vertex points of polygon
 
-                x0, y0 = R * np.cos(i * 2 * np.pi / p), R * \
-                    np.sin(i * 2 * np.pi / p)
-                x1, y1 = R * np.cos((i + 1) * 2 * np.pi / p), R * \
-                    np.sin((i + 1) * 2 * np.pi / p)
+                x0, y0 = R * np.cos(i * 2 * np.pi / p + rot), R * \
+                    np.sin(i * 2 * np.pi / p + rot)
+                x1, y1 = R * np.cos((i + 1) * 2 * np.pi / p + rot), R * \
+                    np.sin((i + 1) * 2 * np.pi / p + rot)
 
                 for s in range(innerpoints + 1):
 
@@ -302,24 +364,28 @@ class PBG(ModeSolver):
                 # Add the circles
                 geo.AddCircle(c=(x, y), r=r, leftdomain=3, rightdomain=2)
 
-    def check_ndof(self, p, refs):
-        """Determine number of dofs for FEM space order p on mesh with refs."""
-        d = deepcopy(self.mesh)  # make independent copy of mesh
+    def ndofs(self, p, refs):
+        """Find number of dofs of fes (order=p) of mesh (with\
+        refinements=refs)."""
+        # Find number of edges elts and verts after refinements
+        edges = self.mesh.nedge
+        elts = self.mesh.ne
+        verts = self.mesh.nv
 
         for r in range(refs):
-            self.refine()  # refine own mesh
+            verts = verts + edges
+            edges = 2 * edges + 3 * elts
+            elts = 4 * elts
 
-        _, X = self.polypmlsystem(p, self.alpha)   # find FEM space
+        # Total grid points for poly is p + d choose d so (p + 2) * (p + 1) / 2
+        # strictly interior points is given by (p - 1) * (p - 2) / 2.
+        interior_points = (p - 1) * (p - 2) * elts / 2
 
-        self.mesh = d   # restore original mesh
+        # edge interiors contribute p-1 each
+        edge_interior_points = (p - 1) * edges
 
-        return X.ndof  # return ndofs
-
-#    def check_ndof2(self, p, refs):
-#        """Estimate ndofs using algebra."""
-#        base_degree = (p + 2) * (p + 1)  # Dimension of P^p_2
-#        bdedge = 2 * self.mesh.nedge - 3 * self.mesh.ne
-#        return None
+        # each vert gives one too, so in total:
+        return verts + interior_points + edge_interior_points
 
     def refine(self):
         """Refine mesh by dividing each triangle into four."""
