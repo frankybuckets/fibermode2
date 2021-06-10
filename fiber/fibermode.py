@@ -22,7 +22,7 @@ class FiberMode(ModeSolver):
 
     def __init__(self, fibername=None, fromfile=None,
                  R=None, Rout=None, geom=None,
-                 h=3, hcore=None, refine=0):
+                 h=3, hcore=None, refine=0, dtemp=None):
         """
         EITHER provide a prefix "filename" of a collection of files, e.g.,
 
@@ -42,6 +42,9 @@ class FiberMode(ModeSolver):
           * cladding and pml meshsize is "h", while core mesh size
             is "hcore" (set to a default of hcore = h/10),
           * degree "p" finite element space is set on the mesh.
+          * when dtemp is specified, the index of refraction is set
+            to explicitly depend on temperature and the thermo-optic
+            coefficient.
 
         (Variables beginning with capital R such as "R", "Rout" are
         nondimensional lengths -- in contrast, "rout" found in other classes
@@ -85,6 +88,9 @@ class FiberMode(ModeSolver):
         self.ngspmlset = None  # True if ngsolve pml set (then cant reuse mesh)
         self.X = None
         self.curvature = None
+
+        self.dtemp = dtemp
+        self.dndT = 1.285e-5
 
         self.setnondimmat(curvature=0)  # sets self.k and self.V
         L = self.fiber.rcore
@@ -178,12 +184,23 @@ class FiberMode(ModeSolver):
 
         self.geo = geo
 
+    def updateindex(self, dtemp, curvature=12, bendfactor=1.28):
+        """
+        Sets the temperature change dtemp on which the index of refraction is
+        is dependent. This change then made within the method setnondimmat()
+        in order to update the potential function self.V(). Optional arguments
+        to update the curvature and bendfactor are also provided.
+        """
+
+        self.dtemp = dtemp
+        self.setnondimmat(curvature=curvature, bendfactor=bendfactor)
+
     def setnondimmat(self, curvature=12, bendfactor=1.28):
         """
         When a fiber of refractive index n is bent to have the
         input "curvature" (curvature = reciprocal of bending radius,
         since we assume bending along a perfect circle), the changed
-        refratcive index is modeled by the formula
+        refractive index is modeled by the formula
 
             nbent = n * (1 + (x * curvature/bendfactor))
 
@@ -198,10 +215,22 @@ class FiberMode(ModeSolver):
         self.k = fib.ks
 
         if curvature == 0:
-            V = fib.fiberV()
-            self.V = CoefficientFunction([0, 0, -V*V])
+            if self.dtemp is None:
+                V = fib.fiberV()
+                self.V = CoefficientFunction([0, 0, -V*V])
+            else:
+                a = fib.rcore
+                n = CoefficientFunction([fib.nclad, fib.nclad, fib.ncore]) + \
+                    self.dndT * self.dtemp
+
+                self.V = (a*fib.ks)**2 * (fib.nclad**2 - n**2)
         else:
-            n = CoefficientFunction([fib.nclad, fib.nclad, fib.ncore])
+            if self.dtemp is None:
+                n = CoefficientFunction([fib.nclad, fib.nclad, fib.ncore])
+            else:
+                n = CoefficientFunction([fib.nclad, fib.nclad, fib.ncore]) + \
+                    self.dndT * self.dtemp
+
             a = fib.rcore
             ka2 = (fib.ks * a) ** 2
             kan2 = ka2 * (fib.nclad ** 2)
