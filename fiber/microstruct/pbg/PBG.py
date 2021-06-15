@@ -158,13 +158,11 @@ class PBG(ModeSolver):
             raise NotImplementedError("Only dictionaries or coefficient\
                                       functions can be used to set base\
                                     refractive index function N.")
-
         self.V = self.set_V(self._N, self.k)
 
     def set_V(self, N, k):
         """Set coefficient function (V) for mesh."""
         V = (self.scale * k) ** 2 * (self.n0 ** 2 - N ** 2)
-
         return V
 
     def reset_N(self):
@@ -349,7 +347,7 @@ class PBG(ModeSolver):
 
                     # Interpolate between vertices to get innerpoints
 
-                    t = s * 1/(innerpoints + 1)
+                    t = s * 1 / (innerpoints + 1)
                     xs.append((1 - t) * x0 + t * x1)
                     ys.append((1 - t) * y0 + t * y1)
 
