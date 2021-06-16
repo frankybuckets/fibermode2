@@ -248,7 +248,8 @@ class ModeSolver:
             self.estimatepolypmldecay(Z, alpha)
 
         moreoutputs = {'longY': Y, 'longYl': Yl,
-                       'ewshistory': ews, 'bdrnorm': bdrnrm}
+                       'ewshistory': ews, 'bdrnorm': bdrnrm,
+                       'converged': cgd}
 
         return Z, y, yl, beta, P, moreoutputs
 
