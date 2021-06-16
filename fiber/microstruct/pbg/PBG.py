@@ -32,7 +32,7 @@ class PBG(ModeSolver):
     - skip: int
         Number of layers skipped to make the core region. Does not subtract
         from total number of tubes forming microstructure region.
-    - sep: float
+    - Λ: float
         Distance separating layers of tubes.
     - r_tube: float
         Radius of the tubes.
@@ -103,7 +103,7 @@ class PBG(ModeSolver):
         self.Rout = (self.r_fiber + self.t_buffer + self.t_outer) / self.scale
 
         # Create geometry
-        self.geo = self.geometry(self.sep, self.r_tube, self.R_fiber, self.R,
+        self.geo = self.geometry(self.Λ, self.r_tube, self.R_fiber, self.R,
                                  self.Rout, self.scale, self.r_core,
                                  self.layers, self.skip, self.p, self.pattern)
 
@@ -171,7 +171,7 @@ class PBG(ModeSolver):
 
     def rotate(self, angle):
         """Rotate fiber by 'angle' (radians)."""
-        self.geo = self.geometry(self.sep, self.r_tube, self.R_fiber, self.R,
+        self.geo = self.geometry(self.Λ, self.r_tube, self.R_fiber, self.R,
                                  self.Rout, self.scale, self.r_core,
                                  self.layers, self.skip, self.p,
                                  self.pattern, rot=angle)
@@ -203,20 +203,20 @@ class PBG(ModeSolver):
 
     def reset_mesh(self):
         """Reset to original mesh."""
-        self.geo = self.geometry(self.sep, self.r_tube, self.R_fiber, self.R,
+        self.geo = self.geometry(self.Λ, self.r_tube, self.R_fiber, self.R,
                                  self.Rout, self.scale, self.r_core,
                                  self.layers, self.skip, self.p,
                                  self.pattern)
         self.mesh = self.create_mesh()
 
-    def geometry(self, sep, r, R_fiber, R, Rout, scale, r_core, layers=6,
+    def geometry(self, Λ, r, R_fiber, R, Rout, scale, r_core, layers=6,
                  skip=1, p=6, pattern=[], rot=0):
         """
         Construct and return Non-Dimensionalized geometry.
 
         Parameters
         ----------
-        sep : float
+        Λ : float
             Distance between layers of tubes.
         r : float
             Radius of tubes.
@@ -248,7 +248,7 @@ class PBG(ModeSolver):
         geo = geom2d.SplineGeometry()
 
         # Non-Dimensionalize needed physical parameters
-        sep /= scale
+        Λ /= scale
         r /= scale
 
         # Create core region
@@ -263,7 +263,7 @@ class PBG(ModeSolver):
         for i in range(layers):
 
             index_layer = skip + i
-            Ri = index_layer * sep
+            Ri = index_layer * Λ
 
             if len(pattern) > 0:
                 self.add_layer(geo, r, Ri, p=p, innerpoints=index_layer - 1,

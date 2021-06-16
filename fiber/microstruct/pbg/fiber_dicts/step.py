@@ -5,7 +5,7 @@ layers = 1                 # number of layers of lattice
 skip = 0                   # number of layers to skip before beginning lattice
 pattern = []               # pattern determining microstructure
 
-sep = 7 * 10**-6           # separation between layers
+Λ = 7 * 10**-6             # separation between layers
 r_tube = 12.5e-6           # radius of inner tubes
 r_core = r_tube            # radius of core region
 r_fiber = 2 * r_core       # radius of fiber
@@ -44,7 +44,7 @@ params = {
     'layers': layers,
     'skip': skip,
     'pattern': pattern,
-    'sep': sep,
+    'Λ': Λ,
     'r_tube': r_tube,
     'r_core': r_core,
     'r_fiber': r_fiber,
