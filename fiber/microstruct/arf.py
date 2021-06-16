@@ -17,7 +17,7 @@ import pickle
 class ARF(ModeSolver):
 
     def __init__(self, name=None, freecapil=False,
-                 outermaterials=None, inc=0, **kwargs):
+                 outermaterials=None, **kwargs):
         """
         PARAMETERS:
 
@@ -29,16 +29,14 @@ class ARF(ModeSolver):
                 be modeled as free standing in the hollow region.
                 Otherwise, they will be embedded into the glass sheath.
 
-           outermaterials: A tuple (or iterable) containing the material
+           outermaterials: A string (or iterable) containing the material
                 specification for each outer region 'OuterAir' and
                 'Outer'. The index of refraction of each such region is
-                set accordingly. If an iterable of length 1 is given, then
-                we assume all outer regions to have the index of refraction
-                of that material.
-
-           inc: A value between 0 and 1, inclusive, that interpolates the
-                index of refraction in the PML region between that of air
-                and the specified outer material given in outermaterials.
+                set accordingly. If a string or an iterable of length 1
+                is given, then we assume all outer regions to have the
+                index of refraction of that material. Otherwise, None
+                gives the default setting of all air outside of the physical
+                fiber cross-section.
 
            kwargs: Override default values of updatable length attributes.
                 Give length values in units of micrometers, e.g.,
@@ -207,7 +205,6 @@ class ARF(ModeSolver):
             n_outerair = self.n_pol
 
         n_outer = self.n_air
-        self.inc = inc
         if self.outermaterials[1] == 'silica':
             n_outer = self.n_si
         elif self.outermaterials[1] == 'polymer':
