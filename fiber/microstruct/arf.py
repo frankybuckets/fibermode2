@@ -16,7 +16,8 @@ import pickle
 
 class ARF(ModeSolver):
 
-    def __init__(self, name=None, freecapil=False, **kwargs):
+    def __init__(self, name=None, freecapil=False,
+                 outermaterials=None, **kwargs):
         """
         PARAMETERS:
 
@@ -27,6 +28,15 @@ class ARF(ModeSolver):
            freecapil: If True, capillary tubes in the microstructure will
                 be modeled as free standing in the hollow region.
                 Otherwise, they will be embedded into the glass sheath.
+
+           outermaterials: A string (or iterable) containing the material
+                specification for each outer region 'OuterAir' and
+                'Outer'. The index of refraction of each such region is
+                set accordingly. If a string or an iterable of length 1
+                is given, then we assume all outer regions to have the
+                index of refraction of that material. Otherwise, None
+                gives the default setting of all air outside of the physical
+                fiber cross-section.
 
            kwargs: Override default values of updatable length attributes.
                 Give length values in units of micrometers, e.g.,
@@ -50,6 +60,8 @@ class ARF(ModeSolver):
 
         self.n_air = 1.00027717     # refractive index of air
         self.n_si = sellmeier.index(self.wavelength, material='FusedSilica')
+        self.NA_pol = 0.46
+        self.n_pol = np.sqrt(self.n_si**2 - self.NA_pol**2)
 
         # UPDATE attributes set in ARF.set() using given inputs
 
@@ -165,19 +177,52 @@ class ARF(ModeSolver):
 
         # MATERIAL COEFFICIENTS
 
+        # Check the outer materials to see if any are valid.
+        acceptable_materials = ('air', 'silica', 'polymer')
+
+        # Make the outer materials tuple contain two elements as needed.
+        if outermaterials is None:
+            self.outermaterials = ('air',) * 2
+        elif isinstance(outermaterials, str):
+            self.outermaterials = (outermaterials,) * 2
+        elif len(outermaterials) == 0:
+            self.outermaterials = ('air',) * 2
+        elif len(outermaterials) == 1:
+            self.outermaterials = (outermaterials[0],) * 2
+        else:
+            self.outermaterials = outermaterials[:2]
+
+        if (not (self.outermaterials[0] in acceptable_materials)) or \
+           (not (self.outermaterials[1] in acceptable_materials)):
+            raise ValueError('Outer materials must be one of \'air\',' +
+                             '\'polymer\', or \'silica\'.')
+
+        # Set the material parameters based on the outermaterials tuple.
+        n_outerair = self.n_air
+        if self.outermaterials[0] == 'silica':
+            n_outerair = self.n_si
+        elif self.outermaterials[0] == 'polymer':
+            n_outerair = self.n_pol
+
+        n_outer = self.n_air
+        if self.outermaterials[1] == 'silica':
+            n_outer = self.n_si
+        elif self.outermaterials[1] == 'polymer':
+            n_outer = self.n_pol
+
         # index of refraction
-        index = {'Outer':         self.n_air,
-                 'OuterAir':      self.n_air,
-                 'Si':            self.n_si,
-                 'CapillaryEncl': self.n_air,
-                 'InnerCore':     self.n_air,
-                 'FillAir':       self.n_air}
+        self.indexdict = {'Outer':         n_outer,
+                          'OuterAir':      n_outerair,
+                          'Si':            self.n_si,
+                          'CapillaryEncl': self.n_air,
+                          'InnerCore':     self.n_air,
+                          'FillAir':       self.n_air}
         self.index = ng.CoefficientFunction(
-            [index[mat] for mat in self.mesh.GetMaterials()])
+            [self.indexdict[mat] for mat in self.mesh.GetMaterials()])
 
         self.setnondimmat()  # sets self.V and self.k
         L = self.scaling * 1e-6
-        n0 = self.n_air
+        n0 = self.indexdict['Outer']
         super().__init__(self.mesh, L, n0)
 
         # OUTPUT LOCATION
@@ -194,6 +239,31 @@ class ARF(ModeSolver):
     def wavelength(self, lam):
         self._wavelength = lam
         self.n_si = sellmeier.index(self.wavelength, material='FusedSilica')
+        self.n_pol = np.sqrt(self.n_si**2 - self.NA_pol**2)
+
+        # Set the material parameters based on the outermaterials tuple.
+        n_outerair = self.n_air
+        if self.outermaterials[0] == 'silica':
+            n_outerair = self.n_si
+        elif self.outermaterials[0] == 'polymer':
+            n_outerair = self.n_pol
+
+        n_outer = self.n_air
+        if self.outermaterials[1] == 'silica':
+            n_outer = self.n_si
+        elif self.outermaterials[1] == 'polymer':
+            n_outer = self.n_pol
+
+        # Reset index of refraction
+        self.indexdict = {'Outer':         n_outer,
+                          'OuterAir':      n_outerair,
+                          'Si':            self.n_si,
+                          'CapillaryEncl': self.n_air,
+                          'InnerCore':     self.n_air,
+                          'FillAir':       self.n_air}
+        self.index = ng.CoefficientFunction(
+            [self.indexdict[mat] for mat in self.mesh.GetMaterials()])
+
         self.setnondimmat()
 
     def setnondimmat(self):
@@ -201,12 +271,13 @@ class ARF(ModeSolver):
 
         a = self.scaling * 1e-6
         k = 2 * np.pi / self.wavelength
+        idx = self.indexdict
         m = {'Outer':         0,
-             'OuterAir':      0,
-             'Si':            self.n_air**2 - self.n_si**2,
-             'CapillaryEncl': 0,
-             'InnerCore':     0,
-             'FillAir':       0}
+             'OuterAir':      idx['Outer']**2 - idx['OuterAir']**2,
+             'Si':            idx['Outer']**2 - idx['Si']**2,
+             'CapillaryEncl': idx['Outer']**2 - idx['CapillaryEncl']**2,
+             'InnerCore':     idx['Outer']**2 - idx['InnerCore']**2,
+             'FillAir':       idx['Outer']**2 - idx['FillAir']**2}
 
         self.V = ng.CoefficientFunction(
             [(a*k)**2 * m[mat] for mat in self.mesh.GetMaterials()])
