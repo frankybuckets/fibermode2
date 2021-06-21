@@ -444,7 +444,8 @@ class FiberMode(ModeSolver):
                  bendfactor=1.28, **kwargs):
 
         self.setnondimmat(curvature=curvature, bendfactor=bendfactor)
-        z, y, _, betas, P, _ = self.leakymode(p=p, ctr=centerZ, rad=radiusZ, **kwargs)
+        z, y, _, betas, P, _ = self.leakymode(p=p, ctr=centerZ, rad=radiusZ,
+                                              **kwargs)
 
         print('Nonlinear eigenvalues in nondimensional Z-plane:\n', z)
         print('Physical propagation constants:\n', betas)
