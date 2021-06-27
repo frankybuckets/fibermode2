@@ -172,15 +172,17 @@ class PBG(ModeSolver):
 
     def rotate(self, angle):
         """Rotate fiber by 'angle' (radians)."""
-        def rot(x, y, z):
-            r = x*x + y * y + z * z
-            R = r ** (1/2)
-            return [R * np.cos(angle), R * np.sin(angle), z]
-        # self.geo = self.geometry(self.Λ, self.r_tube, self.R_fiber, self.R,
-        #                          self.Rout, self.scale, self.r_core,
-        #                          self.layers, self.skip, self.p,
-        #                          self.pattern, rot=angle)
-        self.mesh = modify_mesh(self.mesh, rot)
+        # def rot(x, y, z, theta=angle):
+        #     r = np.sqrt(x*x + y*y)
+        #     theta += np.arctan2(y, x)
+        #     return [r * np.cos(theta), r * np.sin(theta), z]
+        self.geo = self.geometry(self.Λ, self.r_tube, self.R_fiber, self.R,
+                                 self.Rout, self.scale, self.r_core,
+                                 self.layers, self.skip, self.p,
+                                 self.pattern, rot=angle)
+        # self.mesh = ng.Mesh(modify_mesh(self.mesh.ngmesh.Copy(), rot))
+        self.mesh = self.create_mesh()
+        # self.mesh.Curve(3)
 
     def create_mesh(self):
         """Set materials, max diameters and create mesh."""
