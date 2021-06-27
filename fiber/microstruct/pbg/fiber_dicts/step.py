@@ -8,14 +8,14 @@ pattern = []               # pattern determining microstructure
 Λ = 7 * 10**-6             # separation between layers
 r_tube = 12.5e-6           # radius of inner tubes
 r_core = r_tube            # radius of core region
-r_fiber = 2 * r_core       # radius of fiber
+r_fiber = 4 * r_core       # radius of fiber
 scale = r_core             # scaling factor
 
 
 # Physical Parameters
 
-n_tube = 1.45097                    # refractive index of tube material
-n_clad = 1.44973                    # refractive index of cladding material
+n_tube = 1.48                 # refractive index of tube material
+n_clad = 1.45                  # refractive index of cladding material
 n_core = n_clad                     # refractive index of core
 n_buffer = n_clad                   # refractive index of buffer region
 n_outer = n_clad                    # refractive index of outer PML region
@@ -26,7 +26,7 @@ wavelength = 1.064e-6
 # PML Parameters.  Dimensional
 
 t_buffer = 0             # thickness of buffer region (between R_fiber and R)
-t_outer = 14 * r_core    # thickness of outer region (between R and Rout)
+t_outer = 10 * r_core    # thickness of outer region (between R and Rout)
 alpha = 5                # PML factor
 
 # Mesh Parameters. Non-Dimensional
