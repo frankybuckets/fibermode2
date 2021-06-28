@@ -5,7 +5,7 @@ import os
 import pickle
 from fiberamp.fiber.modesolver import ModeSolver
 from pyeigfeast.spectralproj.ngs import NGvecs, SpectralProjNG
-from fiberamp.fiber.modmesh import modify_mesh
+# from fiberamp.fiber.modmesh import modify_mesh
 
 
 class PBG(ModeSolver):
