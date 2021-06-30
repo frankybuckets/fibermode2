@@ -4,7 +4,7 @@ import numpy as np
 import os
 import pickle
 from fiberamp.fiber.modesolver import ModeSolver
-from pyeigfeast.spectralproj.ngs import NGvecs
+from pyeigfeast.spectralproj.ngs import NGvecs, SpectralProjNG
 
 
 class PBG(ModeSolver):
@@ -12,8 +12,8 @@ class PBG(ModeSolver):
     Create a Photonic Band Gap (PBG) fiber object.
 
     These types of fibers have a lattice like microstructure that can allow
-    for modes to be carried in a lower index core region.  It is also possible
-    to model Photonic Crystal Fibers (PCFs) using this class using appropriate
+    modes to be carried in a lower index core region.  It is also possible
+    to model Photonic Crystal Fibers (PCFs) via this class using appropriate
     parameters.  The PBG object can then be used to find the modes of the
     associated fiber using methods from the parent class ModeSolver.
 
@@ -32,7 +32,7 @@ class PBG(ModeSolver):
     - skip: int
         Number of layers skipped to make the core region. Does not subtract
         from total number of tubes forming microstructure region.
-    - sep: float
+    - Λ: float
         Distance separating layers of tubes.
     - r_tube: float
         Radius of the tubes.
@@ -103,7 +103,7 @@ class PBG(ModeSolver):
         self.Rout = (self.r_fiber + self.t_buffer + self.t_outer) / self.scale
 
         # Create geometry
-        self.geo = self.geometry(self.sep, self.r_tube, self.R_fiber, self.R,
+        self.geo = self.geometry(self.Λ, self.r_tube, self.R_fiber, self.R,
                                  self.Rout, self.scale, self.r_core,
                                  self.layers, self.skip, self.p, self.pattern)
 
@@ -158,13 +158,11 @@ class PBG(ModeSolver):
             raise NotImplementedError("Only dictionaries or coefficient\
                                       functions can be used to set base\
                                     refractive index function N.")
-
         self.V = self.set_V(self._N, self.k)
 
     def set_V(self, N, k):
         """Set coefficient function (V) for mesh."""
         V = (self.scale * k) ** 2 * (self.n0 ** 2 - N ** 2)
-
         return V
 
     def reset_N(self):
@@ -173,7 +171,7 @@ class PBG(ModeSolver):
 
     def rotate(self, angle):
         """Rotate fiber by 'angle' (radians)."""
-        self.geo = self.geometry(self.sep, self.r_tube, self.R_fiber, self.R,
+        self.geo = self.geometry(self.Λ, self.r_tube, self.R_fiber, self.R,
                                  self.Rout, self.scale, self.r_core,
                                  self.layers, self.skip, self.p,
                                  self.pattern, rot=angle)
@@ -205,20 +203,20 @@ class PBG(ModeSolver):
 
     def reset_mesh(self):
         """Reset to original mesh."""
-        self.geo = self.geometry(self.sep, self.r_tube, self.R_fiber, self.R,
+        self.geo = self.geometry(self.Λ, self.r_tube, self.R_fiber, self.R,
                                  self.Rout, self.scale, self.r_core,
                                  self.layers, self.skip, self.p,
                                  self.pattern)
         self.mesh = self.create_mesh()
 
-    def geometry(self, sep, r, R_fiber, R, Rout, scale, r_core, layers=6,
+    def geometry(self, Λ, r, R_fiber, R, Rout, scale, r_core, layers=6,
                  skip=1, p=6, pattern=[], rot=0):
         """
         Construct and return Non-Dimensionalized geometry.
 
         Parameters
         ----------
-        sep : float
+        Λ : float
             Distance between layers of tubes.
         r : float
             Radius of tubes.
@@ -250,7 +248,7 @@ class PBG(ModeSolver):
         geo = geom2d.SplineGeometry()
 
         # Non-Dimensionalize needed physical parameters
-        sep /= scale
+        Λ /= scale
         r /= scale
 
         # Create core region
@@ -265,7 +263,7 @@ class PBG(ModeSolver):
         for i in range(layers):
 
             index_layer = skip + i
-            Ri = index_layer * sep
+            Ri = index_layer * Λ
 
             if len(pattern) > 0:
                 self.add_layer(geo, r, Ri, p=p, innerpoints=index_layer - 1,
@@ -349,7 +347,7 @@ class PBG(ModeSolver):
 
                     # Interpolate between vertices to get innerpoints
 
-                    t = s * 1/(innerpoints + 1)
+                    t = s * 1 / (innerpoints + 1)
                     xs.append((1 - t) * x0 + t * x1)
                     ys.append((1 - t) * y0 + t * y1)
 
@@ -364,35 +362,72 @@ class PBG(ModeSolver):
                 # Add the circles
                 geo.AddCircle(c=(x, y), r=r, leftdomain=3, rightdomain=2)
 
-    def ndofs(self, p, refs):
-        """Find number of dofs of fes (order=p) of mesh (with\
-        refinements=refs)."""
-        # Find number of edges elts and verts after refinements
-        edges = self.mesh.nedge
-        elts = self.mesh.ne
-        verts = self.mesh.nv
-
-        for r in range(refs):
-            verts = verts + edges
-            edges = 2 * edges + 3 * elts
-            elts = 4 * elts
-
-        # Total grid points for poly is p + d choose d so (p + 2) * (p + 1) / 2
-        # strictly interior points is given by (p - 1) * (p - 2) / 2.
-        interior_points = (p - 1) * (p - 2) * elts / 2
-
-        # edge interiors contribute p-1 each
-        edge_interior_points = (p - 1) * edges
-
-        # each vert gives one too, so in total:
-        return verts + interior_points + edge_interior_points
-
     def refine(self):
         """Refine mesh by dividing each triangle into four."""
         self.refinements += 1
         self.mesh.ngmesh.Refine()
         self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
         self.mesh.Curve(3)
+
+    # BENDING UTILITIES ###############################################
+
+    def set_bent_N(self, R):
+        """Set N to n_material from Schermer and Cole."""
+        mats = self.mesh.GetMaterials()
+        ns = self.refractive_index_dict
+
+        f_list = []
+        for mat in mats:
+            if mat == 'Outer' or mat == 'buffer':  # No bend stress here
+                f_list.append(ns[mat])
+            else:
+                n = ns[mat]
+                f_list.append(n * (1 - n ** 2 * ng.x / R))  # Bend stress
+
+        self.N = ng.CoefficientFunction(f_list)
+
+    def bent_selfadjsystem_1(self, p, R):
+        """Set up weak form for bent mode finding.
+
+        Weak form derives from a change of coordinates resembling cylindrical
+        coordinates (with the y axis as the direction of the cylinder).  The
+        weak form derives from Jay's version of this mapping.
+        """
+        self.set_bent_N(R)
+        L, k = self.scale, self.k
+        F = ng.CoefficientFunction(1 + ng.x / R)
+        V = - (L * k * self.N) ** 2 * F
+
+        X = ng.H1(self.mesh, order=p, dirichlet='OuterCircle', complex=True)
+        u, v = X.TnT()
+        A = ng.BilinearForm(X)
+
+        A += F * ng.grad(u) * ng.grad(v) * ng.dx + V * u * v * ng.dx
+        B = ng.BilinearForm(X)
+        B += 1 / F * u * v * ng.dx
+        with ng.TaskManager():
+            A.Assemble()
+            B.Assemble()
+
+        return A, B, X
+
+    def guided_bentmode(self, center, radius, R, p, seed=1, npts=6, nspan=10,
+                        within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
+                        verbose=True, inverse='umfpack', **feastkwargs):
+        """Find guided bent modes."""
+        a, b, X = self.bent_selfadjsystem(p, R)
+
+        P = SpectralProjNG(X, a.mat, b.mat,
+                           radius=radius, center=center, npts=npts,
+                           within=within, rhoinv=rhoinv,
+                           quadrule=quadrule, inverse=inverse, verbose=verbose)
+
+        Y = NGvecs(X, nspan, M=b.mat)
+        Y.setrandom(seed=seed)
+        Zsqrs, Y, history, _ = P.feast(Y, hermitian=True, **feastkwargs)
+        betas = np.sqrt(-Zsqrs) / self.scale
+
+        return betas, Zsqrs, Y
 
     # SAVE & LOAD #####################################################
 
