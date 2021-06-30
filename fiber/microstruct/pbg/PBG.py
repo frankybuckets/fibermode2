@@ -5,7 +5,6 @@ import os
 import pickle
 from fiberamp.fiber.modesolver import ModeSolver
 from pyeigfeast.spectralproj.ngs import NGvecs, SpectralProjNG
-# from fiberamp.fiber.modmesh import modify_mesh
 
 
 class PBG(ModeSolver):
@@ -172,17 +171,11 @@ class PBG(ModeSolver):
 
     def rotate(self, angle):
         """Rotate fiber by 'angle' (radians)."""
-        # def rot(x, y, z, theta=angle):
-        #     r = np.sqrt(x*x + y*y)
-        #     theta += np.arctan2(y, x)
-        #     return [r * np.cos(theta), r * np.sin(theta), z]
         self.geo = self.geometry(self.Λ, self.r_tube, self.R_fiber, self.R,
                                  self.Rout, self.scale, self.r_core,
                                  self.layers, self.skip, self.p,
                                  self.pattern, rot=angle)
-        # self.mesh = ng.Mesh(modify_mesh(self.mesh.ngmesh.Copy(), rot))
         self.mesh = self.create_mesh()
-        # self.mesh.Curve(3)
 
     def create_mesh(self):
         """Set materials, max diameters and create mesh."""
@@ -368,29 +361,6 @@ class PBG(ModeSolver):
 
                 # Add the circles
                 geo.AddCircle(c=(x, y), r=r, leftdomain=3, rightdomain=2)
-
-    # def ndofs(self, p, refs):
-    #     """Find number of dofs of fes (order=p) of mesh (with\
-    #     refinements=refs)."""
-    #     # Find number of edges elts and verts after refinements
-    #     edges = self.mesh.nedge
-    #     elts = self.mesh.ne
-    #     verts = self.mesh.nv
-
-    #     for r in range(refs):
-    #         verts = verts + edges
-    #         edges = 2 * edges + 3 * elts
-    #         elts = 4 * elts
-
-    #     # Total grid points for poly is p + d choose d so (p + 2)*(p + 1)/2
-    #     # strictly interior points is given by (p - 1) * (p - 2) / 2.
-    #     interior_points = (p - 1) * (p - 2) * elts / 2
-
-    #     # edge interiors contribute p-1 each
-    #     edge_interior_points = (p - 1) * edges
-
-    #     # each vert gives one too, so in total:
-    #     return verts + interior_points + edge_interior_points
 
     def refine(self):
         """Refine mesh by dividing each triangle into four."""
