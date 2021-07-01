@@ -6,10 +6,10 @@ layers = 7                 # number of layers of lattice
 skip = 1                   # number of layers to skip before beginning lattice
 pattern = []               # pattern determining microstructure
 
-sep = 7 * 10**-6                          # separation between layers
-r_tube = .5 * .4 * sep                    # radius of inner tubes
-r_fiber = (skip + layers + 1) * sep       # radius of fiber
-r_core = .7 * (sep * skip - r_tube)       # radius of core region
+Λ = 7 * 10**-6                          # separation between layers
+r_tube = .5 * .4 * Λ                    # radius of inner tubes
+r_fiber = (skip + layers + 1) * Λ       # radius of fiber
+r_core = .7 * (Λ * skip - r_tube)       # radius of core region
 scale = r_core             # scaling factor
 
 
@@ -27,7 +27,7 @@ wavelength = 1.55e-6
 # PML Parameters.  Dimensional
 
 t_buffer = 0                   # thickness of buffer region (between R0 and R)
-t_outer = 6 * sep              # thickness of outer region (between R and Rout)
+t_outer = 6 * Λ              # thickness of outer region (between R and Rout)
 alpha = 5                      # PML factor
 
 # Mesh Parameters. Non-Dimensional
@@ -45,7 +45,7 @@ params = {
     'layers': layers,
     'skip': skip,
     'pattern': pattern,
-    'sep': sep,
+    'Λ': Λ,
     'r_tube': r_tube,
     'r_core': r_core,
     'r_fiber': r_fiber,

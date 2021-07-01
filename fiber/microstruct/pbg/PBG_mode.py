@@ -4,7 +4,7 @@ from fiberamp.fiber.microstruct.pbg.fiber_dicts.lyr6cr2 import params
 if __name__ == '__main__':
 
     A = PBG(params)
-    A.refine()
+    # A.refine()
 
     center = 1.242933-2.471929e-09j
     radius = .01
