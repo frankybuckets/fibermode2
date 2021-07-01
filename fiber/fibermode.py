@@ -275,7 +275,7 @@ class FiberMode(ModeSolver):
         Search for guided modes in interval=(left, right). If interval is None,
         then an automatic choice will be made to include all guided modes.
 
-        A toned fiber computation is specified using the boolean "tone" and 
+        A toned fiber computation is specified using the boolean "tone" and
         a self-adjoint bent mode computation is specified using the boolean
         "bent". The computation is done using Lagrangre finite elements of
         degree "p", with no PML, using selfadjoint FEAST with a random span
