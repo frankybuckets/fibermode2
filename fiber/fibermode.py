@@ -269,15 +269,18 @@ class FiberMode(ModeSolver):
         return self.X2toBeta(self.Z2toX2(Z2, v=v), v=v)
 
     def guidedmodes(self, interval=None, p=3, nquadpts=20, seed=1,
-                    nspan=15, verbose=True, tone=False, **feastkwargs):
+                    nspan=15, verbose=True, tone=False, bent=False,
+                    **feastkwargs):
         """
         Search for guided modes in interval=(left, right). If interval is None,
         then an automatic choice will be made to include all guided modes.
 
-        The computation is done using Lagrangre finite elements of degree "p",
-        with no PML, using selfadjoint FEAST with a random span of "nspan"
-        vectors (and using the remaining parameters, which are simply
-        passed to feast).
+        A toned fiber computation is specified using the boolean "tone" and
+        a self-adjoint bent mode computation is specified using the boolean
+        "bent". The computation is done using Lagrangre finite elements of
+        degree "p", with no PML, using selfadjoint FEAST with a random span
+        of "nspan" vectors, (and using the remaining parameters, which are
+        simply passed to feast).
 
         OUTPUTS:
 
@@ -306,7 +309,8 @@ class FiberMode(ModeSolver):
 
         for vnum, kk in zip(V, k):
 
-            self.V = CoefficientFunction([0, 0, -vnum*vnum])
+            if not bent:
+                self.V = CoefficientFunction([0, 0, -vnum*vnum])
             self.k = kk
 
             if interval is None:
@@ -451,6 +455,16 @@ class FiberMode(ModeSolver):
         print('Physical propagation constants:\n', betas)
 
         return betas, z, y, P
+
+    def selfadjoint_bentmode(self, p=3, curvature=12, bendfactor=1.28,
+                             nspan=50, **kwargs):
+        """
+        Solves the self-adjoint eigenproblem to compute guided
+        bentmodes in straight fiber.
+        """
+
+        self.setnondimmat(curvature=curvature, bendfactor=bendfactor)
+        return self.guidedmodes(p=p, nspan=nspan, bent=True, *kwargs)
 
     # INTERPOLATED MODES ####################################################
 
