@@ -1,4 +1,3 @@
-import netgen.gui
 from ngsolve import Draw, GridFunction
 from fiberamp.fiber.microstruct.pbg import PBG
 from fiberamp.fiber.microstruct.pbg.fiber_dicts.lyr6cr2 import params
