@@ -210,7 +210,7 @@ class PBG(ModeSolver):
         self.mesh = self.create_mesh()
 
     def geometry(self, Λ, r, R_fiber, R, Rout, scale, r_core, layers=6,
-                 skip=1, p=6, pattern=[], rot=0):
+                 skip=1, p=6, pattern=[], rot=0, hexcore=True):
         """
         Construct and return Non-Dimensionalized geometry.
 
@@ -239,6 +239,13 @@ class PBG(ModeSolver):
         pattern : list, optional
             List of 0's and 1's determining pattern of tubes. The default is
             [].
+        rot: float, optional
+            Rotate mesh by 'rot' radians. The default is zero.
+        hexcore: boolean, optional
+            Create hexagonal core region.  If set to false a circular core
+            region is created.  For a hexagonal core, the radius is defined
+            as the distance from the center to a vertex of the hexagon, and
+            the value used for this is r_core. The default is True.
 
         Returns
         -------
@@ -254,6 +261,19 @@ class PBG(ModeSolver):
         # Create core region
         if skip == 0 or r_core == 0:
             pass
+
+        elif hexcore:
+            R_core = r_core / scale
+            coords = [(R_core * np.cos(i * 2 * np.pi / p),
+                       R_core * np.sin(i * 2 * np.pi / p)) for i in range(p)]
+            pts = [geo.AppendPoint(x, y) for x, y in coords]
+
+            for i in range(p - 1):
+                geo.Append(["line", pts[i], pts[i+1]], leftdomain=1,
+                           rightdomain=2)
+
+            geo.Append(["line", pts[-1], pts[0]], leftdomain=1,
+                       rightdomain=2)
 
         else:
             R_core = r_core / scale

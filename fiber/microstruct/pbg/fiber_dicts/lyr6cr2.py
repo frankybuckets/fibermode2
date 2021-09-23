@@ -28,7 +28,7 @@ wavelength = 1.55e-6
 # PML Parameters.  Dimensional
 
 t_buffer = 0                   # thickness of buffer region (between R0 and R)
-t_outer = 15 * Λ               # thickness of outer region (between R and Rout)
+t_outer = 1.5 * 15 * Λ         # thickness of outer region (between R and Rout)
 alpha = 5                      # PML factor
 
 
