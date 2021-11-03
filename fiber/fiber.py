@@ -659,6 +659,40 @@ class Fiber:
 
             L = 0.1   # to be varied for each simulation
 
+        elif case == 'highestgain_100-400_Tm':
+
+            # ** (20/400) Thulium-Doped LMA Double Clad Fiber **
+            # From Spec sheet provided by Grosek:
+
+            rcore = 5e-5
+            rfiber = 2.75e-4
+            rclad = rfiber  # 2e-4
+            wavelen = 1.977e-6
+            nclad = 1.4384197348119947
+            k0 = 2 * pi / wavelen
+            NA = 0.04
+            ncore = sqrt(nclad*nclad + NA*NA)  # 1.439994
+
+            L = 0.1   # to be varied for each simulation
+
+        elif case == 'TonedASE_Tm_highestgain':
+
+            rcore = 5e-5
+            rfiber = 2.75e-4
+            rclad = rfiber
+            # specify signal wavelength first,
+            # then specify tones
+            wavelen = 1.977e-6
+            nclad = 1.4384197348119947
+            k0 = 2 * pi / wavelen
+            NA = 0.04
+            ncore = sqrt(nclad*nclad + NA*NA)
+            tone_wavelens = [1.9306356965146654e-6]
+            ASE_wavelens = [1.925e-6, 1.975e-6, 2.025e-6, 2.075e-6, 2.125e-6]
+
+            extra_wavelens = tone_wavelens + ASE_wavelens
+            L = 0.1  # to be varied for each simulation
+
         elif case == 'LLMA_Yb':
 
             # ** Variation of Nufern Ytterbium-Doped LMA Double Clad Fiber **
