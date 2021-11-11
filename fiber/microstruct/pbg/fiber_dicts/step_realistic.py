@@ -1,5 +1,4 @@
 # Geometric Parameters.  Dimensional
-import numpy as np
 
 p = 6                      # number of sides of polygonal lattice
 layers = 1                 # number of layers of lattice
