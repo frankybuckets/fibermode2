@@ -97,15 +97,24 @@ class PBG(ModeSolver):
             else:
                 setattr(self, key, value)
 
-        # Create Non-Dimensional Radii
-        self.R_fiber = self.r_fiber / self.scale
-        self.R = (self.r_fiber + self.t_buffer) / self.scale
-        self.Rout = (self.r_fiber + self.t_buffer + self.t_outer) / self.scale
+        if self.t_outer == 0:  # enforce outer region
+            self.t_outer += .5 * self.r_fiber
+
+        # Create Dimensional Radii for pml and outer circle
+        self.r_pml = self.r_fiber + self.t_buffer
+        self.r_out = self.r_fiber + self.t_buffer + self.t_outer
+
+        # Create Non-Dimensional Radii for Modesolver
+        self.R_buffer = self.r_fiber / self.scale  # beginning of buffer
+        self.R = self.r_pml / self.scale  # beginning of PML
+        self.Rout = self.r_out / self.scale  # end of PML and geometry
 
         # Create geometry
-        self.geo = self.geometry(self.Λ, self.r_tube, self.R_fiber, self.R,
-                                 self.Rout, self.scale, self.r_core,
-                                 self.layers, self.skip, self.p, self.pattern)
+        self.geo = self.geometry(self.Λ, self.r_tube, self.r_fiber, self.r_pml,
+                                 self.r_out, self.scale, self.r_core,
+                                 self.layers, self.skip, self.p, self.pattern,
+                                 pml_type=self.pml_type,
+                                 square_buffer=self.square_buffer)
 
         # Create Mesh
         self.mesh = self.create_mesh()
@@ -171,8 +180,8 @@ class PBG(ModeSolver):
 
     def rotate(self, angle):
         """Rotate fiber by 'angle' (radians)."""
-        self.geo = self.geometry(self.Λ, self.r_tube, self.R_fiber, self.R,
-                                 self.Rout, self.scale, self.r_core,
+        self.geo = self.geometry(self.Λ, self.r_tube, self.r_fiber, self.r_pml,
+                                 self.r_out, self.scale, self.r_core,
                                  self.layers, self.skip, self.p,
                                  self.pattern, rot=angle)
         self.mesh = self.create_mesh()
@@ -203,29 +212,32 @@ class PBG(ModeSolver):
 
     def reset_mesh(self):
         """Reset to original mesh."""
-        self.geo = self.geometry(self.Λ, self.r_tube, self.R_fiber, self.R,
-                                 self.Rout, self.scale, self.r_core,
+        self.geo = self.geometry(self.Λ, self.r_tube, self.r_fiber, self.r_pml,
+                                 self.r_out, self.scale, self.r_core,
                                  self.layers, self.skip, self.p,
-                                 self.pattern)
+                                 self.pattern, pml_type=self.pml_type,
+                                 square_buffer=self.square_buffer)
+
         self.mesh = self.create_mesh()
 
-    def geometry(self, Λ, r, R_fiber, R, Rout, scale, r_core, layers=6,
-                 skip=1, p=6, pattern=[], rot=0, hexcore=True):
+    def geometry(self, Λ, r_tube, r_fiber, r_pml, r_out, scale, r_core,
+                 layers=6, skip=1, p=6, pattern=[], rot=0, hexcore=True,
+                 pml_type='radial', square_buffer=.5):
         """
         Construct and return Non-Dimensionalized geometry.
 
         Parameters
         ----------
         Λ : float
-            Distance between layers of tubes.
+            Distance between layers of tubes (Dimensional).
         r : float
-            Radius of tubes.
-        R_fiber : int or float
-            Radius of fiber (non-dimensional).
-        R : int or float
-            Radius at which to begin PML (non-dimensional).
-        Rout : int or float
-            Radius at which to end PML (non-dimensional).
+            Radius of tubes (Dimensional).
+        r_fiber : int or float
+            Radius of fiber (Dimensional).
+        r_pml : int or float
+            Radius at which to begin PML (Dimensional).
+        r_out : int or float
+            Radius at which to end PML (Dimensional).
         scale : float, optional
             Physical scale factor.
         layers : int, optional
@@ -246,6 +258,17 @@ class PBG(ModeSolver):
             region is created.  For a hexagonal core, the radius is defined
             as the distance from the center to a vertex of the hexagon, and
             the value used for this is r_core. The default is True.
+        pml_type: string, optional
+            Determine geometrical type of pml. Options are 'radial' or
+            'square'. If square is chosen, buffer region must be included, and
+            this is ensured using the square_buffer parameter.  Default is
+            'radial'.
+        square_buffer: float, optional
+            Enforce buffer thickness for square pml.  If provided radius of
+            fiber and radius of buffer are equal, this will add a square
+            buffer region with minimal distance to the fiber of
+            square_buffer * R_fiber.  The default of .5 ensures buffer region
+            is at least half a fiber radius separated from the fiber itself.
 
         Returns
         -------
@@ -256,7 +279,11 @@ class PBG(ModeSolver):
 
         # Non-Dimensionalize needed physical parameters
         Λ /= scale
-        r /= scale
+        R_tube = r_tube / scale
+
+        R_fiber = r_fiber / scale
+        R_pml = r_pml / scale
+        R_out = r_out / scale
 
         # Create core region
         if skip == 0 or r_core == 0:
@@ -265,7 +292,8 @@ class PBG(ModeSolver):
         elif hexcore:
             R_core = r_core / scale
             coords = [(R_core * np.cos(i * 2 * np.pi / p),
-                       R_core * np.sin(i * 2 * np.pi / p)) for i in range(p)]
+                       R_core * np.sin(i * 2 * np.pi / p))
+                      for i in range(p)]
             pts = [geo.AppendPoint(x, y) for x, y in coords]
 
             for i in range(p - 1):
@@ -277,7 +305,8 @@ class PBG(ModeSolver):
 
         else:
             R_core = r_core / scale
-            geo.AddCircle(c=(0, 0), r=R_core, leftdomain=1, rightdomain=2)
+            geo.AddCircle(c=(0, 0), r=R_core, leftdomain=1, rightdomain=2,
+                          bc='computational_core_cladding_interface')
 
         # Add the layers of tubes
         for i in range(layers):
@@ -286,27 +315,47 @@ class PBG(ModeSolver):
             Ri = index_layer * Λ
 
             if len(pattern) > 0:
-                self.add_layer(geo, r, Ri, p=p, innerpoints=index_layer - 1,
+                self.add_layer(geo, R_tube, Ri, p=p, innerpoints=index_layer-1,
                                mask=pattern[i], rot=rot)
             else:
-                self.add_layer(geo, r, Ri, p=p, innerpoints=index_layer - 1,
+                self.add_layer(geo, R_tube, Ri, p=p, innerpoints=index_layer-1,
                                rot=rot)
 
         # Create boundary of fiber and PML region
+        if pml_type == 'radial':
 
-        if R_fiber == R:
+            if R_fiber == R_pml:  # No buffer layer
 
-            # No buffer layer
-            geo.AddCircle(c=(0, 0), r=R, leftdomain=2, rightdomain=5)
-            geo.AddCircle(c=(0, 0), r=Rout, leftdomain=5,
-                          bc="OuterCircle")  # outermost circle
+                geo.AddCircle(c=(0, 0), r=R_pml, leftdomain=2, rightdomain=5,
+                              bc='fiber_pml_interface')
+                geo.AddCircle(c=(0, 0), r=R_out,
+                              leftdomain=5, bc="OuterCircle")
 
-        else:
+            else:  # Create buffer layer
 
-            # Create buffer layer
-            geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2, rightdomain=4)
-            geo.AddCircle(c=(0, 0), r=R, leftdomain=4, rightdomain=5)
-            geo.AddCircle(c=(0, 0), r=Rout, leftdomain=5, bc="OuterCircle")
+                geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2, rightdomain=4,
+                              bc='fiber_buffer_interface')
+                geo.AddCircle(c=(0, 0), r=R_pml, leftdomain=4, rightdomain=5,
+                              bc='buffer_pml_interface')
+                geo.AddCircle(c=(0, 0), r=R_out,
+                              leftdomain=5, bc="OuterCircle")
+
+        elif pml_type == 'square':
+
+            if R_fiber == R_pml:  # Need to enforce buffer space
+
+                R_pml = (1 + square_buffer) * R_fiber  # give buffer space
+                self.r_pml_square = R_pml * scale  # add as attribute
+                self.R_pml_square = R_pml
+
+            geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2, rightdomain=4,
+                          bc='OuterCircle')
+            geo.AddRectangle((-R_pml, -R_pml), (R_pml, R_pml),
+                             bcs=['buffer_pml_interface' for i in range(4)],
+                             leftdomain=4, rightdomain=5)
+            geo.AddRectangle((-R_out, -R_out), (R_out, R_out),
+                             bcs=['bottom', 'top', 'left', 'right'],
+                             leftdomain=5)
 
         return geo
 
@@ -346,7 +395,8 @@ class PBG(ModeSolver):
             raise ValueError("Please specify a p of 2 or greater.")
 
         if R == 0:         # zero big radius draws circle at origin
-            geo.AddCircle(c=(0, 0), r=r, leftdomain=3, rightdomain=2)
+            geo.AddCircle(c=(0, 0), r=r, leftdomain=3, rightdomain=2,
+                          bc='core_cladding_interface')
 
         else:
 
@@ -380,7 +430,8 @@ class PBG(ModeSolver):
             for x, y in zip(xs, ys):
 
                 # Add the circles
-                geo.AddCircle(c=(x, y), r=r, leftdomain=3, rightdomain=2)
+                geo.AddCircle(c=(x, y), r=r, leftdomain=3,
+                              rightdomain=2, bc='microtube_cladding_interface')
 
     def refine(self):
         """Refine mesh by dividing each triangle into four."""
