@@ -456,16 +456,6 @@ class FiberMode(ModeSolver):
 
         return betas, z, y, P
 
-    def selfadjoint_bentmode(self, p=3, curvature=12, bendfactor=1.28,
-                             nspan=50, **kwargs):
-        """
-        Solves the self-adjoint eigenproblem to compute guided
-        bentmodes in straight fiber.
-        """
-
-        self.setnondimmat(curvature=curvature, bendfactor=bendfactor)
-        return self.guidedmodes(p=p, nspan=nspan, bent=True, *kwargs)
-
     # INTERPOLATED MODES ####################################################
 
     def interpmodes(self, p):
