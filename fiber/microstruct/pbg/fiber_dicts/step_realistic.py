@@ -14,7 +14,7 @@ scale = r_tube             # scaling factor
 
 # Physical Parameters
 
-n_tube = 1.48                       # refractive index of tube material
+n_tube = 1.465                       # refractive index of tube material
 n_clad = 1.45                       # refractive index of cladding material
 n_core = n_clad                     # refractive index of core
 n_buffer = n_clad                   # refractive index of buffer region
@@ -33,7 +33,7 @@ square_buffer = .25
 
 # Mesh Parameters. Non-Dimensional
 
-pml_maxh = .15 * r_fiber / scale
+pml_maxh = .1 * r_fiber / scale
 buffer_maxh = .1 * r_fiber / scale
 tube_maxh = .01 * r_fiber / scale
 clad_maxh = .08 * r_fiber / scale

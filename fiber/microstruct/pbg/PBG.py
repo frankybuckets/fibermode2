@@ -4,7 +4,7 @@ import numpy as np
 import os
 import pickle
 from fiberamp.fiber.modesolver import ModeSolver
-from pyeigfeast.spectralproj.ngs import NGvecs, SpectralProjNG
+from pyeigfeast.spectralproj.ngs import NGvecs
 
 
 class PBG(ModeSolver):
@@ -97,20 +97,23 @@ class PBG(ModeSolver):
             else:
                 setattr(self, key, value)
 
-        if self.t_outer == 0:  # enforce outer region
+        if self.t_outer == 0:  # enforce outer region (for Modesolver)
             self.t_outer += .5 * self.r_fiber
 
-        # Create Dimensional Radii for pml and outer circle
-        self.r_pml = self.r_fiber + self.t_buffer
-        self.r_out = self.r_fiber + self.t_buffer + self.t_outer
+        # Create radii for polymer, pml, and outer circle
+        self.r_poly = self.r_fiber + self.t_poly  # end of polymer region
+        self.r_pml = self.r_poly + self.t_buffer  # start of PML region
+        self.r_out = self.r_pml + self.t_outer    # end of domain
 
-        # Create Non-Dimensional Radii for Modesolver
-        self.R_buffer = self.r_fiber / self.scale  # beginning of buffer
+        # Create Non-Dimensional Radii (for Modesolver)
+        self.R_poly = self.r_poly / self.scale
+        self.R_buffer = self.r_poly / self.scale  # beginning of buffer
         self.R = self.r_pml / self.scale  # beginning of PML
         self.Rout = self.r_out / self.scale  # end of PML and geometry
 
         # Create geometry
-        self.geo = self.geometry(self.Λ, self.r_tube, self.r_fiber, self.r_pml,
+        self.geo = self.geometry(self.Λ, self.r_tube, self.r_fiber,
+                                 self.r_poly, self.r_pml,
                                  self.r_out, self.scale, self.r_core,
                                  self.layers, self.skip, self.p, self.pattern,
                                  pml_type=self.pml_type,
@@ -123,7 +126,8 @@ class PBG(ModeSolver):
                                       'clad': self.n_clad,
                                       'tube': self.n_tube,
                                       'buffer': self.n_buffer,
-                                      'core': self.n_core
+                                      'core': self.n_core,
+                                      'poly': self.n_poly
                                       }
 
         # Set wavelength and base coefficent function (these then set k and V)
@@ -180,7 +184,8 @@ class PBG(ModeSolver):
 
     def rotate(self, angle):
         """Rotate fiber by 'angle' (radians)."""
-        self.geo = self.geometry(self.Λ, self.r_tube, self.r_fiber, self.r_pml,
+        self.geo = self.geometry(self.Λ, self.r_tube, self.r_fiber,
+                                 self.r_poly, self.r_pml,
                                  self.r_out, self.scale, self.r_core,
                                  self.layers, self.skip, self.p,
                                  self.pattern, rot=angle)
@@ -189,7 +194,8 @@ class PBG(ModeSolver):
     def create_mesh(self):
         """Set materials, max diameters and create mesh."""
         # Set the materials for the domain.
-        mat = {5: 'Outer', 4: 'buffer', 3: 'tube', 2: 'clad', 1: 'core'}
+        mat = {6: 'poly', 5: 'Outer', 4: 'buffer',
+               3: 'tube', 2: 'clad', 1: 'core'}
 
         for domain, material in mat.items():
             self.geo.SetMaterial(domain, material)
@@ -201,6 +207,7 @@ class PBG(ModeSolver):
         self.geo.SetDomainMaxH(3, self.tube_maxh)
         self.geo.SetDomainMaxH(4, self.buffer_maxh)
         self.geo.SetDomainMaxH(5, self.pml_maxh)
+        self.geo.SetDomainMaxH(6, self.poly_maxh)
 
         print("Generating mesh.")
         mesh = ng.Mesh(self.geo.GenerateMesh())
@@ -212,7 +219,8 @@ class PBG(ModeSolver):
 
     def reset_mesh(self):
         """Reset to original mesh."""
-        self.geo = self.geometry(self.Λ, self.r_tube, self.r_fiber, self.r_pml,
+        self.geo = self.geometry(self.Λ, self.r_tube, self.r_fiber,
+                                 self.r_poly, self.r_pml,
                                  self.r_out, self.scale, self.r_core,
                                  self.layers, self.skip, self.p,
                                  self.pattern, pml_type=self.pml_type,
@@ -220,7 +228,7 @@ class PBG(ModeSolver):
 
         self.mesh = self.create_mesh()
 
-    def geometry(self, Λ, r_tube, r_fiber, r_pml, r_out, scale, r_core,
+    def geometry(self, Λ, r_tube, r_fiber, r_poly, r_pml, r_out, scale, r_core,
                  layers=6, skip=1, p=6, pattern=[], rot=0, hexcore=True,
                  pml_type='radial', square_buffer=.5):
         """
@@ -234,6 +242,8 @@ class PBG(ModeSolver):
             Radius of tubes (Dimensional).
         r_fiber : int or float
             Radius of fiber (Dimensional).
+        r_poly: int or float
+            Radius at which to begin polymer
         r_pml : int or float
             Radius at which to begin PML (Dimensional).
         r_out : int or float
@@ -282,6 +292,7 @@ class PBG(ModeSolver):
         R_tube = r_tube / scale
 
         R_fiber = r_fiber / scale
+        R_poly = r_poly / scale
         R_pml = r_pml / scale
         R_out = r_out / scale
 
@@ -321,41 +332,78 @@ class PBG(ModeSolver):
                 self.add_layer(geo, R_tube, Ri, p=p, innerpoints=index_layer-1,
                                rot=rot)
 
-        # Create boundary of fiber and PML region
+        # Create boundary of fiber, polymer and PML region
+
         if pml_type == 'radial':
 
-            if R_fiber == R_pml:  # No buffer layer
-
+            if R_fiber == R_pml:  # No buffer layer or polymer layer
+                print('no buffer no polymer')
                 geo.AddCircle(c=(0, 0), r=R_pml, leftdomain=2, rightdomain=5,
                               bc='fiber_pml_interface')
                 geo.AddCircle(c=(0, 0), r=R_out,
                               leftdomain=5, bc="OuterCircle")
 
-            else:  # Create buffer layer
+            else:  # one or both exist
+                if R_fiber == R_poly:  # No polymer layer, but yes buffer
 
-                geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2, rightdomain=4,
-                              bc='fiber_buffer_interface')
-                geo.AddCircle(c=(0, 0), r=R_pml, leftdomain=4, rightdomain=5,
-                              bc='buffer_pml_interface')
-                geo.AddCircle(c=(0, 0), r=R_out,
-                              leftdomain=5, bc="OuterCircle")
+                    geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2,
+                                  rightdomain=4, bc='fiber_buffer_interface')
+                    geo.AddCircle(c=(0, 0), r=R_pml, leftdomain=4,
+                                  rightdomain=5, bc='buffer_pml_interface')
+                    geo.AddCircle(c=(0, 0), r=R_out,
+                                  leftdomain=5, bc="OuterCircle")
+
+                elif R_poly == R_pml:  # No buffer layer, but yes polymer
+
+                    geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2,
+                                  rightdomain=6, bc='fiber_polymer_interface')
+                    geo.AddCircle(c=(0, 0), r=R_poly, leftdomain=6,
+                                  rightdomain=5, bc='polymer_pml_interface')
+                    geo.AddCircle(c=(0, 0), r=R_out,
+                                  leftdomain=5, bc="OuterCircle")
+
+                else:  # Both polymer and buffer
+                    geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2,
+                                  rightdomain=6, bc='fiber_polymer_interface')
+                    geo.AddCircle(c=(0, 0), r=R_poly, leftdomain=6,
+                                  rightdomain=4, bc='polymer_buffer_interface')
+                    geo.AddCircle(c=(0, 0), r=R_pml, leftdomain=4,
+                                  rightdomain=5, bc='buffer_pml_interface')
+                    geo.AddCircle(c=(0, 0), r=R_out,
+                                  leftdomain=5, bc="OuterCircle")
 
         elif pml_type == 'square':
 
-            if R_fiber == R_pml:  # Need to enforce buffer space
+            if R_poly == R_pml:  # Need to enforce buffer space
+                R_pml = (1 + square_buffer) * R_poly  # give buffer space
 
-                R_pml = (1 + square_buffer) * R_fiber  # give buffer space
-                self.r_pml_square = R_pml * scale  # add as attribute
-                self.R_pml_square = R_pml
+            self.r_pml_square = R_pml * scale  # add as attribute
+            self.R_pml_square = R_pml
 
-            geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2, rightdomain=4,
-                          bc='OuterCircle')
-            geo.AddRectangle((-R_pml, -R_pml), (R_pml, R_pml),
-                             bcs=['buffer_pml_interface' for i in range(4)],
-                             leftdomain=4, rightdomain=5)
-            geo.AddRectangle((-R_out, -R_out), (R_out, R_out),
-                             bcs=['bottom', 'top', 'left', 'right'],
-                             leftdomain=5)
+            if R_fiber == R_poly:  # no polymer layer, just buffer
+
+                geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2, rightdomain=4,
+                              bc='fiber_buffer_interface')
+                geo.AddRectangle((-R_pml, -R_pml), (R_pml, R_pml),
+                                 leftdomain=4, rightdomain=5,
+                                 bc='buffer_pml_interface')
+                geo.AddRectangle((-R_out, -R_out), (R_out, R_out),
+                                 bc='OuterCircle',
+                                 leftdomain=5)
+
+            else:  # must be buffer layer, so we have polymer and buffer
+
+                geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2, rightdomain=6,
+                              bc='fiber_polymer_interface')
+                geo.AddCircle(c=(0, 0), r=R_poly, leftdomain=6, rightdomain=4,
+                              bc='polymer_buffer_interface')
+                geo.AddRectangle((-R_pml, -R_pml), (R_pml, R_pml),
+                                 leftdomain=4, rightdomain=5,
+                                 bc='buffer_pml_interface')
+                geo.AddRectangle((-R_out, -R_out), (R_out, R_out),
+                                 leftdomain=5, bc='OuterCircle')
+        else:
+            raise NotImplementedError('PML type must be square or radial')
 
         return geo
 
@@ -433,72 +481,13 @@ class PBG(ModeSolver):
                 geo.AddCircle(c=(x, y), r=r, leftdomain=3,
                               rightdomain=2, bc='microtube_cladding_interface')
 
-    def refine(self):
-        """Refine mesh by dividing each triangle into four."""
-        self.refinements += 1
-        self.mesh.ngmesh.Refine()
-        self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
-        self.mesh.Curve(3)
-
-    # BENDING UTILITIES ###############################################
-
-    def set_bent_N(self, R):
-        """Set N to n_material from Schermer and Cole."""
-        mats = self.mesh.GetMaterials()
-        ns = self.refractive_index_dict
-
-        f_list = []
-        for mat in mats:
-            if mat == 'Outer' or mat == 'buffer':  # No bend stress here
-                f_list.append(ns[mat])
-            else:
-                n = ns[mat]
-                f_list.append(n * (1 - n ** 2 * ng.x / R))  # Bend stress
-
-        self.N = ng.CoefficientFunction(f_list)
-
-    def bent_selfadjsystem_1(self, p, R):
-        """Set up weak form for bent mode finding.
-
-        Weak form derives from a change of coordinates resembling cylindrical
-        coordinates (with the y axis as the direction of the cylinder).  The
-        weak form derives from Jay's version of this mapping.
-        """
-        self.set_bent_N(R)
-        L, k = self.scale, self.k
-        F = ng.CoefficientFunction(1 + ng.x / R)
-        V = - (L * k * self.N) ** 2 * F
-
-        X = ng.H1(self.mesh, order=p, dirichlet='OuterCircle', complex=True)
-        u, v = X.TnT()
-        A = ng.BilinearForm(X)
-
-        A += F * ng.grad(u) * ng.grad(v) * ng.dx + V * u * v * ng.dx
-        B = ng.BilinearForm(X)
-        B += 1 / F * u * v * ng.dx
-        with ng.TaskManager():
-            A.Assemble()
-            B.Assemble()
-
-        return A, B, X
-
-    def guided_bentmode(self, center, radius, R, p, seed=1, npts=6, nspan=10,
-                        within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
-                        verbose=True, inverse='umfpack', **feastkwargs):
-        """Find guided bent modes."""
-        a, b, X = self.bent_selfadjsystem(p, R)
-
-        P = SpectralProjNG(X, a.mat, b.mat,
-                           radius=radius, center=center, npts=npts,
-                           within=within, rhoinv=rhoinv,
-                           quadrule=quadrule, inverse=inverse, verbose=verbose)
-
-        Y = NGvecs(X, nspan, M=b.mat)
-        Y.setrandom(seed=seed)
-        Zsqrs, Y, history, _ = P.feast(Y, hermitian=True, **feastkwargs)
-        betas = np.sqrt(-Zsqrs) / self.scale
-
-        return betas, Zsqrs, Y
+    def refine(self, n=1):
+        """Refine mesh n times."""
+        self.refinements += n
+        for i in range(n):
+            self.mesh.ngmesh.Refine()
+            self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
+            self.mesh.Curve(3)
 
     # SAVE & LOAD #####################################################
 
