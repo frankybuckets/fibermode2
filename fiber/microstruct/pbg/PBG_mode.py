@@ -1,14 +1,12 @@
-from ngsolve import Draw, GridFunction
+from ngsolve import GridFunction
 from fiberamp.fiber.microstruct.pbg import PBG
 from fiberamp.fiber.microstruct.pbg.fiber_dicts.lyr6cr2 import params
-import netgen.gui
 
 if __name__ == '__main__':
 
     # folder = 'your/output/folder'
 
     A = PBG(params)
-    # Draw(A.mesh)
 
     center = 1.5
     radius = 1
@@ -22,6 +20,5 @@ if __name__ == '__main__':
     for i in range(len(y)):
         a = GridFunction(y.fes, name='sol_' + str(i))
         a.vec.data = 1.5e-6 * y._mv[i]
-        Draw(a)
 
     # A.savemodes('pbg', folder, y, p, beta, z)
