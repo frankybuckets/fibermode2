@@ -1,4 +1,3 @@
-from opticalmaterialspy import RefractiveIndexWebCSVLink as mat_assign
 
 # Geometric Parameters (Dimensional).
 
