@@ -97,17 +97,17 @@ class PBG(ModeSolver):
             else:
                 setattr(self, key, value)
 
+        # Set Vacuum physical constants
+        self.eps0 = 8.85418782e-12
+        self.mu0 = 1.25663706e-6
+
+        self.v0 = 1 / (self.eps0 * self.mu0) ** .5
+        self.eta0 = np.sqrt(self.mu0 / self.eps0)
+
         if self.t_outer == 0:  # enforce outer region (for Modesolver)
             self.t_outer += .5 * self.r_fiber
 
-        # Create radii for polymer, pml, and outer circle
-        self.r_poly = self.r_fiber + self.t_poly  # end of polymer region
-        self.r_pml = self.r_poly + self.t_buffer  # start of PML region
-        self.r_out = self.r_pml + self.t_outer    # end of domain
-
         # Create Non-Dimensional Radii (for Modesolver)
-        self.R_poly = self.r_poly / self.scale
-        self.R_buffer = self.r_poly / self.scale  # beginning of buffer
         self.R = self.r_pml / self.scale  # beginning of PML
         self.Rout = self.r_out / self.scale  # end of PML and geometry
 
@@ -121,7 +121,11 @@ class PBG(ModeSolver):
 
         # Create Mesh
         self.mesh = self.create_mesh()
+
+        # Set refinement counter
         self.refinements = 0
+
+        # Set refractive indices (Need to implement Sellmeier here)
         self.refractive_index_dict = {'Outer': self.n_outer,
                                       'clad': self.n_clad,
                                       'tube': self.n_tube,
@@ -144,8 +148,10 @@ class PBG(ModeSolver):
 
     @wavelength.setter
     def wavelength(self, lam):
+        # Sets wavelength and scaled wavelength and associated parameters
         self._wavelength = lam
         self.k = 2 * np.pi / self._wavelength
+
         try:
             self.V = self.set_V(self.N, self.k)
         except AttributeError:
@@ -379,7 +385,6 @@ class PBG(ModeSolver):
 
             self.r_pml_square = R_pml * scale  # add as attribute
             self.R_pml_square = R_pml
-
             if R_fiber == R_poly:  # no polymer layer, just buffer
 
                 geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2, rightdomain=4,

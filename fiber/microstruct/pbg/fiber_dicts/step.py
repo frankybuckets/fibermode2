@@ -1,4 +1,4 @@
-from numpy import pi
+from opticalmaterialspy import RefractiveIndexWebCSVLink as mat_assign
 
 # Geometric Parameters (Dimensional).
 
@@ -8,41 +8,43 @@ skip = 0                   # number of layers to skip before beginning lattice
 pattern = []               # pattern determining microstructure
 
 Λ = 7 * 10**-6             # separation between layers
-r_tube = 1                 # radius of inner tubes
-r_core = r_tube            # radius of core region
-r_fiber = 2 * r_tube       # radius of fiber
+r_tube = 1e-6              # radius of inner tubes
+r_core = r_tube            # radius of (computational) core region
+r_fiber = 5 * r_tube       # radius of fiber, end of cladding region
+
+t_poly = .5 * r_tube        # polymer jacket thickness
+t_buffer = 2 * r_tube      # thickness of buffer region
+t_outer = 2 * r_tube       # thickness of PML region
+
+r_poly = r_fiber + t_poly  # end of polymer region, start buffer region
+r_pml = r_poly + t_buffer  # end of buffer, start of PML region
+r_out = r_pml + t_outer    # end of domain
+
 scale = r_tube             # scaling factor
 
 
+# Physical Parameters in Vacuum (Dimensional).
+
+wavelength = .5e-6
+
+
 # Refractive indices
+# Here we need to introduce materials and Sellmeier
 
 n_tube = 1.48                       # refractive index of tube material
 n_clad = 1.45                       # refractive index of cladding material
 n_core = n_clad                     # refractive index of core
-n_poly = 1.7                        # refractive index of polymer
-n_buffer = n_poly                   # refractive index of buffer region
-n_outer = n_poly                   # refractive index of outer PML region
-n0 = n_poly                        # base refractive index for V function
+n_poly = 1.3                        # refractive index of polymer
+n_buffer = 1                        # refractive index of buffer region
+n_outer = 1                         # refractive index of outer PML region
+n0 = 1                              # base refractive index for V function
 
 
-# Physical Parameters (Dimensional).
-
-wavelength = .5
-eps0 = 1
-mu0 = 1
-v0 = 1 / (eps0 * mu0) ** .5
-freq = v0 / wavelength
-omega = 2 * pi * freq
-
-
-# PML Parameters.  Dimensional
-t_poly = 1 * r_tube          # polymer jacket thickness
-t_buffer = .5 * r_tube          # thickness of buffer region
-t_outer = 2 * r_tube            # thickness of PML region
+# PML Parameters
 alpha = 5                       # PML factor
-
-pml_type = 'radial'
+pml_type = 'square'
 square_buffer = .25
+
 
 # Mesh Parameters. Non-Dimensional
 
@@ -64,6 +66,9 @@ params = {
     'r_tube': r_tube,
     'r_core': r_core,
     'r_fiber': r_fiber,
+    'r_poly': r_poly,
+    'r_pml': r_pml,
+    'r_out': r_out,
     'scale': scale,
 
     'n_buffer': n_buffer,
