@@ -2,9 +2,8 @@ import ngsolve as ng
 from ngsolve import curl, grad, dx
 import numpy as np
 import sympy as sm
-from fiberamp.fiber.spectralprojpoly import SpectralProjNGPoly
-from pyeigfeast.spectralproj.ngs import NGvecs, SpectralProjNGGeneral
-from pyeigfeast.spectralproj.ngs import SpectralProjNG, SpectralProjNGR
+from pyeigfeast import NGvecs, SpectralProjNGGeneral, SpectralProjNG
+from pyeigfeast import SpectralProjNGR, SpectralProjNGPoly
 
 
 class ModeSolver:
