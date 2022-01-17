@@ -1,15 +1,21 @@
 import ngsolve as ng
-from ngsolve import grad, dx
+from ngsolve import curl, grad, dx
 import numpy as np
 import sympy as sm
 from fiberamp.fiber.spectralprojpoly import SpectralProjNGPoly
 from pyeigfeast.spectralproj.ngs import NGvecs, SpectralProjNGGeneral
-from pyeigfeast.spectralproj.ngs import SpectralProjNG
+from pyeigfeast.spectralproj.ngs import SpectralProjNG, SpectralProjNGR
 
 
 class ModeSolver:
 
     """This class contains algorithms to compute modes of various fibers.
+    The key inputs are cross section mesh, a characteristic length L,
+    the constant refractive index n0 in the unbounded complement, the
+    refractive index and the nondimensional index well V (all
+    described below in more detail). The latter two (index & V) are
+    expected to be provided as attributes of derived classes
+    containing configuration details of specific fibers.
 
     HOW SCALAR MODES ARE COMPUTED:
 
@@ -57,12 +63,13 @@ class ModeSolver:
       The PML region R < r < Rout is assumed to be called 'Outer'
       in the given mesh.
 
-    * self.V represents the above-mentioned index well function V,
-      which must be set by a derived class before calling any of the
-      implemented algorithms.
+    * self.V and self.index represent the L-nondimensionalized index
+      well function V, and the physical refractive index profile of
+      the fiber, both of which must be set by a derived class before
+      calling any of the implemented algorithms.
 
     * self.k represents the wavenumber k in the definition of V, which
-      must be set and can be changed by a derived class before calling
+      must be set by (and can be changed by) a derived class before calling
       any of the implemented algorithms.
 
     """
@@ -537,7 +544,7 @@ class ModeSolver:
         return zsqr, Yl, Y, beta, P
 
     # ###################################################################
-    # GUIDED MODES FROM SELFADJOINT EIGENPROBLEM ########################
+    # GUIDED LP MODES FROM SELFADJOINT EIGENPROBLEM #####################
 
     def selfadjsystem(self, p):
 
@@ -599,3 +606,146 @@ class ModeSolver:
         betas = self.betafrom(Zsqrs)
 
         return betas, Zsqrs, Y
+
+    # ###################################################################
+    # VECTOR MODES
+
+    def guidedvecmodesystem(self, p):   # degree p >= 0
+
+        if self.ngspmlset:
+            raise RuntimeError('Unexpected NGSolve pml mesh trafo here.')
+        n = self.index
+        n2 = n*n
+        X = ng.HCurl(self.mesh, order=p+1-max(1-p, 0), type1=True,
+                     dirichlet='OuterCircle', complex=True)
+        Y = ng.H1(self.mesh, order=p+1, dirichlet='OuterCircle', complex=True)
+        E, v = X.TnT()
+        phi, psi = Y.TnT()
+
+        A = ng.BilinearForm(X)
+        A += (curl(E) * curl(v) + self.V * E * v) * dx
+        M = ng.BilinearForm(X)
+        M += E * v * dx
+        C = ng.BilinearForm(trialspace=Y, testspace=X)
+        C += grad(phi) * v * dx
+        B = ng.BilinearForm(trialspace=X, testspace=Y)
+        B += -n2 * E * grad(psi) * dx
+        D = ng.BilinearForm(Y)
+        D += n2 * phi * psi * dx
+
+        with ng.TaskManager():
+            A.Assemble()
+            M.Assemble()
+            B.Assemble()
+            C.Assemble()
+            D.Assemble()
+            Dinv = D.mat.Inverse(Y.FreeDofs())
+
+        # resolvent of the vector mode problem --------------------------
+
+        class ResolventVectorMode():
+
+            # static resolvent class attributes, same for all class objects
+            XY = ng.FESpace([X, Y])
+            wrk1 = ng.GridFunction(XY)
+            wrk2 = ng.GridFunction(XY)
+            tmpY1 = ng.GridFunction(Y)
+            tmpY2 = ng.GridFunction(Y)
+            tmpX1 = ng.GridFunction(X)
+
+            def __init__(self, z, V, n):
+                n2 = n*n
+                XY = ng.FESpace([X, Y])
+                (E, phi), (v, psi) = XY.TnT()
+                self.zminusOp = ng.BilinearForm(XY)
+                self.zminusOp += (z * E * v - curl(E) * curl(v)
+                                  - V * E * v - grad(phi) * v
+                                  - n2 * phi * psi + n2 * E * grad(psi)) * dx
+                with ng.TaskManager():
+                    self.zminusOp.Assemble()
+                    self.R = self.zminusOp.mat.Inverse()
+
+            def act(self, v, Rv, workspace=None):
+                if workspace is None:
+                    Mv = ng.MultiVector(v._mv[0], v.m)
+                else:
+                    Mv = workspace._mv[:v.m]
+
+                with ng.TaskManager():
+                    Mv[:] = M.mat * v._mv
+                    for i in range(v.m):
+                        self.wrk1.components[0].vec[:] = Mv[i]
+                        self.wrk1.components[1].vec[:] = 0
+                        self.wrk2.vec.data = self.R * self.wrk1.vec
+                        Rv._mv[i][:] = self.wrk2.components[0].vec
+                    Rv.zerobdry()
+
+            def adj(self, v, RHv, workspace=None):
+                if workspace is None:
+                    Mv = ng.MultiVector(v._mv[0], v.m)
+                else:
+                    Mv = workspace._mv[:v.m]
+                with ng.TaskManager():
+                    Mv[:] = M.mat * v._mv
+                    for i in range(v.m):
+                        self.wrk1.components[0].vec[:] = Mv[i]
+                        self.wrk1.components[1].vec[:] = 0
+                        self.wrk2.vec.data = self.R.H * self.wrk1.vec
+                        RHv._mv[i][:] = self.wrk2.components[0].vec
+                    RHv.zerobdry()
+
+            def rayleigh_nsa(self, ql, qr, qAq=not None, qBq=not None,
+                             workspace=None):
+                """
+                Return qAq[i, j] = (𝒜 qr[j], ql[i]) with 𝒜 =  (A - C D⁻¹ B) E
+                and qBq[i, j] = (M qr[j], ql[i]). """
+                if workspace is None:
+                    Aqr = ng.MultiVector(qr._mv[0], qr.m)
+                else:
+                    Aqr = workspace._mv[:qr.m]
+
+                if qAq is not None:
+                    Aqr[:] = A.mat * qr._mv
+                    for i in range(qr.m):
+                        self.tmpY1.vec.data = B.mat * qr._mv[i]
+                        self.tmpY2.vec.data = Dinv * self.tmpY1.vec
+                        self.tmpX1.vec.data = C.mat * self.tmpY2.vec
+                        Aqr[i].data -= self.tmpX1.vec
+                    qAq = ng.InnerProduct(Aqr, ql._mv).NumPy().T
+
+                if qBq is not None:
+                    Bqr = Aqr
+                    Bqr[:] = M.mat * qr._mv
+                    qBq = ng.InnerProduct(Bqr, ql._mv).NumPy().T
+
+                return (qAq, qBq)
+
+            def rayleigh(self, q, workspace=None):
+                return self.rayleigh_nsa(q, q, workspace=workspace)
+
+        # resolvent class definition done -------------------------------
+
+        return X, M.mat, ResolventVectorMode
+
+    def guidedvecmodes(self, rad, ctr, p=3,  seed=1, npts=8, nspan=20,
+                       within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
+                       verbose=True, inverse='umfpack', **feastkwargs):
+
+        X, M, R = self.guidedvecmodesystem(p)
+
+        print('Using FEAST to search for vector guided modes in ' +
+              'circle of radius', rad, 'centered at ', ctr)
+        print('assuming not more than %d modes in this interval' % nspan)
+
+        P = SpectralProjNGR(lambda z: R(z, self.V, self.index),
+                            radius=rad, center=ctr, npts=npts,
+                            within=within, rhoinv=rhoinv, quadrule=quadrule,
+                            inverse=inverse, verbose=verbose)
+
+        U = NGvecs(X, nspan, M=M)
+        U.setrandom(seed=seed)
+
+        Zsqrs, Y, history, _ = P.feast(U, **feastkwargs)
+        betas = self.betafrom(Zsqrs)
+
+        return betas, Zsqrs, U
