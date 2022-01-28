@@ -652,19 +652,19 @@ class ModeSolver:
             tmpY2 = ng.GridFunction(Y)
             tmpX1 = ng.GridFunction(X)
 
-            def __init__(self, z, V, n):
+            def __init__(selfr, z, V, n):
                 n2 = n*n
                 XY = ng.FESpace([X, Y])
                 (E, phi), (v, psi) = XY.TnT()
-                self.zminusOp = ng.BilinearForm(XY)
-                self.zminusOp += (z * E * v - curl(E) * curl(v)
-                                  - V * E * v - grad(phi) * v
-                                  - n2 * phi * psi + n2 * E * grad(psi)) * dx
+                selfr.zminusOp = ng.BilinearForm(XY)
+                selfr.zminusOp += (z * E * v - curl(E) * curl(v)
+                                   - V * E * v - grad(phi) * v
+                                   - n2 * phi * psi + n2 * E * grad(psi)) * dx
                 with ng.TaskManager():
-                    self.zminusOp.Assemble()
-                    self.R = self.zminusOp.mat.Inverse()
+                    selfr.zminusOp.Assemble()
+                    selfr.R = selfr.zminusOp.mat.Inverse()
 
-            def act(self, v, Rv, workspace=None):
+            def act(selfr, v, Rv, workspace=None):
                 if workspace is None:
                     Mv = ng.MultiVector(v._mv[0], v.m)
                 else:
@@ -673,13 +673,13 @@ class ModeSolver:
                 with ng.TaskManager():
                     Mv[:] = M.mat * v._mv
                     for i in range(v.m):
-                        self.wrk1.components[0].vec[:] = Mv[i]
-                        self.wrk1.components[1].vec[:] = 0
-                        self.wrk2.vec.data = self.R * self.wrk1.vec
-                        Rv._mv[i][:] = self.wrk2.components[0].vec
+                        selfr.wrk1.components[0].vec[:] = Mv[i]
+                        selfr.wrk1.components[1].vec[:] = 0
+                        selfr.wrk2.vec.data = selfr.R * selfr.wrk1.vec
+                        Rv._mv[i][:] = selfr.wrk2.components[0].vec
                     Rv.zerobdry()
 
-            def adj(self, v, RHv, workspace=None):
+            def adj(selfr, v, RHv, workspace=None):
                 if workspace is None:
                     Mv = ng.MultiVector(v._mv[0], v.m)
                 else:
@@ -687,13 +687,13 @@ class ModeSolver:
                 with ng.TaskManager():
                     Mv[:] = M.mat * v._mv
                     for i in range(v.m):
-                        self.wrk1.components[0].vec[:] = Mv[i]
-                        self.wrk1.components[1].vec[:] = 0
-                        self.wrk2.vec.data = self.R.H * self.wrk1.vec
-                        RHv._mv[i][:] = self.wrk2.components[0].vec
+                        selfr.wrk1.components[0].vec[:] = Mv[i]
+                        selfr.wrk1.components[1].vec[:] = 0
+                        selfr.wrk2.vec.data = selfr.R.H * selfr.wrk1.vec
+                        RHv._mv[i][:] = selfr.wrk2.components[0].vec
                     RHv.zerobdry()
 
-            def rayleigh_nsa(self, ql, qr, qAq=not None, qBq=not None,
+            def rayleigh_nsa(selfr, ql, qr, qAq=not None, qBq=not None,
                              workspace=None):
                 """
                 Return qAq[i, j] = (𝒜 qr[j], ql[i]) with 𝒜 =  (A - C D⁻¹ B) E
@@ -706,10 +706,10 @@ class ModeSolver:
                 if qAq is not None:
                     Aqr[:] = A.mat * qr._mv
                     for i in range(qr.m):
-                        self.tmpY1.vec.data = B.mat * qr._mv[i]
-                        self.tmpY2.vec.data = Dinv * self.tmpY1.vec
-                        self.tmpX1.vec.data = C.mat * self.tmpY2.vec
-                        Aqr[i].data -= self.tmpX1.vec
+                        selfr.tmpY1.vec.data = B.mat * qr._mv[i]
+                        selfr.tmpY2.vec.data = Dinv * selfr.tmpY1.vec
+                        selfr.tmpX1.vec.data = C.mat * selfr.tmpY2.vec
+                        Aqr[i].data -= selfr.tmpX1.vec
                     qAq = ng.InnerProduct(Aqr, ql._mv).NumPy().T
 
                 if qBq is not None:
@@ -719,21 +719,21 @@ class ModeSolver:
 
                 return (qAq, qBq)
 
-            def rayleigh(self, q, workspace=None):
-                return self.rayleigh_nsa(q, q, workspace=workspace)
+            def rayleigh(selfr, q, workspace=None):
+                return selfr.rayleigh_nsa(q, q, workspace=workspace)
 
         # resolvent class definition done -------------------------------
 
-        return X, M.mat, ResolventVectorMode
+        return X, ResolventVectorMode, M.mat, A.mat, B.mat, C.mat, D.mat, Dinv
 
     def guidedvecmodes(self, rad, ctr, p=3,  seed=1, npts=8, nspan=20,
                        within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
                        verbose=True, inverse='umfpack', **feastkwargs):
 
-        X, M, R = self.guidedvecmodesystem(p)
+        X, R, M, A, B, C, D, Dinv = self.guidedvecmodesystem(p)
 
-        print('Using FEAST to search for vector guided modes in ' +
-              'circle of radius', rad, 'centered at ', ctr)
+        print('Using FEAST to search for vector guided modes in')
+        print('circle of radius', rad, 'centered at ', ctr)
         print('assuming not more than %d modes in this interval' % nspan)
 
         P = SpectralProjNGR(lambda z: R(z, self.V, self.index),
@@ -744,7 +744,7 @@ class ModeSolver:
         U = NGvecs(X, nspan, M=M)
         U.setrandom(seed=seed)
 
-        Zsqrs, Y, history, _ = P.feast(U, **feastkwargs)
+        Zsqrs, U, history, _ = P.feast(U, **feastkwargs)
         betas = self.betafrom(Zsqrs)
 
         return betas, Zsqrs, U
