@@ -724,13 +724,14 @@ class ModeSolver:
 
         # resolvent class definition done -------------------------------
 
-        return X, ResolventVectorMode, M.mat, A.mat, B.mat, C.mat, D.mat, Dinv
+        return ResolventVectorMode, M.mat, A.mat, B.mat, C.mat, D.mat, Dinv
 
     def guidedvecmodes(self, rad, ctr, p=3,  seed=1, npts=8, nspan=20,
                        within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
                        verbose=True, inverse='umfpack', **feastkwargs):
 
-        X, R, M, A, B, C, D, Dinv = self.guidedvecmodesystem(p)
+        R, M, A, B, C, D, Dinv = self.guidedvecmodesystem(p)
+        X, Y = R.XY.components
 
         print('Using FEAST to search for vector guided modes in')
         print('circle of radius', rad, 'centered at ', ctr)
@@ -741,10 +742,15 @@ class ModeSolver:
                             within=within, rhoinv=rhoinv, quadrule=quadrule,
                             inverse=inverse, verbose=verbose)
 
-        U = NGvecs(X, nspan, M=M)
-        U.setrandom(seed=seed)
+        E = NGvecs(X, nspan, M=M)
+        E.setrandom(seed=seed)
 
-        Zsqrs, U, history, _ = P.feast(U, **feastkwargs)
+        Zsqrs, E, history, _ = P.feast(E, **feastkwargs)
         betas = self.betafrom(Zsqrs)
 
-        return betas, Zsqrs, U
+        phi = NGvecs(Y, E.m)
+        BE = phi.zeroclone()
+        BE._mv[:] = -B * E._mv
+        phi._mv[:] = Dinv * BE._mv
+
+        return betas, Zsqrs, E, phi, R
