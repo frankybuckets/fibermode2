@@ -1,7 +1,7 @@
 import ngsolve as ng
 import numpy as np
 from netgen.geom2d import SplineGeometry
-from ngsolve import H1, CoefficientFunction, IfPos
+from ngsolve import H1, CF, IfPos
 from ngsolve.special_functions import jv, kv
 from fiberamp.fiber import Fiber
 import fiberamp
@@ -217,18 +217,20 @@ class FiberMode(ModeSolver):
         if curvature == 0:
             if self.dtemp is None:
                 V = fib.fiberV()
-                self.V = CoefficientFunction([0, 0, -V*V])
+                self.V = CF([0, 0, -V*V])
+                self.index = CF([fib.nclad, fib.nclad, fib.ncore])
             else:
                 a = fib.rcore
-                n = CoefficientFunction([fib.nclad, fib.nclad, fib.ncore]) + \
+                n = CF([fib.nclad, fib.nclad, fib.ncore]) + \
                     self.dndT * self.dtemp
 
                 self.V = (a*fib.ks)**2 * (fib.nclad**2 - n**2)
+                self.index = n
         else:
             if self.dtemp is None:
-                n = CoefficientFunction([fib.nclad, fib.nclad, fib.ncore])
+                n = CF([fib.nclad, fib.nclad, fib.ncore])
             else:
-                n = CoefficientFunction([fib.nclad, fib.nclad, fib.ncore]) + \
+                n = CF([fib.nclad, fib.nclad, fib.ncore]) + \
                     self.dndT * self.dtemp
 
             a = fib.rcore
@@ -236,9 +238,9 @@ class FiberMode(ModeSolver):
             kan2 = ka2 * (fib.nclad ** 2)
 
             nbent = n * (1 + (ng.x * a * curvature/bendfactor))
-
+            self.index = nbent
             m = kan2 - ka2 * nbent * nbent
-            self.V = CoefficientFunction([0, m, m])
+            self.V = CF([0, m, m])
 
     # MODE CALCULATORS AND RELATED FUNCTIONALITIES  #########################
 
@@ -310,7 +312,7 @@ class FiberMode(ModeSolver):
         for vnum, kk in zip(V, k):
 
             if not bent:
-                self.V = CoefficientFunction([0, 0, -vnum*vnum])
+                self.V = CF([0, 0, -vnum*vnum])
             self.k = kk
 
             if interval is None:
@@ -506,7 +508,7 @@ class FiberMode(ModeSolver):
                where 'm' is implied by the ordering of sublists.
 
         OUTPUTS:
-        modes: CoefficientFunctions for the fiber modes
+        modes: CFs for the fiber modes
         betas: Propagation constants
         name2ind: A 'name to index' dict which places propagation
                   constants in descending order.
