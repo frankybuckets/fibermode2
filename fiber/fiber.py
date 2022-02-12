@@ -458,7 +458,7 @@ class Fiber:
         return X, Y, F, modefun, ax
 
     def vec_propagation_constants(self, m, delta=0.1, nrefine=10000,
-                                  tol=1e-9, maxnroots=50):
+                                  tol=1e-9, maxnroots=50, m0name=None):
         """
         Given mode angular variation index "m", attempt to find all
         propagation constants of vector modes (with m=0 corresponding
@@ -484,6 +484,7 @@ class Fiber:
         maxnroots: an estimate for number of BesselJm's roots that might
         be contained in [0, V].
 
+        m0name: if m=0, this argument should specify either 'TM' or 'TE'.
         """
 
         k = self.ks
@@ -504,12 +505,18 @@ class Fiber:
             K = kv(m, Y)
             KY = K * Y
             dK = kvp(m, Y)
-            fY = kn0a2 * ((X * Y)**2 * ((n1/n0)**2 * dJ * KY + JX * dK) *
-                          (dJ * KY + JX * dK))
             if m == 0:
+                if m0name == 'TE':
+                    fY = dJ * KY + JX * dK
+                elif m0name == 'TM':
+                    fY = (n1/n0)**2 * dJ * KY + JX * dK
+                else:
+                    raise ValueError('m=0 case should specify m0name!')
                 return fY
             else:
-                fY -= (m**2 * V**4) * ((Y**2 + kn0a2) * (J*K)**2)
+                fY = kn0a2 * ((X * Y)**2 * ((n1/n0)**2 * dJ * KY + JX * dK) *
+                              (dJ * KY + JX * dK)) \
+                    - (m**2 * V**4) * ((Y**2 + kn0a2) * (J*K)**2)
                 return fY
 
         # Collect Bessel roots appended with 0 and V:
@@ -727,6 +734,15 @@ class Fiber:
     def visualize_vec_Emode(self, m, Y, m0name=None, real=False, num=200):
         """
         An inefficient quick hack for visualizing hybrid electric modes.
+
+        INPUTS: m, Y, m0name are as documented in other methods
+        like  vec_symbolic_Emode(..).
+
+        "real": For hybrid modes, real=True and real=False should give
+        two distinct mode profiles (each Y-value is a root of
+        multiplicity 2, with even and odd angular variation).
+
+        "num": plot on a num x num uniform grid.
         """
 
         Ecore, Eclad = self.vec_symbolic_Emode(m, Y, m0name=m0name)
