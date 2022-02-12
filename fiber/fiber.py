@@ -464,8 +464,12 @@ class Fiber:
         propagation constants of vector modes (with m=0 corresponding
         to the circularly symmetric case).
 
-        OUTPUT: Return a list of tuples (ys, a, b) where ys is a list of roots
-        found in the interval [a, b].
+        OUTPUT:
+
+        A list of tuples (ys, a, b) where ys is a list of roots found
+        in the interval [a, b].  These nondimensional Y-values in ys are
+        related to the physical propagation constant β by
+        Y = a * sqrt(β² - k²n₀²).
 
         INPUTS:
 
@@ -573,7 +577,7 @@ class Fiber:
 
         return Y
 
-    def vec_symbolicfun(self, m):
+    def vec_symbolic_rootfun(self, m):
         """
         For the "m"-th mode index, return a nonlinear function of a
         nondimensional variable Z whose nondimensionalized roots give
@@ -616,13 +620,14 @@ class Fiber:
 
     def vec_confirm_roots(self, m, YY):
         """
-        Use cxroots to confirm roots within intervals, as output by YY =
-        self.vec_propagation_constants(...). The input YY must be in
-        the same format as the output of vec_propagation_constants.
-        Return roots as found by cxroots (which might have better precision).
+        Use cxroots to confirm the roots found within intervals, as output
+        by YY = self.vec_propagation_constants(...). The input YY must
+        be in the same format (as a 3-tuple) as the output of
+        vec_propagation_constants.  Return roots as found by cxroots
+        (which might have better precision).
         """
 
-        g, dg = self.vec_symbolicfun(m)
+        g, dg = self.vec_symbolic_rootfun(m)
         roots = []
         for yy in YY:
             y, a, b = yy
@@ -634,6 +639,161 @@ class Fiber:
                               rootErrTol=1.e-10, newtonStepTol=1.e-14)
                 roots += [r]
         return roots
+
+    def vec_symbolic_Emode(self, m, Y, m0name=None):
+        """
+        INPUTS:
+
+        * Angular index m (with m=0 indicating circular symmetry).
+        * The Y-value corresponding to the input "m", e.g, as output by the
+        method vec_propagation_constants(...).
+        * When m=0, there are two mode profiles, and it is necessary to
+        give m0name as either 'TM' or 'TE' to select one.
+
+        OUTPUTS:  Ecore, Eclad
+
+        Both are a list of evaluable strings representing the mode
+        expression as a function of polar coordinates r (radius), t
+        (angle). Each list has three complex components, corresponding
+        to r, t, and z components of the electric field E. The first
+        list represents the expressions in the core and the second in
+        the cladding.
+
+        """
+        x, y = sm.symbols('x y')
+        r, t = sm.symbols('r t')
+        n1 = self.ncore
+        n0 = self.nclad
+        a = self.rcore
+        k = self.ks
+        V = self.fiberV()
+        X = sm.sqrt(V**2 - Y**2)
+        J = sm.besselj(m, X)
+        K = sm.besselk(m, Y)
+        dJ = sm.besselj(m, x).diff(x).subs(x, X)
+        dK = sm.besselk(m, y).diff(y).subs(y, Y)
+        beta = self.XtoBeta([X])[0]
+
+        if m > 0:
+            B1t = 1j * k**2 * (dJ*K*Y*n1**2 + J*X*dK*n0**2) * X*Y \
+                / (m * beta * J * K * V**2)
+            phase = sm.exp(sm.I * m * t)
+
+            Ezcore = sm.besselj(m, X*r/a) * phase
+            Hztcore = B1t * sm.besselj(m, X*r/a) * phase
+            Ercore = -sm.I*(a/X)**2 * (beta*Ezcore.diff(r) + Hztcore.diff(t)/r)
+            Etcore = -sm.I*(a/X)**2 * (beta*Ezcore.diff(t)/r - Hztcore.diff(r))
+
+            Ezclad = (J/K) * sm.besselk(m, Y*r/a) * phase
+            Hztclad = B1t * (J/K) * sm.besselk(m, Y*r/a) * phase
+            Erclad = sm.I*(a/Y)**2 * (beta*Ezclad.diff(r) + Hztclad.diff(t)/r)
+            Etclad = sm.I*(a/Y)**2 * (beta*Ezclad.diff(t)/r - Hztclad.diff(r))
+
+        elif m == 0 and m0name == 'TE':
+
+            Ezcore = 0
+            Hztcore = sm.besselj(m, X*r/a)
+            Ercore = -sm.I*(a/X)**2 * Hztcore.diff(t)/r
+            Etcore = sm.I*(a/X)**2 * Hztcore.diff(r)
+
+            Ezclad = 0
+            Hztclad = (J/K) * sm.besselk(m, Y*r/a)
+            Erclad = sm.I*(a/Y)**2 * Hztclad.diff(t)/r
+            Etclad = -sm.I*(a/Y)**2 * Hztclad.diff(r)
+
+        elif m == 0 and m0name == 'TM':
+
+            Ezcore = sm.besselj(m, X*r/a)
+            Hztcore = 0 * sm.I
+            Ercore = -sm.I*(a/X)**2 * beta*Ezcore.diff(r)
+            Etcore = -sm.I*(a/X)**2 * beta*Ezcore.diff(t)/r
+
+            Ezclad = (J/K) * sm.besselk(m, Y*r/a)
+            Hztclad = 0 * sm.I
+            Erclad = sm.I*(a/Y)**2 * beta*Ezclad.diff(r)
+            Etclad = sm.I*(a/Y)**2 * beta*Ezclad.diff(t)/r
+
+        else:
+            raise ValueError('Improper input parameters')
+
+        Ecore, Eclad = \
+            [[str(e).replace('besselj', 'jv').replace('besselk', 'kv').
+              replace('sqrt', 'np.sqrt').replace('I', '1j').
+              replace('exp', 'np.exp') for e in ee]
+             for ee in [(Ercore, Etcore, Ezcore), (Erclad, Etclad, Ezclad)]]
+
+        return Ecore, Eclad
+
+    def visualize_vec_Emode(self, m, Y, m0name=None, real=False, num=200):
+        """
+        An inefficient quick hack for visualizing hybrid electric modes.
+        """
+
+        Ecore, Eclad = self.vec_symbolic_Emode(m, Y, m0name=m0name)
+        a = self.rcore
+        x = np.linspace(-2*a, 2*a, num=num)
+        y = np.linspace(-2*a, 2*a, num=num)
+        x, y = np.meshgrid(x, y)
+        r = np.sqrt(x**2 + y**2)
+        t = np.arctan2(y, x)
+        usevars = {'np': np, 'jv': jv, 'kv': kv, 'r': r, 't': t}
+        E0 = [eval(e, usevars) for e in Eclad]
+        E1 = [eval(e, usevars) for e in Ecore]
+        Er = np.select([r < self.rcore, r >= self.rcore], [E1[0], E0[0]])
+        Et = np.select([r < self.rcore, r >= self.rcore], [E1[1], E0[1]])
+        Ez = np.select([r < self.rcore, r >= self.rcore], [E1[2], E0[2]])
+        Ex = Er * np.cos(t) - Et * np.sin(t)
+        Ey = Er * np.sin(t) + Et * np.cos(t)
+
+        fig = plt.figure()
+        ax = fig.add_subplot()
+        ax.axis('equal')
+        ax.set(xlim=(-1.5*a, 1.5*a), ylim=(-1.5*a, 1.5*a))
+        if real:
+            rep = 'real'
+            U = Ex.real
+            V = Ey.real
+            W = Ez.real
+            tit = 'Re($E_{xy}$) and Re($E_z$)'
+            ctit = 'Re($E_z$)'
+            ax.set_title(tit)
+            stit = '|Re($E_{xy})|^2$'
+        else:
+            rep = 'imaginary'
+            U = Ex.imag
+            V = Ey.imag
+            W = Ez.imag
+            tit = 'Im($E_{xy}$) and Im($E_z$)'
+            ctit = 'Im($E_z$)'
+            ax.set_title(tit)
+            stit = '|Im($E_{xy})|^2$'
+
+        cs = ax.contourf(x, y, W, cmap='seismic', alpha=0.8)
+        cbar = fig.colorbar(cs, location='right')
+        cbar.ax.set_ylabel(ctit)
+        s0 = np.linspace(-a, a, num=20)
+        sl = np.linspace(-1.5*a, -a, num=3, endpoint=False)
+        s = np.concatenate((sl, s0, -sl))
+        sx, sy = np.meshgrid(s, s)
+        xs = sx.reshape(1, sx.shape[0]*sx.shape[1])
+        ys = sy.reshape(1, sy.shape[0]*sy.shape[1])
+        seeds = np.concatenate((ys, xs), axis=0)
+        Intens = U**2 + V**2
+        if np.linalg.norm(Intens) < 1e-20:
+            print('**** Refusing to drawing the 0 ' + rep
+                  + ' part of transverse E!')
+            print('(Have you tried to draw the other part?)')
+        else:
+            strm = ax.streamplot(x, y, U, V, start_points=seeds.T,
+                                 density=2.5, linewidth=1.5,
+                                 color=Intens, cmap='PuBuGn')
+            sbar = fig.colorbar(strm.lines, location='left')
+            sbar.ax.set_ylabel(stit)
+
+        plt.tight_layout()
+        plt.show(block=False)
+
+        return fig, ax, x, y, Ex, Ey, Ez
 
     # PREPROGRAMMED FIBER CASES & OTHER UTILITIES:
 
@@ -970,6 +1130,7 @@ class Fiber:
             ncore = sqrt(nclad*nclad + NA*NA)
 
         elif case == 'book':
+
             L = 0.1
             rcore = 3e-6
             rclad = 1e-3
@@ -979,6 +1140,7 @@ class Fiber:
             ncore = 1.469
 
         elif case == 'empty':
+
             L = 10
             rcore = 0.25
             rclad = 1
@@ -987,6 +1149,7 @@ class Fiber:
             ncore = 1.0
 
         elif case == 'empty_2':
+
             L = 10
             rcore = 0.5
             rclad = 1
