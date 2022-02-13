@@ -13,8 +13,8 @@ from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 from scipy.optimize import fsolve, bisect
-from scipy.special import hankel1, jv, kv, jn_zeros
-from cxroots import Rectangle
+from scipy.special import hankel1, jv, kv, jvp, kvp, jn_zeros
+from cxroots import Rectangle, Circle
 import sympy as sm
 
 
@@ -457,6 +457,360 @@ class Fiber:
 
         return X, Y, F, modefun, ax
 
+    def vec_propagation_constants(self, m, delta=0.1, nrefine=10000,
+                                  tol=1e-9, maxnroots=50, m0name=None):
+        """
+        Given mode angular variation index "m", attempt to find all
+        propagation constants of vector modes (with m=0 corresponding
+        to the circularly symmetric case).
+
+        OUTPUT:
+
+        A list of tuples (ys, a, b) where ys is a list of roots found
+        in the interval [a, b].  These nondimensional Y-values in ys are
+        related to the physical propagation constant β by
+        Y = a * sqrt(β² - k²n₀²).
+
+        INPUTS:
+
+        nrefine: Split the interval [0, V] into nrefine subintervals and
+        separately search in each. (Here V is the V-number of the fiber.)
+
+        delta: do not search near +/- delta intervals near BesselJm roots and
+        near points 0 and V (where spurious roots can be picked up easily).
+
+        tol: root accepted when f has abs value less than tol.
+
+        maxnroots: an estimate for number of BesselJm's roots that might
+        be contained in [0, V].
+
+        m0name: if m=0, this argument should specify either 'TM' or 'TE'.
+        """
+
+        k = self.ks
+        V = self.fiberV()
+        n1 = self.ncore
+        n0 = self.nclad
+        a = self.rcore
+        kn0a2 = (k*n0*a)**2
+
+        if abs(self.numerical_aperture()) < 1.e-15:
+            raise NotImplementedError()
+
+        def f(Y):
+            X = np.sqrt(V**2 - Y**2)
+            J = jv(m, X)
+            JX = J * X
+            dJ = jvp(m, X)
+            K = kv(m, Y)
+            KY = K * Y
+            dK = kvp(m, Y)
+            if m == 0:
+                if m0name == 'TE':
+                    fY = dJ * KY + JX * dK
+                elif m0name == 'TM':
+                    fY = (n1/n0)**2 * dJ * KY + JX * dK
+                else:
+                    raise ValueError('m=0 case should specify m0name!')
+                return fY
+            else:
+                fY = kn0a2 * ((X * Y)**2 * ((n1/n0)**2 * dJ * KY + JX * dK) *
+                              (dJ * KY + JX * dK)) \
+                    - (m**2 * V**4) * ((Y**2 + kn0a2) * (J*K)**2)
+                return fY
+
+        # Collect Bessel roots appended with 0 and V:
+
+        jz = jn_zeros(m, maxnroots)
+        jz = jz[np.where(jz < V)[0]]
+        jz = np.insert(jz, 0, 0)
+        jz = np.append(jz, V)
+        jy = np.sort(np.sqrt(V**2 - jz**2))  # convert to Y-intervals
+        Y = []
+
+        for i in range(1, len(jz)):
+
+            # Try bisection on "nrefine" intervals between bessel roots
+            a0 = jy[i-1]+delta
+            b0 = jy[i]-delta
+            aa = np.linspace(a0, b0, num=nrefine)
+            print('\nSEARCHING FOR ROOTS Y in [%6g, %6g]' % (a0, b0) + '-'*29)
+            ys = []
+            for ii in range(nrefine-1):
+                roots = []
+                a = aa[ii]
+                b = aa[ii+1]
+                if abs(f(a)) < tol:
+                    roots += [a]
+                elif abs(f(b)) < tol:
+                    roots += [b]
+                elif np.sign(f(a)*f(b)) < 0:
+                    print(' SEARCH %1d: Sign change in [%g, %g]' % (ii, a, b))
+                    y = bisect(f, a, b, xtol=tol, maxiter=10000)
+                    if abs(f(y)) < tol:
+                        print('  Bisection succeeded.')
+                        roots += [y]
+                    else:
+                        y = fsolve(f, (a+b)/2, xtol=tol)[0]
+                        if abs(f(y)) < tol:
+                            print('  Nonlinear solve succeeded.')
+                            roots += [y]
+                        else:
+                            print('  >>>Neither bisection nor fsolve worked!')
+                if len(roots):
+                    ys += [(roots, a, b)]
+
+            if len(ys) == 0:
+                y = fsolve(f, (a0+b0)/2, xtol=tol)[0]
+                if abs(f(y)) < tol and abs(y-b0) > delta and abs(y-a0) > delta:
+                    print('  Nonlinear solve b/w Bessel roots succeeded.')
+                    ys += [(y, a0, b0)]
+                else:
+                    print('  >>>Could not find root in [%6g, %6g]' % (a0, b0))
+
+            Y += ys
+
+        # Report
+        print('-'*64)
+        if len(Y):
+            print('ROOTS FOR m =', m,  ' FOUND:')
+            for yy in Y:
+                y, a, b = yy
+                for yroot in y:
+                    print('  %12.10f in [%8.6f, %8.6f]' % (yroot, a, b))
+        else:
+            print('NO ROOTS FOUND FOR m =', m)
+        print('-'*64)
+
+        return Y
+
+    def vec_symbolic_rootfun(self, m):
+        """
+        For the "m"-th mode index, return a nonlinear function of a
+        nondimensional variable Z whose nondimensionalized roots give
+        leaky modes.  The function is returned as a string (with letter Z)
+        which can be evaluated for specific Z values later.
+        """
+        x, y = sm.symbols('x y')
+        n1 = self.ncore
+        n0 = self.nclad
+        a = self.rcore
+        k = self.ks
+        kn0a2 = (k*n0*a)**2
+        V = self.fiberV()
+
+        J = sm.besselj(m, x)
+        JX = J * x
+        dJ = J.diff(x).factor()
+        K = sm.besselk(m, y)
+        KY = K * y
+        dK = K.diff(y).factor()
+
+        fY = kn0a2 * ((x * y)**2 * ((n1/n0)**2 * dJ * KY + JX * dK) *
+                      (dJ * KY + JX * dK))
+        if m > 0:
+            fY -= (m**2 * V**4) * ((y**2 + kn0a2) * (J*K)**2)
+
+        fY = fY.subs(x, sm.sqrt(V**2 - y**2))
+        dfY = fY.diff(y).factor()
+
+        dgstr = str(dfY).replace('y', 'Y').    \
+            replace('besselj', 'jv').          \
+            replace('besselk', 'kv').          \
+            replace('sqrt', 'np.sqrt')
+        gstr = str(fY).replace('y', 'Y').      \
+            replace('besselj', 'jv').          \
+            replace('besselk', 'kv').          \
+            replace('sqrt', 'np.sqrt')
+
+        return gstr, dgstr
+
+    def vec_confirm_roots(self, m, YY):
+        """
+        Use cxroots to confirm the roots found within intervals, as output
+        by YY = self.vec_propagation_constants(...). The input YY must
+        be in the same format (as a 3-tuple) as the output of
+        vec_propagation_constants.  Return roots as found by cxroots
+        (which might have better precision).
+        """
+
+        g, dg = self.vec_symbolic_rootfun(m)
+        roots = []
+        for yy in YY:
+            y, a, b = yy
+            for ctr in y:
+                rad = max(ctr-a, b-ctr, 1e-6)
+                print(' Checking root ', ctr, ' about radius', rad)
+                rec = Circle(ctr, rad)
+                r = rec.roots(lambda Y: eval(g), lambda Y: eval(dg),
+                              rootErrTol=1.e-10, newtonStepTol=1.e-14)
+                roots += [r]
+        return roots
+
+    def vec_symbolic_Emode(self, m, Y, m0name=None):
+        """
+        INPUTS:
+
+        * Angular index m (with m=0 indicating circular symmetry).
+        * The Y-value corresponding to the input "m", e.g, as output by the
+        method vec_propagation_constants(...).
+        * When m=0, there are two mode profiles, and it is necessary to
+        give m0name as either 'TM' or 'TE' to select one.
+
+        OUTPUTS:  Ecore, Eclad
+
+        Both are a list of evaluable strings representing the mode
+        expression as a function of polar coordinates r (radius), t
+        (angle). Each list has three complex components, corresponding
+        to r, t, and z components of the electric field E. The first
+        list represents the expressions in the core and the second in
+        the cladding.
+
+        """
+        x, y = sm.symbols('x y')
+        r, t = sm.symbols('r t')
+        n1 = self.ncore
+        n0 = self.nclad
+        a = self.rcore
+        k = self.ks
+        V = self.fiberV()
+        X = sm.sqrt(V**2 - Y**2)
+        J = sm.besselj(m, X)
+        K = sm.besselk(m, Y)
+        dJ = sm.besselj(m, x).diff(x).subs(x, X)
+        dK = sm.besselk(m, y).diff(y).subs(y, Y)
+        beta = self.XtoBeta([X])[0]
+
+        if m > 0:
+            B1t = 1j * k**2 * (dJ*K*Y*n1**2 + J*X*dK*n0**2) * X*Y \
+                / (m * beta * J * K * V**2)
+            phase = sm.exp(sm.I * m * t)
+
+            Ezcore = sm.besselj(m, X*r/a) * phase
+            Hztcore = B1t * sm.besselj(m, X*r/a) * phase
+            Ercore = -sm.I*(a/X)**2 * (beta*Ezcore.diff(r) + Hztcore.diff(t)/r)
+            Etcore = -sm.I*(a/X)**2 * (beta*Ezcore.diff(t)/r - Hztcore.diff(r))
+
+            Ezclad = (J/K) * sm.besselk(m, Y*r/a) * phase
+            Hztclad = B1t * (J/K) * sm.besselk(m, Y*r/a) * phase
+            Erclad = sm.I*(a/Y)**2 * (beta*Ezclad.diff(r) + Hztclad.diff(t)/r)
+            Etclad = sm.I*(a/Y)**2 * (beta*Ezclad.diff(t)/r - Hztclad.diff(r))
+
+        elif m == 0 and m0name == 'TE':
+
+            Ezcore = 0
+            Hztcore = sm.besselj(m, X*r/a)
+            Ercore = -sm.I*(a/X)**2 * Hztcore.diff(t)/r
+            Etcore = sm.I*(a/X)**2 * Hztcore.diff(r)
+
+            Ezclad = 0
+            Hztclad = (J/K) * sm.besselk(m, Y*r/a)
+            Erclad = sm.I*(a/Y)**2 * Hztclad.diff(t)/r
+            Etclad = -sm.I*(a/Y)**2 * Hztclad.diff(r)
+
+        elif m == 0 and m0name == 'TM':
+
+            Ezcore = sm.besselj(m, X*r/a)
+            Hztcore = 0 * sm.I
+            Ercore = -sm.I*(a/X)**2 * beta*Ezcore.diff(r)
+            Etcore = -sm.I*(a/X)**2 * beta*Ezcore.diff(t)/r
+
+            Ezclad = (J/K) * sm.besselk(m, Y*r/a)
+            Hztclad = 0 * sm.I
+            Erclad = sm.I*(a/Y)**2 * beta*Ezclad.diff(r)
+            Etclad = sm.I*(a/Y)**2 * beta*Ezclad.diff(t)/r
+
+        else:
+            raise ValueError('Improper input parameters')
+
+        Ecore, Eclad = \
+            [[str(e).replace('besselj', 'jv').replace('besselk', 'kv').
+              replace('sqrt', 'np.sqrt').replace('I', '1j').
+              replace('exp', 'np.exp') for e in ee]
+             for ee in [(Ercore, Etcore, Ezcore), (Erclad, Etclad, Ezclad)]]
+
+        return Ecore, Eclad
+
+    def visualize_vec_Emode(self, m, Y, m0name=None, real=False, num=200):
+        """
+        An inefficient quick hack for visualizing hybrid electric modes.
+
+        INPUTS: m, Y, m0name are as documented in other methods
+        like  vec_symbolic_Emode(..).
+
+        "real": For hybrid modes, real=True and real=False should give
+        two distinct mode profiles (each Y-value is a root of
+        multiplicity 2, with even and odd angular variation).
+
+        "num": plot on a num x num uniform grid.
+        """
+
+        Ecore, Eclad = self.vec_symbolic_Emode(m, Y, m0name=m0name)
+        a = self.rcore
+        x = np.linspace(-2*a, 2*a, num=num)
+        y = np.linspace(-2*a, 2*a, num=num)
+        x, y = np.meshgrid(x, y)
+        r = np.sqrt(x**2 + y**2)
+        t = np.arctan2(y, x)
+        usevars = {'np': np, 'jv': jv, 'kv': kv, 'r': r, 't': t}
+        E0 = [eval(e, usevars) for e in Eclad]
+        E1 = [eval(e, usevars) for e in Ecore]
+        Er = np.select([r < self.rcore, r >= self.rcore], [E1[0], E0[0]])
+        Et = np.select([r < self.rcore, r >= self.rcore], [E1[1], E0[1]])
+        Ez = np.select([r < self.rcore, r >= self.rcore], [E1[2], E0[2]])
+        Ex = Er * np.cos(t) - Et * np.sin(t)
+        Ey = Er * np.sin(t) + Et * np.cos(t)
+
+        fig = plt.figure()
+        ax = fig.add_subplot()
+        ax.axis('equal')
+        ax.set(xlim=(-1.5*a, 1.5*a), ylim=(-1.5*a, 1.5*a))
+        if real:
+            rep = 'real'
+            U = Ex.real
+            V = Ey.real
+            W = Ez.real
+            tit = 'Re($E_{xy}$) and Re($E_z$)'
+            ctit = 'Re($E_z$)'
+            ax.set_title(tit)
+            stit = '|Re($E_{xy})|^2$'
+        else:
+            rep = 'imaginary'
+            U = Ex.imag
+            V = Ey.imag
+            W = Ez.imag
+            tit = 'Im($E_{xy}$) and Im($E_z$)'
+            ctit = 'Im($E_z$)'
+            ax.set_title(tit)
+            stit = '|Im($E_{xy})|^2$'
+
+        cs = ax.contourf(x, y, W, cmap='seismic', alpha=0.8)
+        cbar = fig.colorbar(cs, location='right')
+        cbar.ax.set_ylabel(ctit)
+        s0 = np.linspace(-a, a, num=20)
+        sl = np.linspace(-1.5*a, -a, num=3, endpoint=False)
+        s = np.concatenate((sl, s0, -sl))
+        sx, sy = np.meshgrid(s, s)
+        xs = sx.reshape(1, sx.shape[0]*sx.shape[1])
+        ys = sy.reshape(1, sy.shape[0]*sy.shape[1])
+        seeds = np.concatenate((ys, xs), axis=0)
+        Intens = U**2 + V**2
+        if np.linalg.norm(Intens) < 1e-20:
+            print('**** Refusing to drawing the 0 ' + rep
+                  + ' part of transverse E!')
+            print('(Have you tried to draw the other part?)')
+        else:
+            strm = ax.streamplot(x, y, U, V, start_points=seeds.T,
+                                 density=2.5, linewidth=1.5,
+                                 color=Intens, cmap='PuBuGn')
+            sbar = fig.colorbar(strm.lines, location='left')
+            sbar.ax.set_ylabel(stit)
+
+        plt.tight_layout()
+        plt.show(block=False)
+
+        return fig, ax, x, y, Ex, Ey, Ez
+
     # PREPROGRAMMED FIBER CASES & OTHER UTILITIES:
 
     def set(self, case):
@@ -792,6 +1146,7 @@ class Fiber:
             ncore = sqrt(nclad*nclad + NA*NA)
 
         elif case == 'book':
+
             L = 0.1
             rcore = 3e-6
             rclad = 1e-3
@@ -801,6 +1156,7 @@ class Fiber:
             ncore = 1.469
 
         elif case == 'empty':
+
             L = 10
             rcore = 0.25
             rclad = 1
@@ -809,6 +1165,7 @@ class Fiber:
             ncore = 1.0
 
         elif case == 'empty_2':
+
             L = 10
             rcore = 0.5
             rclad = 1
