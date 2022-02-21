@@ -457,7 +457,7 @@ class Fiber:
 
         return X, Y, F, modefun, ax
 
-    def vec_propagation_constants(self, m, delta=0.1, nrefine=10000,
+    def vec_propagation_constants(self, m, delta=0.01, nrefine=10000,
                                   tol=1e-9, maxnroots=50, m0name=None):
         """
         Given mode angular variation index "m", attempt to find all
@@ -731,7 +731,8 @@ class Fiber:
 
         return Ecore, Eclad
 
-    def visualize_vec_Emode(self, m, Y, m0name=None, real=False, num=200):
+    def visualize_vec_Emode(self, m, Y, m0name=None, real=False,
+                            num=200, block=True):
         """
         An inefficient quick hack for visualizing hybrid electric modes.
 
@@ -743,6 +744,7 @@ class Fiber:
         multiplicity 2, with even and odd angular variation).
 
         "num": plot on a num x num uniform grid.
+        "block": Set to False if you don't want the plot to pause the code.
         """
 
         Ecore, Eclad = self.vec_symbolic_Emode(m, Y, m0name=m0name)
@@ -807,7 +809,7 @@ class Fiber:
             sbar.ax.set_ylabel(stit)
 
         plt.tight_layout()
-        plt.show(block=False)
+        plt.show(block=block)
 
         return fig, ax, x, y, Ex, Ey, Ez
 
