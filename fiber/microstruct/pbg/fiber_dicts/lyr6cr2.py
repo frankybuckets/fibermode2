@@ -1,3 +1,4 @@
+
 # Geometric Parameters.  Dimensional
 
 p = 6                      # number of sides of polygonal lattice
