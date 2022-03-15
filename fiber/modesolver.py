@@ -753,4 +753,4 @@ class ModeSolver:
         BE._mv[:] = -B * E._mv
         phi._mv[:] = Dinv * BE._mv
 
-        return betas, Zsqrs, E, phi, R, P
+        return betas, Zsqrs, E, phi, R
