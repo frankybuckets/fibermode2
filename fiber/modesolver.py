@@ -662,7 +662,7 @@ class ModeSolver:
                                    - n2 * phi * psi + n2 * E * grad(psi)) * dx
                 with ng.TaskManager():
                     selfr.zminusOp.Assemble()
-                    selfr.R = selfr.zminusOp.mat.Inverse()
+                    selfr.R = selfr.zminusOp.mat.Inverse(XY.FreeDofs())
 
             def act(selfr, v, Rv, workspace=None):
                 if workspace is None:
@@ -753,4 +753,4 @@ class ModeSolver:
         BE._mv[:] = -B * E._mv
         phi._mv[:] = Dinv * BE._mv
 
-        return betas, Zsqrs, E, phi, R
+        return betas, Zsqrs, E, phi, R, P
