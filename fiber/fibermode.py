@@ -21,7 +21,7 @@ class FiberMode(ModeSolver):
     """
 
     def __init__(self, fibername=None, fromfile=None,
-                 R=None, Rout=None, geom=None,
+                 R=None, Rout=None, geom=None, curveorder=3,
                  h=3, hcore=None, refine=0, dtemp=None):
         """
         EITHER provide a prefix "filename" of a collection of files, e.g.,
@@ -58,7 +58,7 @@ class FiberMode(ModeSolver):
                 raise ValueError('Need either a file or a fiber name')
             self.makefibermode(fibername, R=R, Rout=Rout, geom=geom,
                                h=h, hcore=hcore)
-            self.makemesh(refine)
+            self.makemesh(refine, curveorder)
         else:
             fbmfilename = self.outfolder+'/'+fromfile+'_fbm.npz'
             if os.path.isfile(fbmfilename):
@@ -75,7 +75,7 @@ class FiberMode(ModeSolver):
                 else:
                     self.geo = geom
 
-                self.loadmesh(meshfname)
+                self.loadmesh(meshfname, curveorder)
             else:
                 print('Specified mesh file not found -- creating it')
                 self.makemesh(refine)
@@ -136,13 +136,13 @@ class FiberMode(ModeSolver):
         self.hclad = h
         self.hpml = h
 
-    def makemesh(self, refine=0):
+    def makemesh(self, refine=0, curveorder=3):
         self.setstepindexgeom()  # sets self.geo
         ngmesh = self.geo.GenerateMesh()
         for i in range(refine):
             ngmesh.Refine()
         mesh = ng.Mesh(ngmesh.Copy())
-        mesh.Curve(3)
+        mesh.Curve(curveorder)
         ng.Draw(mesh)
         self.mesh = mesh
 
@@ -159,11 +159,11 @@ class FiberMode(ModeSolver):
         self.fiber = Fiber(self.fibername)
         self.setstepindexgeom()  # sets self.geo
 
-    def loadmesh(self, meshfname):
+    def loadmesh(self, meshfname, curveorder=3):
         print('Loading mesh from file ', meshfname)
         self.mesh = ng.Mesh(meshfname)
         self.mesh.ngmesh.SetGeometry(self.geo)
-        self.mesh.Curve(3)
+        self.mesh.Curve(curveorder)
         ng.Draw(self.mesh)
 
     def setstepindexgeom(self):
