@@ -729,7 +729,7 @@ class ModeSolver:
     def guidedvecmodes(self, rad, ctr, p=3,  seed=1, npts=8, nspan=20,
                        within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
                        verbose=True, inverse='umfpack',
-                       hermitian=True, **feastkwargs):
+                       **feastkwargs):
 
         R, M, A, B, C, D, Dinv = self.guidedvecmodesystem(p)
         X, Y = R.XY.components
@@ -746,8 +746,7 @@ class ModeSolver:
         E = NGvecs(X, nspan, M=M)
         E.setrandom(seed=seed)
 
-        Zsqrs, E, history, _ = P.feast(E, hermitian=hermitian,
-                                       **feastkwargs)
+        Zsqrs, E, history, _ = P.feast(E, **feastkwargs)
         betas = self.betafrom(Zsqrs)
 
         phi = NGvecs(Y, E.m)
