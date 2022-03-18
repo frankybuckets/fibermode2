@@ -728,7 +728,8 @@ class ModeSolver:
 
     def guidedvecmodes(self, rad, ctr, p=3,  seed=1, npts=8, nspan=20,
                        within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
-                       verbose=True, inverse='umfpack', **feastkwargs):
+                       verbose=True, inverse='umfpack',
+                       **feastkwargs):
 
         R, M, A, B, C, D, Dinv = self.guidedvecmodesystem(p)
         X, Y = R.XY.components
