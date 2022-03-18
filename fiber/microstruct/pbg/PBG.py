@@ -133,6 +133,9 @@ class PBG(ModeSolver):
                                       'core': self.n_core,
                                       'poly': self.n_poly
                                       }
+        self.index = ng.CoefficientFunction(
+            [self.refractive_index_dict[mat]
+             for mat in self.mesh.GetMaterials()])
 
         # Set wavelength and base coefficent function (these then set k and V)
         self.wavelength = fiber_param_dict['wavelength']
