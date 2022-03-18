@@ -8,7 +8,8 @@ from pyeigfeast import SpectralProjNGR, SpectralProjNGPoly
 
 class ModeSolver:
 
-    """This class contains algorithms to compute modes of various fibers.
+    """This class contains algorithms to compute modes of various fibers,
+    including MICROSTRUCTURED fibers with or without radial symmetry.
     The key inputs are cross section mesh, a characteristic length L,
     the constant refractive index n0 in the unbounded complement, the
     refractive index and the nondimensional index well V (all
@@ -81,7 +82,8 @@ class ModeSolver:
         self.ngspmlset = False
 
         print('ModeSolver: Checking if mesh has required regions')
-
+        print('Mesh has ', mesh.ne, ' elements, ', mesh.nv, ' points, '
+              ' and ', mesh.nedge, ' edges.')
         if sum(self.mesh.Materials('Outer').Mask()) == 0:
             raise ValueError('Input mesh must have a region called Outer')
         if sum(self.mesh.Boundaries('OuterCircle').Mask()) == 0:
@@ -405,7 +407,7 @@ class ModeSolver:
             is such that Z*Z is contained within the circular contour
             centered at "centerZ2" of radius "radiusZ2" in the complex
             plane.
-        * Remaining inputs are the as documented in leakymode(..).
+        * Remaining inputs are as documented in leakymode(..).
 
         OUTPUTS:   zsqr, Yl, Y, P
 
@@ -609,10 +611,31 @@ class ModeSolver:
     # ###################################################################
     # VECTOR MODES
 
-    def guidedvecmodesystem(self, p):   # degree p >= 0
+    def vecmodesystem(self, p, alpha=None):
+        """
+        Prepare eigensystem and resolvents for solving for vector modes.
 
-        if self.ngspmlset:
+        INPUTS:
+
+        p: Determines degree of Nedelec x Lagrange space system.
+           This should be an integer >= 0.
+
+        alpha: If alpha is None, prepare system for vector guided modes.
+           If alpha is a positive number, use it as PML strength and
+           prepare system for leaky modes using NGSolve's automatic
+           mesh-based PML.
+        """
+
+        if alpha is not None:
+            self.ngspmlset = True
+            radial = ng.pml.Radial(rad=self.R,
+                                   alpha=alpha*1j, origin=(0, 0))
+            self.mesh.SetPML(radial, 'Outer')
+            print('Set NGSolve automatic PML with p=', p, ' alpha=', alpha,
+                  'and thickness=%.3f' % (self.Rout-self.R))
+        elif self.ngspmlset:
             raise RuntimeError('Unexpected NGSolve pml mesh trafo here.')
+
         n = self.index
         n2 = n*n
         X = ng.HCurl(self.mesh, order=p+1-max(1-p, 0), type1=True,
@@ -677,7 +700,6 @@ class ModeSolver:
                         selfr.wrk1.components[1].vec[:] = 0
                         selfr.wrk2.vec.data = selfr.R * selfr.wrk1.vec
                         Rv._mv[i][:] = selfr.wrk2.components[0].vec
-                    Rv.zerobdry()
 
             def adj(selfr, v, RHv, workspace=None):
                 if workspace is None:
@@ -691,13 +713,13 @@ class ModeSolver:
                         selfr.wrk1.components[1].vec[:] = 0
                         selfr.wrk2.vec.data = selfr.R.H * selfr.wrk1.vec
                         RHv._mv[i][:] = selfr.wrk2.components[0].vec
-                    RHv.zerobdry()
 
             def rayleigh_nsa(selfr, ql, qr, qAq=not None, qBq=not None,
                              workspace=None):
                 """
                 Return qAq[i, j] = (𝒜 qr[j], ql[i]) with 𝒜 =  (A - C D⁻¹ B) E
                 and qBq[i, j] = (M qr[j], ql[i]). """
+
                 if workspace is None:
                     Aqr = ng.MultiVector(qr._mv[0], qr.m)
                 else:
@@ -726,26 +748,29 @@ class ModeSolver:
 
         return ResolventVectorMode, M.mat, A.mat, B.mat, C.mat, D.mat, Dinv
 
-    def guidedvecmodes(self, rad, ctr, p=3,  seed=1, npts=8, nspan=20,
+    def guidedvecmodes(self, rad, ctr, p=3,  seed=None, npts=8, nspan=20,
                        within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
                        verbose=True, inverse='umfpack',
                        **feastkwargs):
+        """
+        Capture guided vector modes whose non-dimensional resonance value Z²
+        is such that Z*Z is within the interval (ctr-rad, ctr+rad).
+        """
 
-        R, M, A, B, C, D, Dinv = self.guidedvecmodesystem(p)
+        R, M, A, B, C, D, Dinv = self.vecmodesystem(p)
         X, Y = R.XY.components
+        E = NGvecs(X, nspan, M=M)
+        E.setrandom(seed=seed)
 
         print('Using FEAST to search for vector guided modes in')
         print('circle of radius', rad, 'centered at ', ctr)
-        print('assuming not more than %d modes in this interval' % nspan)
+        print('assuming not more than %d modes in this interval.' % nspan)
+        print('System size:', E.n, ' x ', E.n, '  Inverse type:', inverse)
 
         P = SpectralProjNGR(lambda z: R(z, self.V, self.index),
                             radius=rad, center=ctr, npts=npts,
                             within=within, rhoinv=rhoinv, quadrule=quadrule,
                             inverse=inverse, verbose=verbose)
-
-        E = NGvecs(X, nspan, M=M)
-        E.setrandom(seed=seed)
-
         Zsqrs, E, history, _ = P.feast(E, **feastkwargs)
         betas = self.betafrom(Zsqrs)
 
@@ -753,5 +778,46 @@ class ModeSolver:
         BE = phi.zeroclone()
         BE._mv[:] = -B * E._mv
         phi._mv[:] = Dinv * BE._mv
+
+        return betas, Zsqrs, E, phi, R
+
+    def leakyvecmodes(self, rad, ctr, alpha=1, p=3,  seed=1, npts=8, nspan=20,
+                      within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
+                      verbose=True, inverse='umfpack',
+                      **feastkwargs):
+        """
+        Capture leaky vector modes whose non-dimensional resonance value Z²
+        is contained  within the circular contour centered at "ctr"
+        of radius "rad" in the Z² complex plane (not the Z-plane!).
+        """
+
+        R, M, A, B, C, D, Dinv = self.vecmodesystem(p, alpha=alpha)
+        X, Y = R.XY.components
+        E = NGvecs(X, nspan, M=M)
+        El = E.create()
+        E.setrandom(seed=seed)
+        El.setrandom(seed=seed)
+
+        print('Using FEAST to search for vector leaky modes in')
+        print('circle of radius', rad, 'centered at ', ctr)
+        print('assuming not more than %d modes in this interval' % nspan)
+        print('System size:', E.n, ' x ', E.n, '  Inverse type:', inverse)
+
+        P = SpectralProjNGR(lambda z: R(z, self.V, self.index),
+                            radius=rad, center=ctr, npts=npts,
+                            within=within, rhoinv=rhoinv, quadrule=quadrule,
+                            inverse=inverse, verbose=verbose)
+
+        Zsqrs, E, history, El = P.feast(E, Yl=El, hermitian=False,
+                                        **feastkwargs)
+        phi = NGvecs(Y, E.m)
+        BE = phi.zeroclone()
+        BE._mv[:] = -B * E._mv
+        phi._mv[:] = Dinv * BE._mv
+
+        betas = self.betafrom(Zsqrs)
+        print('Results:\n Z²:', Zsqrs)
+        print(' beta:', betas)
+        print(' CL dB/m:', 20 * betas.imag / np.log(10))
 
         return betas, Zsqrs, E, phi, R
