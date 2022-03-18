@@ -173,7 +173,7 @@ class ARF(ModeSolver):
             ngmesh = self.geo.GenerateMesh()
             self.mesh = ng.Mesh(ngmesh)
 
-        self.mesh.Curve(3)
+        self.mesh.Curve(10)
 
         # MATERIAL COEFFICIENTS
 
@@ -754,7 +754,7 @@ class ARF(ModeSolver):
         self.refined += 1
         self.mesh.ngmesh.Refine()
         self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
-        self.mesh.Curve(3)
+        self.mesh.Curve(10)
         for key in self.epw:
             self.epw[key] = self.epw[key] * 2
         s = '  Elements/wavelength revised:'
