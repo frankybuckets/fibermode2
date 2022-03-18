@@ -725,19 +725,20 @@ class ModeSolver:
                 else:
                     Aqr = workspace._mv[:qr.m]
 
-                if qAq is not None:
-                    Aqr[:] = A.mat * qr._mv
-                    for i in range(qr.m):
-                        selfr.tmpY1.vec.data = B.mat * qr._mv[i]
-                        selfr.tmpY2.vec.data = Dinv * selfr.tmpY1.vec
-                        selfr.tmpX1.vec.data = C.mat * selfr.tmpY2.vec
-                        Aqr[i].data -= selfr.tmpX1.vec
-                    qAq = ng.InnerProduct(Aqr, ql._mv).NumPy().T
+                with ng.TaskManager():
+                    if qAq is not None:
+                        Aqr[:] = A.mat * qr._mv
+                        for i in range(qr.m):
+                            selfr.tmpY1.vec.data = B.mat * qr._mv[i]
+                            selfr.tmpY2.vec.data = Dinv * selfr.tmpY1.vec
+                            selfr.tmpX1.vec.data = C.mat * selfr.tmpY2.vec
+                            Aqr[i].data -= selfr.tmpX1.vec
+                        qAq = ng.InnerProduct(Aqr, ql._mv).NumPy().T
 
-                if qBq is not None:
-                    Bqr = Aqr
-                    Bqr[:] = M.mat * qr._mv
-                    qBq = ng.InnerProduct(Bqr, ql._mv).NumPy().T
+                    if qBq is not None:
+                        Bqr = Aqr
+                        Bqr[:] = M.mat * qr._mv
+                        qBq = ng.InnerProduct(Bqr, ql._mv).NumPy().T
 
                 return (qAq, qBq)
 
