@@ -1,10 +1,11 @@
 """
-This class models STEP-INDEX optical fibers.  Methods are provided
-to calculate propagation constants, fiber's transverse guided modes,
-and leaky modes/resonances using (semi)ANALYTIC calculations.
+This class models RADIALLY SYMMETRIC STEP-INDEX optical fibers and
+provides method to calculate propagation constants, transverse guided
+modes, and leaky modes/resonances using (semi)ANALYTIC calculations.
 
-(Numerical mode computation routines using feast are in a different
-class FiberModeNonDim.)
+(Numerical mode computation routines  are in a different
+class FiberMode.)
+
 """
 
 from math import pi, sqrt, atan2

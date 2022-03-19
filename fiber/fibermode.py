@@ -16,8 +16,8 @@ import scipy.special as scf
 class FiberMode(ModeSolver):
 
     """Class with facilities to numerically approximate transverse modes
-    of a STEP-INDEX fiber using a nondimensional eigenproblem and FEAST.
-    Guided modes and leaky modes can be computed.
+    of a RADIALLY SYMMETRIC STEP-INDEX fiber using a nondimensional
+    eigenproblem and FEAST. Guided modes and leaky modes can be computed.
     """
 
     def __init__(self, fibername=None, fromfile=None,
