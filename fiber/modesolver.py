@@ -665,7 +665,6 @@ class ModeSolver:
                 B.Assemble()
                 C.Assemble()
                 D.Assemble()
-                Dinv = D.mat.Inverse(Y.FreeDofs())
             except Exception:
                 print('*** Trying again with larger heap')
                 ng.SetHeapSize(int(1e9))
@@ -674,13 +673,7 @@ class ModeSolver:
                 B.Assemble()
                 C.Assemble()
                 D.Assemble()
-                Dinv = D.mat.Inverse(Y.FreeDofs())
-            # A.Assemble()
-            # M.Assemble()
-            # B.Assemble()
-            # C.Assemble()
-            # D.Assemble()
-            # Dinv = D.mat.Inverse(Y.FreeDofs())
+            Dinv = D.mat.Inverse(Y.FreeDofs())
 
         # resolvent of the vector mode problem --------------------------
 
