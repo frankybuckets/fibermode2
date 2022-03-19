@@ -611,7 +611,7 @@ class ModeSolver:
     # ###################################################################
     # VECTOR MODES
 
-    def vecmodesystem(self, p, alpha=None):
+    def vecmodesystem(self, p, alpha=None, d=None):
         """
         Prepare eigensystem and resolvents for solving for vector modes.
 
@@ -628,11 +628,14 @@ class ModeSolver:
 
         if alpha is not None:
             self.ngspmlset = True
-            radial = ng.pml.Radial(rad=self.R,
-                                   alpha=alpha*1j, origin=(0, 0))
-            self.mesh.SetPML(radial, 'Outer')
-            print('Set NGSolve automatic PML with p=', p, ' alpha=', alpha,
-                  'and thickness=%.3f' % (self.Rout-self.R))
+            if d is not None:
+                self.set_smooth_ngpml(alpha, d)
+            else:
+                radial = ng.pml.Radial(rad=self.R,
+                                       alpha=alpha*1j, origin=(0, 0))
+                self.mesh.SetPML(radial, 'Outer')
+                print('Set NGSolve automatic PML with p=', p, ' alpha=', alpha,
+                      'and thickness=%.3f' % (self.Rout-self.R))
         elif self.ngspmlset:
             raise RuntimeError('Unexpected NGSolve pml mesh trafo here.')
 
@@ -656,12 +659,28 @@ class ModeSolver:
         D += n2 * phi * psi * dx
 
         with ng.TaskManager():
-            A.Assemble()
-            M.Assemble()
-            B.Assemble()
-            C.Assemble()
-            D.Assemble()
-            Dinv = D.mat.Inverse(Y.FreeDofs())
+            try:
+                A.Assemble()
+                M.Assemble()
+                B.Assemble()
+                C.Assemble()
+                D.Assemble()
+                Dinv = D.mat.Inverse(Y.FreeDofs())
+            except Exception:
+                print('*** Trying again with larger heap')
+                ng.SetHeapSize(int(1e9))
+                A.Assemble()
+                M.Assemble()
+                B.Assemble()
+                C.Assemble()
+                D.Assemble()
+                Dinv = D.mat.Inverse(Y.FreeDofs())
+            # A.Assemble()
+            # M.Assemble()
+            # B.Assemble()
+            # C.Assemble()
+            # D.Assemble()
+            # Dinv = D.mat.Inverse(Y.FreeDofs())
 
         # resolvent of the vector mode problem --------------------------
 
@@ -684,7 +703,12 @@ class ModeSolver:
                                    - V * E * v - grad(phi) * v
                                    - n2 * phi * psi + n2 * E * grad(psi)) * dx
                 with ng.TaskManager():
-                    selfr.zminusOp.Assemble()
+                    try:
+                        selfr.zminusOp.Assemble()
+                    except Exception:
+                        print('*** Trying again with larger heap')
+                        ng.SetHeapSize(int(1e9))
+                        selfr.zminusOp.Assemble()
                     selfr.R = selfr.zminusOp.mat.Inverse(XY.FreeDofs())
 
             def act(selfr, v, Rv, workspace=None):
@@ -700,6 +724,7 @@ class ModeSolver:
                         selfr.wrk1.components[1].vec[:] = 0
                         selfr.wrk2.vec.data = selfr.R * selfr.wrk1.vec
                         Rv._mv[i][:] = selfr.wrk2.components[0].vec
+                    # Rv.zerobdry()
 
             def adj(selfr, v, RHv, workspace=None):
                 if workspace is None:
@@ -713,6 +738,7 @@ class ModeSolver:
                         selfr.wrk1.components[1].vec[:] = 0
                         selfr.wrk2.vec.data = selfr.R.H * selfr.wrk1.vec
                         RHv._mv[i][:] = selfr.wrk2.components[0].vec
+                    # RHv.zerobdry()
 
             def rayleigh_nsa(selfr, ql, qr, qAq=not None, qBq=not None,
                              workspace=None):
@@ -784,7 +810,7 @@ class ModeSolver:
 
     def leakyvecmodes(self, rad, ctr, alpha=1, p=3,  seed=1, npts=8, nspan=20,
                       within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
-                      verbose=True, inverse='umfpack',
+                      verbose=True, inverse='umfpack', d=None,
                       **feastkwargs):
         """
         Capture leaky vector modes whose non-dimensional resonance value Z²
@@ -792,7 +818,7 @@ class ModeSolver:
         of radius "rad" in the Z² complex plane (not the Z-plane!).
         """
 
-        R, M, A, B, C, D, Dinv = self.vecmodesystem(p, alpha=alpha)
+        R, M, A, B, C, D, Dinv = self.vecmodesystem(p, alpha=alpha, d=d)
         X, Y = R.XY.components
         E = NGvecs(X, nspan, M=M)
         El = E.create()
@@ -822,3 +848,47 @@ class ModeSolver:
         print(' CL dB/m:', 20 * betas.imag / np.log(10))
 
         return betas, Zsqrs, E, phi, R
+
+    def set_smooth_ngpml(self, alpha, d):
+        """NGSolve custom pml of form:
+
+        r = rh + 1j * α * φ(rh - R))
+
+        where
+
+        φ(rh - R)) = 1/(d+1) * alpha * 1j ((rh - R) / W)^(d+1).
+
+        Integer d determines the degee of smoothing.
+        """
+        if d < 0:
+            raise ValueError('PML degree must be integer >= 0.')
+
+        W = self.Rout-self.R
+
+        # Set complex trafo
+        rh = ng.sqrt(ng.x**2 + ng.y**2)
+        r = rh + 1/(d+1) * alpha * 1j * ((rh - self.R) / W)**(d+1)
+        drdrh = 1 + alpha*1j / d * ((rh - self.R) / W)**d
+
+        x = r * ng.x / rh
+        y = r * ng.y / rh
+
+        trafo = ng.CoefficientFunction((x, y))
+
+        # derivatives and determinant
+
+        dxdxh = drdrh * (ng.x / rh) ** 2 + r * (ng.y ** 2 / rh ** 3)
+        dxdyh = drdrh * (ng.y * ng. x / rh ** 2) - \
+            r * (ng.y * ng.x / rh ** 3)
+
+        dydyh = drdrh * (ng.y / rh) ** 2 + r * (ng.x ** 2 / rh ** 3)
+        dydxh = dxdyh
+
+        J = ng.CoefficientFunction((dxdxh, dxdyh, dydxh, dydyh),
+                                   dims=(2, 2))
+
+        custom_pml = ng.pml.Custom(trafo, J)
+
+        self.mesh.SetPML(custom_pml, 'Outer')
+        print('Set NGSolve custom (smooth) PML with alpha=', alpha, 'degree=',
+              d, 'and thickness=%.3f' % (self.Rout-self.R))
