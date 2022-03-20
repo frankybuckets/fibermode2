@@ -1,5 +1,5 @@
 #!/usr/bin/bash
-#SBATCH --job-name guidedvec_convergence
+#SBATCH --job-name leakyvec_convergence
 #SBATCH --nodes 1
 #SBATCH --tasks-per-node 1
 #SBATCH --cpus-per-task 24
@@ -7,8 +7,8 @@
 #SBATCH --partition himem
 #SBATCH --mail-user piet2@pdx.edu
 #SBATCH --mail-type ALL
-#SBATCH --output=guidedvec_convergence.log
-#SBATCH --error=guidedvec_convergence.err
+#SBATCH --output=leakyvec_convergence.log
+#SBATCH --error=leakyvec_convergence.err
 
 echo "Starting at wall clock time:"
 date
@@ -22,6 +22,6 @@ module load intel
 # Run the code.
 echo "Starting convergence study: "
 date
-python3 guidedvecmode_convergence.py
+python3 leakyvecmode_convergence.py
 echo "Ending convergence study:"
 date

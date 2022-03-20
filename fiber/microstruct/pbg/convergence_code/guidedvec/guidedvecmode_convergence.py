@@ -26,6 +26,8 @@ After saving, alter script.h file appropriately and run sbatch script.h.
 import numpy as np
 import os
 from fiberamp import FiberMode
+from netgen.libngpy._meshing import NgException
+
 
 z_exact = -15.817570072953
 
@@ -39,8 +41,8 @@ directory and begin again.")
 
 # Polynomial Degrees and Refinements to cycle through. #################
 
-refs = [0, 1]
-ps = [0, 1]
+refs = [5, 0]
+ps = [5, 1]
 nspan = 3
 
 Zs = np.zeros(shape=(len(refs), len(ps), nspan), dtype=complex)
@@ -49,13 +51,13 @@ dofs = np.zeros(shape=(len(refs), len(ps)), dtype=float)
 
 if __name__ == '__main__':
     for i, ref in enumerate(refs):
-        for j, p in enumerate(ps):
-            try:
+        try:
+            for j, p in enumerate(ps):
                 print('\n' + '#'*8 + ' refinement: ' + str(ref) +
-                      ', degree: ' + str(p) + '  ' + '#'*8 + '\n')
+                          ', degree: ' + str(p) + '  ' + '#'*8 + '\n')
                 fbm = FiberMode(fibername='Nufern_Yb', R=2.5,
-                                Rout=5, h=80, refine=ref,
-                                curveorder=max(p+1, 4))
+                                    Rout=5, h=80, refine=ref,
+                                    curveorder=max(p+1, 4))
 
                 betas, zsqrs, E, phi, Robj = fbm.guidedvecmodes(ctr=z_exact,
                                                                 rad=.1,
@@ -67,11 +69,13 @@ if __name__ == '__main__':
                                                                 nspan=nspan)
                 Zs[i, j, :len(zsqrs)] = zsqrs[:]
                 dofs[i, j] = Robj.XY.ndof
-            except MemoryError('\nMemory limit exceeded at ref: ', ref,
-                               ', and p: ', p, '.\n Passing.'):
-                pass
+        except NgException: 
+            print('\nMemory limit exceeded at ref: ', ref,
+                    ', and p: ', p, '.\n Skipping rest of orders for this refinement.')
+            pass
 
     print('Saving data.\n')
 
-    np.save(os.path.abspath(folder + '/' + 'guidedvec_Zs'), Zs)
-    np.save(os.path.abspath(folder + '/' + 'guidedvec_dofs'), dofs)
+#    np.save(os.path.abspath(folder + '/' + 'guidedvec_Zs'), Zs)
+#    np.save(os.path.abspath(folder + '/' + 'guidedvec_dofs'), dofs)
+
