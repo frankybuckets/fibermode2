@@ -845,11 +845,11 @@ class ModeSolver:
     def set_smooth_ngpml(self, alpha, d):
         """NGSolve custom pml of form:
 
-        r = rh + 1j * α * φ(rh - R))
+            r = rh + 1j * α * φ(rh - R))
 
         where
 
-        φ(rh - R)) = 1/(d+1) * alpha * 1j ((rh - R) / W)^(d+1).
+            φ(rh - R)) = 1/(d+1) * alpha * 1j ((rh - R) / W)^(d+1).
 
         Integer d determines the degee of smoothing.
         """
