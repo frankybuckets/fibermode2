@@ -1,0 +1,1335 @@
+Starting at wall clock time:
+Sat Mar 19 23:33:47 PDT 2022
+Running CMT on 24 CPU cores
+Starting convergence study: 
+Sat Mar 19 23:33:47 PDT 2022
+importing NGSolve-6.2.2102-191-g88aaa23
+
+######## refinement: 0, degree: 0  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  130  elements,  74  points,  and  203  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 203  x  203   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Reorthogonalizing and trying again...
+   QR found abs(diag(R)):
+   [2.1e-01 7.7e-03 6.0e-11]
+   Real part of computed eigenvalues:
+   [-15.83017732 -15.62361845 -10.12342899]
+   Imag part of computed eigenvalues:
+   [-3.61451592e-09 -1.49210225e-10  1.48178189e-05]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-5.23614398e+05 -1.58301759e+01 -1.56234266e+01]
+   Relative Hausdorff distance from prior iterate: 3.310e+04
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.83017596 -15.62361792 133.63383758]
+   Relative Hausdorff distance from prior iterate: 3.310e+04
+
+   Removing ew#[1, 2] not enclosed by contour
+ ITERATION 4 with 1 vectors
+   Real part of computed eigenvalues:
+   [-15.83014748]
+   Relative Hausdorff distance from prior iterate: 1.801e-06
+
+ ITERATION 5 with 1 vectors
+   Real part of computed eigenvalues:
+   [-15.8301468]
+   Relative Hausdorff distance from prior iterate: 4.292e-08
+
+ ITERATION 6 with 1 vectors
+   Real part of computed eigenvalues:
+   [-15.8301468]
+   Relative Hausdorff distance from prior iterate: 5.121e-10
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 5.121e-10
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 0, degree: 1  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  130  elements,  74  points,  and  203  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 666  x  666   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Reorthogonalizing and trying again...
+   QR found abs(diag(R)):
+   [2.7e-01 6.6e-01 4.8e-11]
+   Real part of computed eigenvalues:
+   [-15.84318076 -15.79391148 -10.15479972]
+   Imag part of computed eigenvalues:
+   [-1.17518059e-17  9.45534050e-16 -2.50290996e-06]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.84318076 -15.79391148 -11.13658   ]
+   Relative Hausdorff distance from prior iterate: 6.207e-02
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.84318076 -15.79391149 -10.55673738]
+   Relative Hausdorff distance from prior iterate: 3.666e-02
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.84318076 -15.79391148]
+   Relative Hausdorff distance from prior iterate: 1.144e-09
+
+ ITERATION 5 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.84318076 -15.79391148]
+   Relative Hausdorff distance from prior iterate: 1.909e-15
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 1.909e-15
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 0, degree: 2  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  130  elements,  74  points,  and  203  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 1389  x  1389   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Reorthogonalizing and trying again...
+   QR found abs(diag(R)):
+   [6.5e-01 4.2e-01 5.9e-11]
+   Real part of computed eigenvalues:
+   [-15.8225824  -15.81418819 -10.1925168 ]
+   Imag part of computed eigenvalues:
+   [-2.78020743e-16  2.23421610e-16  9.09948075e-07]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.8225824  -15.81418819 -10.19920211]
+   Relative Hausdorff distance from prior iterate: 4.227e-04
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.8225824  -15.81418819 -10.25289444]
+   Relative Hausdorff distance from prior iterate: 3.394e-03
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.8225824  -15.81418819]
+   Relative Hausdorff distance from prior iterate: 5.840e-15
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 5.840e-15
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 0, degree: 3  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  130  elements,  74  points,  and  203  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 2372  x  2372   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Real part of computed eigenvalues:
+   [-1.58182164e+01 -1.58171661e+01  9.86825440e+07]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [ -15.81821612  -15.81716664 1523.87856787]
+   Relative Hausdorff distance from prior iterate: 6.239e+06
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81821612 -15.81716592 123.53095289]
+   Relative Hausdorff distance from prior iterate: 8.853e+01
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81821612 -15.81716592]
+   Relative Hausdorff distance from prior iterate: 2.009e-10
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 2.009e-10
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 0, degree: 4  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  130  elements,  74  points,  and  203  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 3615  x  3615   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Reorthogonalizing and trying again...
+   QR found abs(diag(R)):
+   [8.1e-01 1.4e-01 9.8e-11]
+   Real part of computed eigenvalues:
+   [-15.81763145 -15.81753303 -10.18438842]
+   Imag part of computed eigenvalues:
+   [1.02568582e-13 4.03851174e-14 4.63779114e-07]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81763145 -15.81753304 -10.9006015 ]
+   Relative Hausdorff distance from prior iterate: 4.528e-02
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81763145 -15.81753303  35.91381496]
+   Relative Hausdorff distance from prior iterate: 2.960e+00
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81763145 -15.81753303]
+   Relative Hausdorff distance from prior iterate: 3.426e-12
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 3.426e-12
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 1, degree: 0  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  520  elements,  277  points,  and  796  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 796  x  796   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Real part of computed eigenvalues:
+   [-7.35268212e+08 -1.58196292e+01 -1.57371004e+01]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81962966 -15.73710055 549.974823  ]
+   Relative Hausdorff distance from prior iterate: 4.648e+07
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-286.2849418   -15.81962938  -15.73673668]
+   Relative Hausdorff distance from prior iterate: 3.576e+01
+
+   Removing ew#[0] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81962938 -15.73710055]
+   Relative Hausdorff distance from prior iterate: 2.300e-05
+
+ ITERATION 5 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81962938 -15.73710055]
+   Relative Hausdorff distance from prior iterate: 4.091e-13
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 4.091e-13
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 1, degree: 1  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  520  elements,  277  points,  and  796  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 2632  x  2632   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Real part of computed eigenvalues:
+   [-1.58219136e+01 -1.58141432e+01  3.89760000e+04]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.82191358 -15.81414318 -10.25801875]
+   Relative Hausdorff distance from prior iterate: 2.465e+03
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.82191358 -15.81414318 -10.21923966]
+   Relative Hausdorff distance from prior iterate: 2.452e-03
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.82191358 -15.81414318]
+   Relative Hausdorff distance from prior iterate: 3.481e-15
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 3.481e-15
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 1, degree: 2  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  520  elements,  277  points,  and  796  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 5508  x  5508   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Reorthogonalizing and trying again...
+   QR found abs(diag(R)):
+   [5.1e-01 2.5e-01 2.0e-10]
+   Real part of computed eigenvalues:
+   [-15.81785366 -15.81739279 -10.18460447]
+   Imag part of computed eigenvalues:
+   [ 2.84822236e-17 -7.87182438e-16  1.89059527e-08]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81785366 -15.81739279 -10.18716788]
+   Relative Hausdorff distance from prior iterate: 1.621e-04
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81785366 -15.81739279 -10.18504149]
+   Relative Hausdorff distance from prior iterate: 1.344e-04
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81785366 -15.81739279]
+   Relative Hausdorff distance from prior iterate: 4.268e-15
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 4.268e-15
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 1, degree: 3  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  520  elements,  277  points,  and  796  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 9424  x  9424   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Reorthogonalizing and trying again...
+   QR found abs(diag(R)):
+   [8.3e-01 9.6e-02 1.1e-10]
+   Real part of computed eigenvalues:
+   [-15.81758162 -15.81756316 -10.18495201]
+   Imag part of computed eigenvalues:
+   [7.02476460e-15 2.02086305e-16 7.73459582e-07]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81758162 -15.81756317 -10.33677981]
+   Relative Hausdorff distance from prior iterate: 9.599e-03
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81758162 -15.81756316 -10.08038823]
+   Relative Hausdorff distance from prior iterate: 1.621e-02
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81758162 -15.81756316]
+   Relative Hausdorff distance from prior iterate: 4.256e-14
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 4.256e-14
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 1, degree: 4  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  520  elements,  277  points,  and  796  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 14380  x  14380   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Reorthogonalizing and trying again...
+   QR found abs(diag(R)):
+   [6.9e-01 4.4e-01 1.2e-10]
+   Real part of computed eigenvalues:
+   [-15.81757042 -15.81756987 -10.18448521]
+   Imag part of computed eigenvalues:
+   [ 4.41842528e-16 -3.12235181e-16 -5.19640388e-07]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757042 -15.81756987 -10.19274637]
+   Relative Hausdorff distance from prior iterate: 5.223e-04
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757042 -15.81756987 -10.18452048]
+   Relative Hausdorff distance from prior iterate: 5.200e-04
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81757042 -15.81756987]
+   Relative Hausdorff distance from prior iterate: 1.145e-14
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 1.145e-14
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 2, degree: 0  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  2080  elements,  1073  points,  and  3152  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 3152  x  3152   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Real part of computed eigenvalues:
+   [-1.58194470e+01 -1.57927420e+01  3.50240464e+08]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [ -15.81944677  -15.79274363 2478.91737381]
+   Relative Hausdorff distance from prior iterate: 2.214e+07
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81944677 -15.79274217 839.94482759]
+   Relative Hausdorff distance from prior iterate: 1.036e+02
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81944677 -15.79274216]
+   Relative Hausdorff distance from prior iterate: 3.326e-10
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 3.326e-10
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 2, degree: 1  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  2080  elements,  1073  points,  and  3152  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 10464  x  10464   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Real part of computed eigenvalues:
+   [-48.         -15.81801688 -15.81726157]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81801688 -15.81726157 -10.22242169]
+   Relative Hausdorff distance from prior iterate: 2.035e+00
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81801688 -15.81726157 -10.1843793 ]
+   Relative Hausdorff distance from prior iterate: 2.405e-03
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81801688 -15.81726157]
+   Relative Hausdorff distance from prior iterate: 3.594e-15
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 3.594e-15
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 2, degree: 2  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  2080  elements,  1073  points,  and  3152  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 21936  x  21936   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757795 -15.81756551 101.33333333]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757795 -15.81756551 -10.18532278]
+   Relative Hausdorff distance from prior iterate: 7.050e+00
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757795 -15.81756551 -10.1852665 ]
+   Relative Hausdorff distance from prior iterate: 3.557e-06
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81757795 -15.81756551]
+   Relative Hausdorff distance from prior iterate: 1.348e-15
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 1.348e-15
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 2, degree: 3  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  2080  elements,  1073  points,  and  3152  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 37568  x  37568   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Real part of computed eigenvalues:
+   [-1.58175702e+01 -1.58175700e+01  4.26243200e+05]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757016 -15.81757003  33.14766437]
+   Relative Hausdorff distance from prior iterate: 2.695e+04
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757016 -15.81757002 -10.3661288 ]
+   Relative Hausdorff distance from prior iterate: 2.751e+00
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81757016 -15.81757002]
+   Relative Hausdorff distance from prior iterate: 1.370e-14
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 1.370e-14
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 2, degree: 4  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  2080  elements,  1073  points,  and  3152  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 57360  x  57360   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007   3.87096774]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-201.35384615  -15.81757007  -15.81757007]
+   Relative Hausdorff distance from prior iterate: 1.173e+01
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007 -10.18428367]
+   Relative Hausdorff distance from prior iterate: 1.173e+01
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007]
+   Relative Hausdorff distance from prior iterate: 1.179e-14
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 1.179e-14
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 3, degree: 0  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  8320  elements,  4225  points,  and  12544  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 12544  x  12544   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Real part of computed eigenvalues:
+   [-1.58183619e+01 -1.58109149e+01  1.28377221e+08]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-2123.84656714   -15.81836193   -15.81091437]
+   Relative Hausdorff distance from prior iterate: 8.116e+06
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81838608 -15.81091453 142.19401611]
+   Relative Hausdorff distance from prior iterate: 1.333e+02
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81836193 -15.81091453]
+   Relative Hausdorff distance from prior iterate: 1.526e-06
+
+ ITERATION 5 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81836193 -15.81091453]
+   Relative Hausdorff distance from prior iterate: 1.291e-14
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 1.291e-14
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 3, degree: 1  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  8320  elements,  4225  points,  and  12544  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 41728  x  41728   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81760375 -15.8175483   -3.83333333]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81760375 -15.8175483  -10.18413239]
+   Relative Hausdorff distance from prior iterate: 4.015e-01
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81760375 -15.8175483  -10.18406372]
+   Relative Hausdorff distance from prior iterate: 4.341e-06
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81760375 -15.8175483 ]
+   Relative Hausdorff distance from prior iterate: 5.278e-15
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 5.278e-15
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 3, degree: 2  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  8320  elements,  4225  points,  and  12544  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 87552  x  87552   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Real part of computed eigenvalues:
+   [-112.          -15.81757022  -15.81756999]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757022 -15.81756999 -10.18391855]
+   Relative Hausdorff distance from prior iterate: 6.081e+00
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757022 -15.81756999 -10.1851194 ]
+   Relative Hausdorff distance from prior iterate: 7.592e-05
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81757022 -15.81756999]
+   Relative Hausdorff distance from prior iterate: 2.201e-14
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 2.201e-14
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 3, degree: 3  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  8320  elements,  4225  points,  and  12544  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 150016  x  150016   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Real part of computed eigenvalues:
+   [-1.58175701e+01 -1.58175701e+01  2.26524000e+05]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007 -10.1875877 ]
+   Relative Hausdorff distance from prior iterate: 1.432e+04
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007 -10.18511316]
+   Relative Hausdorff distance from prior iterate: 1.564e-04
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007]
+   Relative Hausdorff distance from prior iterate: 1.999e-14
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 1.999e-14
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 3, degree: 4  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  8320  elements,  4225  points,  and  12544  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 229120  x  229120   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Real part of computed eigenvalues:
+   [-69.33333333 -15.81757007 -15.81757007]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007 -10.35181647]
+   Relative Hausdorff distance from prior iterate: 3.383e+00
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007 -10.18574216]
+   Relative Hausdorff distance from prior iterate: 1.050e-02
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007]
+   Relative Hausdorff distance from prior iterate: 2.594e-14
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 2.594e-14
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 4, degree: 0  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  33280  elements,  16769  points,  and  50048  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 50048  x  50048   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Real part of computed eigenvalues:
+   [-4.09700320e+07 -1.58178133e+01 -1.58158787e+01]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-1.58178135e+01 -1.58158787e+01  1.13615146e+05]
+   Relative Hausdorff distance from prior iterate: 2.590e+06
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-16.71122125 -15.81781324 -15.81583442]
+   Relative Hausdorff distance from prior iterate: 7.184e+03
+
+   Removing ew#[0] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81781324 -15.81587875]
+   Relative Hausdorff distance from prior iterate: 2.802e-06
+
+ ITERATION 5 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81781324 -15.81587875]
+   Relative Hausdorff distance from prior iterate: 4.784e-14
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 4.784e-14
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 4, degree: 1  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  33280  elements,  16769  points,  and  50048  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 166656  x  166656   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757232 -15.81756866  27.52      ]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757232 -15.81756866 -10.1881928 ]
+   Relative Hausdorff distance from prior iterate: 2.384e+00
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757232 -15.81756866 -10.18478833]
+   Relative Hausdorff distance from prior iterate: 2.152e-04
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81757232 -15.81756866]
+   Relative Hausdorff distance from prior iterate: 1.853e-14
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 1.853e-14
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 4, degree: 2  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  33280  elements,  16769  points,  and  50048  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 349824  x  349824   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757008 -15.81757007  -0.8040201 ]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757008 -15.81757007 -10.18957696]
+   Relative Hausdorff distance from prior iterate: 5.934e-01
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757008 -15.81757007 -10.18411248]
+   Relative Hausdorff distance from prior iterate: 3.455e-04
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81757008 -15.81757007]
+   Relative Hausdorff distance from prior iterate: 1.359e-14
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 1.359e-14
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 4, degree: 3  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  33280  elements,  16769  points,  and  50048  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 599552  x  599552   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Reorthogonalizing and trying again...
+   QR found abs(diag(R)):
+   [3.7e-01 3.1e-01 4.4e-11]
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007 -10.17892845]
+   Imag part of computed eigenvalues:
+   [2.82056405e-15 1.09048118e-15 2.64813709e-06]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007 -10.18698   ]
+   Relative Hausdorff distance from prior iterate: 5.090e-04
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007 -10.18475409]
+   Relative Hausdorff distance from prior iterate: 1.407e-04
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007]
+   Relative Hausdorff distance from prior iterate: 7.446e-14
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 7.446e-14
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+
+######## refinement: 4, degree: 4  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  33280  elements,  16769  points,  and  50048  edges.
+Using FEAST to search for vector guided modes in
+circle of radius 0.1 centered at  -15.817570072953
+assuming not more than 3 modes in this interval.
+System size: 915840  x  915840   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.1, Center=-15.8176+0j
+SpectralProjNGR:   Making resolvent at z = -15.731 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 +0.100j
+SpectralProjNGR:   Making resolvent at z = -15.904 +0.050j
+SpectralProjNGR:   Making resolvent at z = -15.904 -0.050j
+SpectralProjNGR:   Making resolvent at z = -15.818 -0.100j
+SpectralProjNGR:   Making resolvent at z = -15.731 -0.050j
+
+=========== Starting FEAST iterations ===========
+Trying with 3 vectors:
+
+ ITERATION 1 with 3 vectors
+   Reorthogonalizing and trying again...
+   QR found abs(diag(R)):
+   [9.4e-01 3.6e-01 3.9e-11]
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007  -9.83325114]
+   Imag part of computed eigenvalues:
+   [ 5.21102033e-15 -4.33347950e-15 -1.54072983e-05]
+   Relative Hausdorff distance from prior iterate: 6.322e+98
+
+ ITERATION 2 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007 -10.22180037]
+   Relative Hausdorff distance from prior iterate: 2.456e-02
+
+ ITERATION 3 with 3 vectors
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007 -10.1873975 ]
+   Relative Hausdorff distance from prior iterate: 2.175e-03
+
+   Removing ew#[2] not enclosed by contour
+ ITERATION 4 with 2 vectors
+   Real part of computed eigenvalues:
+   [-15.81757007 -15.81757007]
+   Relative Hausdorff distance from prior iterate: 8.872e-15
+
+
+***FEAST converged with:
+	Relative Hausdorff distance = 8.872e-15
+
+============= FEAST iterations done =============
+guided vec modes complete, saving.
+
+Saving data again just in case.
+
+Ending convergence study:
+Sat Mar 19 23:43:38 PDT 2022

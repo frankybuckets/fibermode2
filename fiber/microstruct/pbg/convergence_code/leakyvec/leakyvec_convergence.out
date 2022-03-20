@@ -1,0 +1,271 @@
+Starting at wall clock time:
+Sat Mar 19 23:43:38 PDT 2022
+Running CMT on 24 CPU cores
+Starting convergence study: 
+Sat Mar 19 23:43:39 PDT 2022
+importing NGSolve-6.2.2102-191-g88aaa23
+
+######## refinement: 3, degree: 3  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  22528  elements,  11377  points,  and  33904  edges.
+Set NGSolve automatic PML with p= 3  alpha= 3 and thickness=6.000
+Using FEAST to search for vector leaky modes in
+circle of radius 0.005 centered at  (3.7969194313378907-0.725805740812567j)
+assuming not more than 6 modes in this interval
+System size: 405952  x  405952   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.005, Center=3.79692-0.725806j
+SpectralProjNGR:   Making resolvent at z =  +3.801 -0.723j
+SpectralProjNGR:   Making resolvent at z =  +3.797 -0.721j
+SpectralProjNGR:   Making resolvent at z =  +3.793 -0.723j
+SpectralProjNGR:   Making resolvent at z =  +3.793 -0.728j
+SpectralProjNGR:   Making resolvent at z =  +3.797 -0.731j
+SpectralProjNGR:   Making resolvent at z =  +3.801 -0.728j
+
+=========== Starting FEAST iterations ===========
+Trying with 6 vectors:
+
+ ITERATION 1 with 6 vectors and 6 left vectors
+   During kernel cleaning abs(g):
+   [2.7e+00 5.7e-01 3.0e-02 1.6e-03 1.3e-15 2.7e-15]
+   Real part of computed eigenvalues:
+   [-9.22123410e+03  3.79691943e+00  3.79691943e+00  3.80406573e+00
+  3.80406573e+00  4.70662159e+03]
+   Imag part of computed eigenvalues:
+   [ 6.01118202e+03 -7.25805751e-01 -7.25805749e-01 -7.28580412e-01
+ -7.28580410e-01 -2.37143345e+03]
+   Relative Hausdorff distance from prior iterate: 2.584e+99
+
+ ITERATION 2 with 6 vectors and 6 left vectors
+   During kernel cleaning abs(g):
+   [2.6e-01 1.7e-01 3.3e-02 3.3e-02 2.0e-21 2.0e-18]
+   Removing ew#[4, 5]
+   Real part of computed eigenvalues:
+   [3.79691943 3.79691943 3.80406573 3.80406573]
+   Imag part of computed eigenvalues:
+   [-0.72580575 -0.72580575 -0.72858041 -0.72858041]
+   Relative Hausdorff distance from prior iterate: 2.845e+03
+
+ ITERATION 3 with 4 vectors and 4 left vectors
+   During kernel cleaning abs(g):
+   [0.4 0.4 0.  0. ]
+   Real part of computed eigenvalues:
+   [3.79691943 3.79691943 3.80406573 3.80406573]
+   Imag part of computed eigenvalues:
+   [-0.72580575 -0.72580575 -0.72858041 -0.72858041]
+   Relative Hausdorff distance from prior iterate: 4.421e-14
+
+   Removing ew#[2, 3] not enclosed by contour
+
+***FEAST converged with:
+	Relative Hausdorff distance = 4.421e-14
+
+============= FEAST iterations done =============
+Results:
+ Z²: [3.79691943-0.72580575j 3.79691943-0.72580575j]
+ beta: [8559597.31603047+271.34201733j 8559597.31602981+271.34201642j]
+ CL dB/m: [2356.84681671 2356.84680882]
+leakyvecmodes done, saving.
+
+
+######## refinement: 3, degree: 4  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  22528  elements,  11377  points,  and  33904  edges.
+Set NGSolve automatic PML with p= 4  alpha= 3 and thickness=6.000
+Using FEAST to search for vector leaky modes in
+circle of radius 0.005 centered at  (3.7969194313378907-0.725805740812567j)
+assuming not more than 6 modes in this interval
+System size: 620080  x  620080   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.005, Center=3.79692-0.725806j
+SpectralProjNGR:   Making resolvent at z =  +3.801 -0.723j
+SpectralProjNGR:   Making resolvent at z =  +3.797 -0.721j
+SpectralProjNGR:   Making resolvent at z =  +3.793 -0.723j
+SpectralProjNGR:   Making resolvent at z =  +3.793 -0.728j
+SpectralProjNGR:   Making resolvent at z =  +3.797 -0.731j
+SpectralProjNGR:   Making resolvent at z =  +3.801 -0.728j
+
+=========== Starting FEAST iterations ===========
+Trying with 6 vectors:
+
+ ITERATION 1 with 6 vectors and 6 left vectors
+   During kernel cleaning abs(g):
+   [2.4e+00 8.6e-02 3.6e-02 1.9e-02 1.4e-15 1.9e-15]
+   Real part of computed eigenvalues:
+   [3.79691943e+00 3.79691943e+00 3.80406573e+00 3.80406573e+00
+ 1.06540714e+03 5.13133539e+03]
+   Imag part of computed eigenvalues:
+   [-7.25805741e-01 -7.25805741e-01 -7.28580412e-01 -7.28580412e-01
+  2.61884249e+03 -7.05590352e+03]
+   Relative Hausdorff distance from prior iterate: 2.584e+99
+
+ ITERATION 2 with 6 vectors and 6 left vectors
+   During kernel cleaning abs(g):
+   [2.9e-01 1.6e-01 3.5e-03 3.0e-03 9.6e-23 1.0e-17]
+   Removing ew#[4, 5]
+   Real part of computed eigenvalues:
+   [3.79691943 3.79691943 3.80406573 3.80406573]
+   Imag part of computed eigenvalues:
+   [-0.72580574 -0.72580574 -0.72858041 -0.72858041]
+   Relative Hausdorff distance from prior iterate: 2.253e+03
+
+ ITERATION 3 with 4 vectors and 4 left vectors
+   During kernel cleaning abs(g):
+   [0.4 0.4 0.  0. ]
+   Real part of computed eigenvalues:
+   [3.79691943 3.79691943 3.80406573 3.80406573]
+   Imag part of computed eigenvalues:
+   [-0.72580574 -0.72580574 -0.72858041 -0.72858041]
+   Relative Hausdorff distance from prior iterate: 1.037e-13
+
+   Removing ew#[2, 3] not enclosed by contour
+
+***FEAST converged with:
+	Relative Hausdorff distance = 1.037e-13
+
+============= FEAST iterations done =============
+Results:
+ Z²: [3.79691943-0.72580574j 3.79691943-0.72580574j]
+ beta: [8559597.31602854+271.34201352j 8559597.31602854+271.34201352j]
+ CL dB/m: [2356.84678358 2356.8467836 ]
+leakyvecmodes done, saving.
+
+
+######## refinement: 4, degree: 3  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  90112  elements,  45281  points,  and  135392  edges.
+Set NGSolve automatic PML with p= 3  alpha= 3 and thickness=6.000
+Using FEAST to search for vector leaky modes in
+circle of radius 0.005 centered at  (3.7969194313378907-0.725805740812567j)
+assuming not more than 6 modes in this interval
+System size: 1622912  x  1622912   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.005, Center=3.79692-0.725806j
+SpectralProjNGR:   Making resolvent at z =  +3.801 -0.723j
+SpectralProjNGR:   Making resolvent at z =  +3.797 -0.721j
+SpectralProjNGR:   Making resolvent at z =  +3.793 -0.723j
+SpectralProjNGR:   Making resolvent at z =  +3.793 -0.728j
+SpectralProjNGR:   Making resolvent at z =  +3.797 -0.731j
+SpectralProjNGR:   Making resolvent at z =  +3.801 -0.728j
+
+=========== Starting FEAST iterations ===========
+Trying with 6 vectors:
+
+ ITERATION 1 with 6 vectors and 6 left vectors
+   During kernel cleaning abs(g):
+   [3.5e+00 3.9e-01 5.1e-03 5.6e-03 1.7e-15 7.4e-15]
+   Real part of computed eigenvalues:
+   [3.79691943e+00 3.79691943e+00 3.80406573e+00 3.80406573e+00
+ 1.67441220e+03 3.95702016e+03]
+   Imag part of computed eigenvalues:
+   [-7.25805741e-01 -7.25805741e-01 -7.28580412e-01 -7.28580412e-01
+ -7.58228288e+02  5.59865153e+03]
+   Relative Hausdorff distance from prior iterate: 2.584e+99
+
+ ITERATION 2 with 6 vectors and 6 left vectors
+   During kernel cleaning abs(g):
+   [3.3e-01 7.0e-02 5.4e-02 4.0e-02 2.2e-22 3.8e-19]
+   Removing ew#[4, 5]
+   Real part of computed eigenvalues:
+   [3.79691943 3.79691943 3.80406573 3.80406573]
+   Imag part of computed eigenvalues:
+   [-0.72580574 -0.72580574 -0.72858041 -0.72858041]
+   Relative Hausdorff distance from prior iterate: 1.771e+03
+
+ ITERATION 3 with 4 vectors and 4 left vectors
+   During kernel cleaning abs(g):
+   [0. 0. 0. 0.]
+   Real part of computed eigenvalues:
+   [3.79691943 3.79691943 3.80406573 3.80406573]
+   Imag part of computed eigenvalues:
+   [-0.72580574 -0.72580574 -0.72858041 -0.72858041]
+   Relative Hausdorff distance from prior iterate: 1.440e-13
+
+   Removing ew#[2, 3] not enclosed by contour
+
+***FEAST converged with:
+	Relative Hausdorff distance = 1.440e-13
+
+============= FEAST iterations done =============
+Results:
+ Z²: [3.79691943-0.72580574j 3.79691943-0.72580574j]
+ beta: [8559597.31602853+271.34201353j 8559597.31602853+271.34201353j]
+ CL dB/m: [2356.84678368 2356.84678365]
+leakyvecmodes done, saving.
+
+
+######## refinement: 4, degree: 4  ########
+
+ModeSolver: Checking if mesh has required regions
+Mesh has  90112  elements,  45281  points,  and  135392  edges.
+Set NGSolve automatic PML with p= 4  alpha= 3 and thickness=6.000
+Using FEAST to search for vector leaky modes in
+circle of radius 0.005 centered at  (3.7969194313378907-0.725805740812567j)
+assuming not more than 6 modes in this interval
+System size: 2479200  x  2479200   Inverse type: umfpack
+
+SpectralProj: Setting shifted trapezoidal rule quadrature on circular contour
+SpectralProj: Radius=0.005, Center=3.79692-0.725806j
+SpectralProjNGR:   Making resolvent at z =  +3.801 -0.723j
+SpectralProjNGR:   Making resolvent at z =  +3.797 -0.721j
+SpectralProjNGR:   Making resolvent at z =  +3.793 -0.723j
+SpectralProjNGR:   Making resolvent at z =  +3.793 -0.728j
+SpectralProjNGR:   Making resolvent at z =  +3.797 -0.731j
+SpectralProjNGR:   Making resolvent at z =  +3.801 -0.728j
+
+=========== Starting FEAST iterations ===========
+Trying with 6 vectors:
+
+ ITERATION 1 with 6 vectors and 6 left vectors
+   During kernel cleaning abs(g):
+   [2.2e+00 9.5e-01 2.2e-02 6.6e-03 2.6e-15 4.1e-15]
+   Real part of computed eigenvalues:
+   [3.79691942e+00 3.79691943e+00 3.80406573e+00 3.80406573e+00
+ 1.12469721e+03 2.52704831e+04]
+   Imag part of computed eigenvalues:
+   [-7.25805737e-01 -7.25805741e-01 -7.28580412e-01 -7.28580412e-01
+ -1.36481318e+03 -5.24694512e+03]
+   Relative Hausdorff distance from prior iterate: 2.584e+99
+
+ ITERATION 2 with 6 vectors and 6 left vectors
+   During kernel cleaning abs(g):
+   [1.7e-01 2.3e-01 3.9e-02 5.0e-02 6.9e-22 1.9e-18]
+   Removing ew#[4, 5]
+   Real part of computed eigenvalues:
+   [3.79691943 3.79691943 3.80406573 3.80406573]
+   Imag part of computed eigenvalues:
+   [-0.72580574 -0.72580574 -0.72858041 -0.72858041]
+   Relative Hausdorff distance from prior iterate: 6.667e+03
+
+ ITERATION 3 with 4 vectors and 4 left vectors
+   During kernel cleaning abs(g):
+   [0.1 0.1 0.  0. ]
+   Real part of computed eigenvalues:
+   [3.79691943 3.79691943 3.80406573 3.80406573]
+   Imag part of computed eigenvalues:
+   [-0.72580574 -0.72580574 -0.72858041 -0.72858041]
+   Relative Hausdorff distance from prior iterate: 1.038e-13
+
+   Removing ew#[2, 3] not enclosed by contour
+
+***FEAST converged with:
+	Relative Hausdorff distance = 1.038e-13
+
+============= FEAST iterations done =============
+Results:
+ Z²: [3.79691943-0.72580574j 3.79691943-0.72580574j]
+ beta: [8559597.31602852+271.34201351j 8559597.31602852+271.34201351j]
+ CL dB/m: [2356.84678355 2356.84678355]
+leakyvecmodes done, saving.
+
+
+Loops completed, saving data again just in case.
+
+Ending convergence study:
+Sun Mar 20 00:19:25 PDT 2022

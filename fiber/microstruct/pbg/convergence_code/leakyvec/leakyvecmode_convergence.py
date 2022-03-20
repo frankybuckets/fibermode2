@@ -19,8 +19,8 @@ directory and begin again.")
 
 # Polynomial Degrees and Refinements to cycle through. #################
 
-refs = [0, 1, 2, 3, 4, 5]
-ps = [0, 1, 2, 3, 4, 5]
+refs = [3, 4]
+ps = [3, 4]
 nspan = 6
 
 Zs = np.zeros(shape=(len(refs), len(ps), nspan), dtype=complex)
@@ -41,21 +41,24 @@ if __name__ == '__main__':
                 betas, zsqrs, E, phi, Robj = fbm.leakyvecmodes(ctr=z_exact,
                                                                rad=.005,
                                                                p=p,
-                                                               alpha=1,
+                                                               alpha=3,
                                                                niterations=15,
                                                                nrestarts=0,
                                                                stop_tol=1e-9,
-                                                               nspan=nspan)
+                                                               nspan=nspan,
+                                                               npts=6)
 
                 Zs[i, j, :len(zsqrs)] = zsqrs[:]
                 dofs[i, j] = Robj.XY.ndof
-        except NgException or Exception:
+                print('leakyvecmodes done, saving.\n', flush=True)
+                np.save(os.path.relpath(folder + '/' + 'leakyvec_Zs2'), Zs)
+                np.save(os.path.relpath(folder + '/' + 'leakyvec_dofs2'), dofs)
+        except (NgException, Exception):
             print('\nMemory limit exceeded at ref: ', ref,
                   ', and p: ', p, '.\n Skipping rest of orders for this\
  refinement.', flush=True)
             pass
-    print("\nLoops completed, saving data.\n", flush=True)
+    print("\nLoops completed, saving data again just in case.\n", flush=True)
 
-    np.save(os.path.abspath(folder + '/' + 'leakyvec_Zs'), Zs)
-    np.save(os.path.abspath(folder + '/' + 'leakyvec_dofs'), dofs)
-
+    np.save(os.path.relpath(folder + '/' + 'leakyvec_Zs2'), Zs)
+    np.save(os.path.relpath(folder + '/' + 'leakyvec_dofs2'), dofs)

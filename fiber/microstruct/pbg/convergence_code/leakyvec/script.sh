@@ -7,7 +7,7 @@
 #SBATCH --partition himem
 #SBATCH --mail-user piet2@pdx.edu
 #SBATCH --mail-type ALL
-#SBATCH --output=leakyvec_convergence.log
+#SBATCH --output=leakyvec_convergence.out
 #SBATCH --error=leakyvec_convergence.err
 
 echo "Starting at wall clock time:"
@@ -22,6 +22,6 @@ module load intel
 # Run the code.
 echo "Starting convergence study: "
 date
-python3 leakyvecmode_convergence.py
+python3 -u leakyvecmode_convergence.py
 echo "Ending convergence study:"
 date
