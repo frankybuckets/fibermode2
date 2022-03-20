@@ -58,4 +58,3 @@ if __name__ == '__main__':
 
     np.save(os.path.abspath(folder + '/' + 'leakyvec_Zs'), Zs)
     np.save(os.path.abspath(folder + '/' + 'leakyvec_dofs'), dofs)
-
