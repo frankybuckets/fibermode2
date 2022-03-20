@@ -32,7 +32,7 @@ if __name__ == '__main__':
         try:
             for j, p in enumerate(ps):
                 print('\n' + '#'*8 + ' refinement: ' + str(ref) +
-                      ', degree: ' + str(p) + '  ' + '#'*8 + '\n')
+                      ', degree: ' + str(p) + '  ' + '#'*8 + '\n', flush=True)
 
                 fbm = FiberMode(fibername='Nufern_Yb', R=3,
                                 Rout=9, h=2, hcore=.3, refine=ref,
@@ -52,8 +52,10 @@ if __name__ == '__main__':
         except NgException or Exception:
             print('\nMemory limit exceeded at ref: ', ref,
                   ', and p: ', p, '.\n Skipping rest of orders for this\
- refinement.')
+ refinement.', flush=True)
             pass
+    print("\nLoops completed, saving data.\n", flush=True)
 
     np.save(os.path.abspath(folder + '/' + 'leakyvec_Zs'), Zs)
     np.save(os.path.abspath(folder + '/' + 'leakyvec_dofs'), dofs)
+

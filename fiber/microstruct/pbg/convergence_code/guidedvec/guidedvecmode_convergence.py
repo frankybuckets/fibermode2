@@ -40,8 +40,8 @@ directory and begin again.")
 
 # Polynomial Degrees and Refinements to cycle through. #################
 
-refs = [5, 0]
-ps = [5, 1]
+refs = [0, 1, 2, 3, 4, 5]
+ps = [0, 1, 2, 3, 4, 5]
 nspan = 3
 
 Zs = np.zeros(shape=(len(refs), len(ps), nspan), dtype=complex)
@@ -68,7 +68,7 @@ if __name__ == '__main__':
                                                                 nspan=nspan)
                 Zs[i, j, :len(zsqrs)] = zsqrs[:]
                 dofs[i, j] = Robj.XY.ndof
-        except NgException:
+        except NgException or Exception:
             print('\nMemory limit exceeded at ref: ', ref,
                   ', and p: ', p, '.\n Skipping rest of orders for this\
  refinement.')
