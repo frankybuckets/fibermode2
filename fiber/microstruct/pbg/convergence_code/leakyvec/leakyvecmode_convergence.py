@@ -11,8 +11,7 @@ from netgen.libngpy._meshing import NgException
 z_exact = 3.7969194313378907-0.725805740812567j
 
 # Folder setup.  Enter your path to pbg folder. ##################
-pbg_home = '/home/piet2/local/fiberamp/fiber/microstruct/pbg/'
-folder = pbg_home + '/outputs'   # Make this directory
+folder = '/home/piet2/local/fiberamp/fiber/microstruct/pbg/outputs'
 
 if not os.path.isdir(os.path.relpath(folder)):
     raise FileNotFoundError("Given folder is not a directory. Make this \
@@ -33,8 +32,8 @@ if __name__ == '__main__':
         try:
             for j, p in enumerate(ps):
                 print('\n' + '#'*8 + ' refinement: ' + str(ref) +
-                          ', degree: ' + str(p) + '  ' + '#'*8 + '\n')
-                
+                      ', degree: ' + str(p) + '  ' + '#'*8 + '\n')
+
                 fbm = FiberMode(fibername='Nufern_Yb', R=3,
                                 Rout=9, h=2, hcore=.3, refine=ref,
                                 curveorder=max(p+1, 6))
@@ -45,18 +44,16 @@ if __name__ == '__main__':
                                                                alpha=1,
                                                                niterations=15,
                                                                nrestarts=0,
-                                                               npts=6,
                                                                stop_tol=1e-9,
                                                                nspan=nspan)
-                
+
                 Zs[i, j, :len(zsqrs)] = zsqrs[:]
                 dofs[i, j] = Robj.XY.ndof
-        except NgException or Exception: 
+        except NgException or Exception:
             print('\nMemory limit exceeded at ref: ', ref,
-                    ', and p: ', p, '.\n Skipping rest of orders for this refinement.')
+                  ', and p: ', p, '.\n Skipping rest of orders for this\
+ refinement.')
             pass
 
- 
     np.save(os.path.abspath(folder + '/' + 'leakyvec_Zs'), Zs)
     np.save(os.path.abspath(folder + '/' + 'leakyvec_dofs'), dofs)
-

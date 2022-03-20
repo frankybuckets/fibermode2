@@ -32,8 +32,7 @@ from netgen.libngpy._meshing import NgException
 z_exact = -15.817570072953
 
 # Folder setup.  Enter your path to pbg folder. ##################
-pbg_home = '/home/piet2/local/fiberamp/fiber/microstruct/pbg/'
-folder = pbg_home + '/outputs'   # Make this directory
+folder = '/home/piet2/local/fiberamp/fiber/microstruct/pbg/outputs'
 
 if not os.path.isdir(os.path.relpath(folder)):
     raise FileNotFoundError("Given folder is not a directory. Make this \
@@ -54,10 +53,10 @@ if __name__ == '__main__':
         try:
             for j, p in enumerate(ps):
                 print('\n' + '#'*8 + ' refinement: ' + str(ref) +
-                          ', degree: ' + str(p) + '  ' + '#'*8 + '\n')
+                      ', degree: ' + str(p) + '  ' + '#'*8 + '\n')
                 fbm = FiberMode(fibername='Nufern_Yb', R=2.5,
-                                    Rout=5, h=80, refine=ref,
-                                    curveorder=max(p+1, 4))
+                                Rout=5, h=80, refine=ref,
+                                curveorder=max(p+1, 4))
 
                 betas, zsqrs, E, phi, Robj = fbm.guidedvecmodes(ctr=z_exact,
                                                                 rad=.1,
@@ -69,13 +68,13 @@ if __name__ == '__main__':
                                                                 nspan=nspan)
                 Zs[i, j, :len(zsqrs)] = zsqrs[:]
                 dofs[i, j] = Robj.XY.ndof
-        except NgException: 
+        except NgException:
             print('\nMemory limit exceeded at ref: ', ref,
-                    ', and p: ', p, '.\n Skipping rest of orders for this refinement.')
+                  ', and p: ', p, '.\n Skipping rest of orders for this\
+ refinement.')
             pass
 
     print('Saving data.\n')
 
-#    np.save(os.path.abspath(folder + '/' + 'guidedvec_Zs'), Zs)
-#    np.save(os.path.abspath(folder + '/' + 'guidedvec_dofs'), dofs)
-
+    np.save(os.path.abspath(folder + '/' + 'guidedvec_Zs'), Zs)
+    np.save(os.path.abspath(folder + '/' + 'guidedvec_dofs'), dofs)
