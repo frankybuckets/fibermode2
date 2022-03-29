@@ -45,8 +45,7 @@ if __name__ == '__main__':
                                                                 nrestarts=0,
                                                                 npts=6,
                                                                 stop_tol=1e-9,
-                                                                nspan=nspan,
-                                                                inverse='umfpack')
+                                                                nspan=nspan)
                 Zs[i, j, :len(zsqrs)] = zsqrs[:]
                 dofs[i, j] = Robj.XY.ndof
                 print("guided vec modes complete, saving.\n", flush=True)

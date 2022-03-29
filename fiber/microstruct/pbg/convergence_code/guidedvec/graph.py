@@ -25,7 +25,8 @@ plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 z_exact = -15.817570072953
 
 path = os.path.relpath(
-    '/home/pv/local/fiberamp/fiber/microstruct/pbg/outputs')
+    '/home/pv/local/fiberamp/fiber/microstruct/pbg/convergence_code\
+/guidedvec/outputs')
 
 
 Zs = np.load(path + '/guidedvec_Zs.npy')

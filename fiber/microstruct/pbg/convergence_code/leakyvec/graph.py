@@ -25,11 +25,12 @@ plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 z_exact = 3.7969194313378907-0.725805740812567j
 
 path = os.path.relpath(
-    '/home/pv/local/fiberamp/fiber/microstruct/pbg/convergence_code/leakyvec')
+    '/home/pv/local/fiberamp/fiber/microstruct/pbg\
+/convergence_code/leakyvec/outputs')
 
 
-Zs = np.load(path + '/leakyvec_Zs.npy')
-dofs = np.load(path + '/leakyvec_dofs.npy')
+Zs = np.load(path + '/leakyvec_Zs_a3.npy')
+dofs = np.load(path + '/leakyvec_dofs_a3.npy')
 
 # Take mean of differences where not zero (and not too large)
 diffs = np.mean(Zs-z_exact, axis=2,
@@ -38,9 +39,22 @@ diffs = np.mean(Zs-z_exact, axis=2,
 
 plt.figure(figsize=(18, 16))
 
-for i in range(1, len(Zs[1])):
+for i in range(len(Zs[1])):
     plt.plot(np.log10(dofs[:, i]), np.log10(
         np.abs(diffs[:, i])), 'o-', label='p='+str(i+1), linewidth=2.5,
+        markersize=8)
+
+Zs = np.load(path + '/leakyvec_Zs_a3_5.npy')
+dofs = np.load(path + '/leakyvec_dofs_a3_5.npy')
+
+# Take mean of differences where not zero (and not too large)
+diffs = np.mean(Zs-z_exact, axis=2,
+                where=np.where((Zs != 0)*(np.abs(Zs-z_exact) < 1),
+                               True, False))
+
+for i in range(len(Zs[1])):
+    plt.plot(np.log10(dofs[:, i]), np.log10(
+        np.abs(diffs[:, i])), 'o-', label='p='+str(i+5), linewidth=2.5,
         markersize=8)
 
 plt.legend()
@@ -48,6 +62,6 @@ plt.legend()
 plt.xlabel('log of ndofs')
 plt.ylabel('log of error')
 plt.grid()
-# plt.ylim(-16)
+plt.ylim(-12)
 plt.title('Leaky Mode Convergence for Vectorial Solver\nNufern Ytterbium Fiber \
- (Fundamental Mode)\n')
+\n alpha = 3, Fundamental Mode\n')
