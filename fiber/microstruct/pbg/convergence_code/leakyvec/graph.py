@@ -44,6 +44,14 @@ for i in range(len(Zs[1])):
         np.abs(diffs[:, i])), 'o-', label='p='+str(i+1), linewidth=2.5,
         markersize=8)
 
+
+hs = [2**(-i) for i in range(5)]
+for i in range(len(Zs[1])):
+    xs = np.log10(hs[2:-1])
+    ys = np.log10(np.abs(diffs[:, i]))[2:-1]
+    print(i+1, np.polyfit(xs, ys, 1)[0])
+
+
 Zs = np.load(path + '/leakyvec_Zs_a3_5.npy')
 dofs = np.load(path + '/leakyvec_dofs_a3_5.npy')
 
@@ -51,7 +59,7 @@ dofs = np.load(path + '/leakyvec_dofs_a3_5.npy')
 diffs = np.mean(Zs-z_exact, axis=2,
                 where=np.where((Zs != 0)*(np.abs(Zs-z_exact) < 1),
                                True, False))
-
+hs = [2 ^ (-i) for i in range(5)]
 for i in range(len(Zs[1])):
     plt.plot(np.log10(dofs[:, i]), np.log10(
         np.abs(diffs[:, i])), 'o-', label='p='+str(i+5), linewidth=2.5,
@@ -65,3 +73,9 @@ plt.grid()
 plt.ylim(-12)
 plt.title('Leaky Mode Convergence for Vectorial Solver\nNufern Ytterbium Fiber \
 \n alpha = 3, Fundamental Mode\n')
+
+hs = [2**(-i) for i in range(5)]
+for i in range(len(Zs[1])):
+    xs = np.log10(hs[1:-2])
+    ys = np.log10(np.abs(diffs[:, i]))[1:-2]
+    print(5, np.polyfit(xs, ys, 1)[0])

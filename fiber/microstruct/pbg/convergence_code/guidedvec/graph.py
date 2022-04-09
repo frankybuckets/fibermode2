@@ -53,7 +53,9 @@ plt.grid()
 plt.title('Guided Mode Convergence for Vectorial Solver\
 \nNufern Ytterbium Fiber (Fundamental Mode)\n')
 
+
+hs = [10 * 2**(-i) for i in range(5)]
 for i in range(len(Zs[1])):
-    xs = np.log10(dofs[:, i])[1:-1]
+    xs = np.log10(hs[1:-1])
     ys = np.log10(np.abs(diffs[:, i]))[1:-1]
     print(i, np.polyfit(xs, ys, 1)[0])
