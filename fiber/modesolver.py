@@ -656,11 +656,20 @@ class ModeSolver:
         D += n2 * phi * psi * dx
 
         with ng.TaskManager():
-            A.Assemble()
-            M.Assemble()
-            B.Assemble()
-            C.Assemble()
-            D.Assemble()
+            try:
+                A.Assemble()
+                M.Assemble()
+                B.Assemble()
+                C.Assemble()
+                D.Assemble()
+            except Exception:
+                print('*** Trying again with larger heap')
+                ng.SetHeapSize(int(1e9))
+                A.Assemble()
+                M.Assemble()
+                B.Assemble()
+                C.Assemble()
+                D.Assemble()
             Dinv = D.mat.Inverse(Y.FreeDofs())
 
         # resolvent of the vector mode problem --------------------------
@@ -684,7 +693,12 @@ class ModeSolver:
                                    - V * E * v - grad(phi) * v
                                    - n2 * phi * psi + n2 * E * grad(psi)) * dx
                 with ng.TaskManager():
-                    selfr.zminusOp.Assemble()
+                    try:
+                        selfr.zminusOp.Assemble()
+                    except Exception:
+                        print('*** Trying again with larger heap')
+                        ng.SetHeapSize(int(1e9))
+                        selfr.zminusOp.Assemble()
                     selfr.R = selfr.zminusOp.mat.Inverse(XY.FreeDofs())
 
             def act(selfr, v, Rv, workspace=None):
@@ -751,8 +765,7 @@ class ModeSolver:
 
     def guidedvecmodes(self, rad, ctr, p=3,  seed=None, npts=8, nspan=20,
                        within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
-                       verbose=True, inverse='umfpack',
-                       **feastkwargs):
+                       verbose=True, inverse='umfpack', **feastkwargs):
         """
         Capture guided vector modes whose non-dimensional resonance value Z²
         is such that Z*Z is within the interval (ctr-rad, ctr+rad).
@@ -784,8 +797,7 @@ class ModeSolver:
 
     def leakyvecmodes(self, rad, ctr, alpha=1, p=3,  seed=1, npts=8, nspan=20,
                       within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
-                      verbose=True, inverse='umfpack',
-                      **feastkwargs):
+                      verbose=True, inverse='umfpack', **feastkwargs):
         """
         Capture leaky vector modes whose non-dimensional resonance value Z²
         is contained  within the circular contour centered at "ctr"
