@@ -17,7 +17,8 @@ import pickle
 class ARF(ModeSolver):
 
     def __init__(self, name=None, freecapil=False,
-                 outermaterials=None, **kwargs):
+                 outermaterials=None, curve=3, refine=0,
+                 **kwargs):
         """
         PARAMETERS:
 
@@ -173,7 +174,7 @@ class ARF(ModeSolver):
             ngmesh = self.geo.GenerateMesh()
             self.mesh = ng.Mesh(ngmesh)
 
-        self.mesh.Curve(3)
+        self.refine(n=refine, curve=curve)
 
         # MATERIAL COEFFICIENTS
 
@@ -747,16 +748,17 @@ class ARF(ModeSolver):
 
         return capillary_points
 
-    def refine(self):
-        """ Refine mesh by dividing each triangle into four """
+    def refine(self, n=1, curve=3):
+        """Uniformly refine mesh n times and set mesh curvature."""
 
         print('  Refining ARF mesh uniformly: each element split into four')
-        self.refined += 1
-        self.mesh.ngmesh.Refine()
+        self.refined += n
+        for i in range(n):
+            self.mesh.ngmesh.Refine()
         self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
-        self.mesh.Curve(3)
+        self.mesh.Curve(curve)
         for key in self.epw:
-            self.epw[key] = self.epw[key] * 2
+            self.epw[key] = self.epw[key] * (2 ** n)
         s = '  Elements/wavelength revised:'
         s += '%g (capillary), %g (air), %g (inner core)' \
             % (self.epw['capillary'], self.epw['air'], self.epw['inner'])
