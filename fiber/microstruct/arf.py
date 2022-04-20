@@ -767,7 +767,6 @@ class ARF(ModeSolver):
         print(s)
 
     def curve(self, curve=3):
-        self.mesh.Curve(0)
         self.mesh.Curve(curve)
 
     # SAVE & LOAD #####################################################

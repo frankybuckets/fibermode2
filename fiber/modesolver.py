@@ -611,7 +611,7 @@ class ModeSolver:
     # ###################################################################
     # VECTOR MODES
 
-    def vecmodesystem(self, p, alpha=None):
+    def vecmodesystem(self, p, alpha=None, inverse=None):
         """
         Prepare eigensystem and resolvents for solving for vector modes.
 
@@ -670,7 +670,7 @@ class ModeSolver:
                 B.Assemble()
                 C.Assemble()
                 D.Assemble()
-            Dinv = D.mat.Inverse(Y.FreeDofs())
+            Dinv = D.mat.Inverse(Y.FreeDofs(), inverse=inverse)
 
         # resolvent of the vector mode problem --------------------------
 
@@ -684,7 +684,7 @@ class ModeSolver:
             tmpY2 = ng.GridFunction(Y)
             tmpX1 = ng.GridFunction(X)
 
-            def __init__(selfr, z, V, n):
+            def __init__(selfr, z, V, n, inverse=None):
                 n2 = n*n
                 XY = ng.FESpace([X, Y])
                 (E, phi), (v, psi) = XY.TnT()
@@ -699,7 +699,8 @@ class ModeSolver:
                         print('*** Trying again with larger heap')
                         ng.SetHeapSize(int(1e9))
                         selfr.zminusOp.Assemble()
-                    selfr.R = selfr.zminusOp.mat.Inverse(XY.FreeDofs())
+                    selfr.R = selfr.zminusOp.mat.Inverse(XY.FreeDofs(),
+                                                         inverse=inverse)
 
             def act(selfr, v, Rv, workspace=None):
                 if workspace is None:
@@ -771,7 +772,7 @@ class ModeSolver:
         is such that Z*Z is within the interval (ctr-rad, ctr+rad).
         """
 
-        R, M, A, B, C, D, Dinv = self.vecmodesystem(p)
+        R, M, A, B, C, D, Dinv = self.vecmodesystem(p, inverse=inverse)
         X, Y = R.XY.components
         E = NGvecs(X, nspan, M=M)
         E.setrandom(seed=seed)
@@ -781,10 +782,11 @@ class ModeSolver:
         print('assuming not more than %d modes in this interval.' % nspan)
         print('System size:', E.n, ' x ', E.n, '  Inverse type:', inverse)
 
-        P = SpectralProjNGR(lambda z: R(z, self.V, self.index),
+        P = SpectralProjNGR(lambda z: R(z, self.V, self.index,
+                                        inverse=inverse),
                             radius=rad, center=ctr, npts=npts,
                             within=within, rhoinv=rhoinv, quadrule=quadrule,
-                            inverse=inverse, verbose=verbose)
+                            verbose=verbose)
         Zsqrs, E, history, _ = P.feast(E, **feastkwargs)
         betas = self.betafrom(Zsqrs)
 
@@ -804,7 +806,8 @@ class ModeSolver:
         of radius "rad" in the Z² complex plane (not the Z-plane!).
         """
 
-        R, M, A, B, C, D, Dinv = self.vecmodesystem(p, alpha=alpha)
+        R, M, A, B, C, D, Dinv = self.vecmodesystem(p, alpha=alpha,
+                                                    inverse=inverse)
         X, Y = R.XY.components
         E = NGvecs(X, nspan, M=M)
         El = E.create()
@@ -816,10 +819,11 @@ class ModeSolver:
         print('assuming not more than %d modes in this interval' % nspan)
         print('System size:', E.n, ' x ', E.n, '  Inverse type:', inverse)
 
-        P = SpectralProjNGR(lambda z: R(z, self.V, self.index),
+        P = SpectralProjNGR(lambda z: R(z, self.V, self.index,
+                                        inverse=inverse),
                             radius=rad, center=ctr, npts=npts,
                             within=within, rhoinv=rhoinv, quadrule=quadrule,
-                            inverse=inverse, verbose=verbose)
+                            verbose=verbose)
 
         Zsqrs, E, history, El = P.feast(E, Yl=El, hermitian=False,
                                         **feastkwargs)
