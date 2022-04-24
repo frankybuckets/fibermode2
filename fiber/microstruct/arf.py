@@ -751,7 +751,8 @@ class ARF(ModeSolver):
     def refine(self, n=1, curve=3):
         """Uniformly refine mesh n times and set mesh curvature."""
 
-        print('  Refining ARF mesh uniformly: each element split into four')
+        print('  Refining ARF mesh uniformly ' + str(n) + ' times:\
+ each element split into four')
         self.refined += n
         for i in range(n):
             self.mesh.ngmesh.Refine()

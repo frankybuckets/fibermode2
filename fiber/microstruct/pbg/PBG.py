@@ -89,7 +89,7 @@ class PBG(ModeSolver):
 
     """
 
-    def __init__(self, fiber_param_dict):
+    def __init__(self, fiber_param_dict, refine=0, curve=3):
 
         for key, value in fiber_param_dict.items():
             if key == 'wavelength':  # set later to update k and V
@@ -120,10 +120,8 @@ class PBG(ModeSolver):
                                  square_buffer=self.square_buffer)
 
         # Create Mesh
-        self.mesh = self.create_mesh()
-
-        # Set refinement counter
         self.refinements = 0
+        self.mesh = self.create_mesh(ref=refine, curve=curve)
 
         # Set refractive indices (Need to implement Sellmeier here)
         self.refractive_index_dict = {'Outer': self.n_outer,
@@ -200,7 +198,7 @@ class PBG(ModeSolver):
                                  self.pattern, rot=angle)
         self.mesh = self.create_mesh()
 
-    def create_mesh(self):
+    def create_mesh(self, ref=0, curve=3):
         """Set materials, max diameters and create mesh."""
         # Set the materials for the domain.
         mat = {6: 'poly', 5: 'Outer', 4: 'buffer',
@@ -222,7 +220,7 @@ class PBG(ModeSolver):
         mesh = ng.Mesh(self.geo.GenerateMesh())
         print("Mesh created.")
 
-        mesh.Curve(3)
+        self.refine(n=ref, curve=curve)
 
         return mesh
 
@@ -236,6 +234,17 @@ class PBG(ModeSolver):
                                  square_buffer=self.square_buffer)
 
         self.mesh = self.create_mesh()
+
+    def refine(self, n=1, curve=3):
+        """Refine mesh n times."""
+        self.refinements += n
+        for i in range(n):
+            self.mesh.ngmesh.Refine()
+            self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
+            self.curve(curve)
+
+    def curve(self, curve=3):
+        self.mesh.Curve(curve)
 
     def geometry(self, Λ, r_tube, r_fiber, r_poly, r_pml, r_out, scale, r_core,
                  layers=6, skip=1, p=6, pattern=[], rot=0, hexcore=True,
@@ -488,14 +497,6 @@ class PBG(ModeSolver):
                 # Add the circles
                 geo.AddCircle(c=(x, y), r=r, leftdomain=3,
                               rightdomain=2, bc='microtube_cladding_interface')
-
-    def refine(self, n=1):
-        """Refine mesh n times."""
-        self.refinements += n
-        for i in range(n):
-            self.mesh.ngmesh.Refine()
-            self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
-            self.mesh.Curve(3)
 
     # SAVE & LOAD #####################################################
 

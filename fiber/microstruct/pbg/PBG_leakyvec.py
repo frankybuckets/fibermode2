@@ -5,16 +5,16 @@ if __name__ == '__main__':
 
     A = PBG(params)
 
-    zcenter = 2
-    radius = 1
+    center = 3.034
+    radius = .1
     p = 2
 
     betas, zsqrs, E, phi, R = \
-        A.leakyvecmodes(rad=radius, ctr=zcenter**2,
+        A.leakyvecmodes(rad=radius, ctr=center,
                         alpha=A.alpha, p=p,
                         quadrule='ellipse_trapez_shift', rhoinv=.8,
-                        niterations=12, npts=6, stop_tol=1e-8,
-                        nspan=5, nrestarts=0)
+                        niterations=12, npts=4, stop_tol=1e-11,
+                        nspan=3, nrestarts=0)
 
     E.draw(name='E')
     phi.draw(name='phi')
