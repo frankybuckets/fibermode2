@@ -751,12 +751,13 @@ class ARF(ModeSolver):
     def refine(self, n=1, curve=3):
         """Uniformly refine mesh n times and set mesh curvature."""
 
-        print('  Refining ARF mesh uniformly: each element split into four')
+        print('  Refining ARF mesh uniformly ' + str(n) + ' times:\
+ each element split into four')
         self.refined += n
         for i in range(n):
             self.mesh.ngmesh.Refine()
         self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
-        self.mesh.Curve(curve)
+        self.curve(curve)
         for key in self.epw:
             self.epw[key] = self.epw[key] * (2 ** n)
         s = '  Elements/wavelength revised:'
@@ -765,6 +766,9 @@ class ARF(ModeSolver):
         s += '\n  Elements/wavelength revised: %g (glass), %g (outer)'  \
             % (self.epw['glass'], self.epw['outer'])
         print(s)
+
+    def curve(self, curve=3):
+        self.mesh.Curve(curve)
 
     # SAVE & LOAD #####################################################
 
