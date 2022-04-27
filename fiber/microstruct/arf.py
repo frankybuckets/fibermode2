@@ -756,7 +756,8 @@ class ARF(ModeSolver):
         self.refined += n
         for i in range(n):
             self.mesh.ngmesh.Refine()
-        self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
+            self.mesh.ngmesh.SetGeometry(self.geo)
+            self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
         self.curve(curve)
         for key in self.epw:
             self.epw[key] = self.epw[key] * (2 ** n)
@@ -787,7 +788,7 @@ class ARF(ModeSolver):
         Save a NGVec span object Y containing modes of FE degree p.
         Include any solver paramaters to be saved together with the
         modes in the input dictionary "solverparams". If "arfpickle"
-        is True, then the arf object is also save under the same "fileprefix".
+        is True, then the arf object is also saved under the same "fileprefix".
         """
 
         if arfpickle:

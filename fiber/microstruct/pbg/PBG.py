@@ -240,8 +240,9 @@ class PBG(ModeSolver):
         self.refinements += n
         for i in range(n):
             self.mesh.ngmesh.Refine()
+            self.mesh.ngmesh.SetGeometry(self.geo)
             self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
-            self.curve(curve)
+        self.curve(curve)
 
     def curve(self, curve=3):
         self.mesh.Curve(curve)
