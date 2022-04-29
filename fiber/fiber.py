@@ -1176,6 +1176,18 @@ class Fiber:
             nclad = 1.0
             ncore = 1.0
 
+        elif case == 'basic':
+
+            # Basic fiber with paramaters that make testing easy
+
+            rcore = 1e-6
+            rclad = 4e-6
+            wavelen = .5e-6
+            ncore = 1.48
+            k0 = 2 * pi / wavelen
+            nclad = 1.45
+            L = 0.1
+
         else:
             raise ValueError('Unknown fiber parameter case %s' % case)
 
