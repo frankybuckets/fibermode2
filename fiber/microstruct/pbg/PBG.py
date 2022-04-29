@@ -121,7 +121,7 @@ class PBG(ModeSolver):
 
         # Create Mesh
         self.refinements = 0
-        self.mesh = self.create_mesh(ref=refine, curve=curve)
+        self.create_mesh(ref=refine, curve=curve)
 
         # Set refractive indices (Need to implement Sellmeier here)
         self.refractive_index_dict = {'Outer': self.n_outer,
@@ -217,12 +217,10 @@ class PBG(ModeSolver):
         self.geo.SetDomainMaxH(6, self.poly_maxh)
 
         print("Generating mesh.")
-        mesh = ng.Mesh(self.geo.GenerateMesh())
+        self.mesh = ng.Mesh(self.geo.GenerateMesh())
         print("Mesh created.")
 
         self.refine(n=ref, curve=curve)
-
-        return mesh
 
     def reset_mesh(self):
         """Reset to original mesh."""
@@ -233,7 +231,7 @@ class PBG(ModeSolver):
                                  self.pattern, pml_type=self.pml_type,
                                  square_buffer=self.square_buffer)
 
-        self.mesh = self.create_mesh()
+        self.create_mesh(ref=0, curve=3)
 
     def refine(self, n=1, curve=3):
         """Refine mesh n times."""

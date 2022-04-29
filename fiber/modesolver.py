@@ -838,3 +838,200 @@ class ModeSolver:
         print(' CL dB/m:', 20 * betas.imag / np.log(10))
 
         return betas, Zsqrs, E, phi, R
+
+    # ###################################################################
+    # BENT MODES
+
+    def bentmodesystem(self, p, R_bend, alpha=None, inverse=None):
+        """
+        Prepare eigensystem and resolvents for solving for bent vector modes.
+
+        INPUTS:
+
+        p: Determines degree of Nedelec x Lagrange space system.
+           This should be an integer >= 0.
+
+        R_bend: Non-dimensionalized bend radius.  Typical values around
+            800 * R_clad.
+
+        alpha: If alpha is None, prepare system for vector guided modes.
+           If alpha is a positive number, use it as PML strength and
+           prepare system for leaky modes using NGSolve's automatic
+           mesh-based PML.
+        """
+
+        # if alpha is not None:
+        #     self.ngspmlset = True
+        #     radial = ng.pml.Radial(rad=self.R,
+        #                            alpha=alpha*1j, origin=(0, 0))
+        #     self.mesh.SetPML(radial, 'Outer')
+        #     print('Set NGSolve automatic PML with p=', p, ' alpha=', alpha,
+        #           'and thickness=%.3f' % (self.Rout-self.R))
+        # elif self.ngspmlset:
+        #     raise RuntimeError('Unexpected NGSolve pml mesh trafo here.')
+
+        n = self.index
+        n2 = n*n
+        r = ng.x + R_bend  # r is NOT sqrt(x^2 + y^2)
+        X = ng.HCurl(self.mesh, order=p+1-max(1-p, 0), type1=True,
+                     dirichlet='OuterCircle', complex=True)
+        Y = ng.H1(self.mesh, order=p+1, dirichlet='OuterCircle', complex=True)
+        E, v = X.TnT()
+        phi, psi = Y.TnT()
+
+        A = ng.BilinearForm(X)
+        A += r * (curl(E) * curl(v) - (self.L*self.k)**2 * n2 * E * v) * dx
+        M = ng.BilinearForm(X)
+        M += -R_bend ** 2 / r * E * v * dx
+        C = ng.BilinearForm(trialspace=Y, testspace=X)
+        C += R_bend * (grad(phi) * v + 1/r * phi * v[0]) * dx
+        B = ng.BilinearForm(trialspace=X, testspace=Y)
+        B += -n2 * r * E * grad(psi) * dx
+        D = ng.BilinearForm(Y)
+        D += n2 * R_bend * phi * psi * dx
+
+        with ng.TaskManager():
+            try:
+                A.Assemble()
+                M.Assemble()
+                B.Assemble()
+                C.Assemble()
+                D.Assemble()
+            except Exception:
+                print('*** Trying again with larger heap')
+                ng.SetHeapSize(int(1e9))
+                A.Assemble()
+                M.Assemble()
+                B.Assemble()
+                C.Assemble()
+                D.Assemble()
+            Dinv = D.mat.Inverse(Y.FreeDofs(), inverse=inverse)
+
+        # resolvent of the vector mode problem --------------------------
+
+        class ResolventVectorMode():
+
+            # static resolvent class attributes, same for all class objects
+            XY = ng.FESpace([X, Y])
+            wrk1 = ng.GridFunction(XY)
+            wrk2 = ng.GridFunction(XY)
+            tmpY1 = ng.GridFunction(Y)
+            tmpY2 = ng.GridFunction(Y)
+            tmpX1 = ng.GridFunction(X)
+
+            def __init__(selfr, z, n, inverse=None):
+                n2 = n*n
+                XY = ng.FESpace([X, Y])
+                (E, phi), (v, psi) = XY.TnT()
+                selfr.zminusOp = ng.BilinearForm(XY)
+                selfr.zminusOp += (-z * R_bend**2 / r * E * v
+                                   - r * curl(E) * curl(v)
+                                   + (self.L*self.k)**2 * n2 * r * E * v
+                                   - R_bend * (grad(phi) * v + 1/r * phi*v[0])
+                                   - R_bend * n2 * phi * psi
+                                   + n2 * r * E * grad(psi)) * dx
+                with ng.TaskManager():
+                    try:
+                        selfr.zminusOp.Assemble()
+                    except Exception:
+                        print('*** Trying again with larger heap')
+                        ng.SetHeapSize(int(1e9))
+                        selfr.zminusOp.Assemble()
+                    selfr.R = selfr.zminusOp.mat.Inverse(XY.FreeDofs(),
+                                                         inverse=inverse)
+
+            def act(selfr, v, Rv, workspace=None):
+                if workspace is None:
+                    Mv = ng.MultiVector(v._mv[0], v.m)
+                else:
+                    Mv = workspace._mv[:v.m]
+
+                with ng.TaskManager():
+                    Mv[:] = M.mat * v._mv
+                    for i in range(v.m):
+                        selfr.wrk1.components[0].vec[:] = Mv[i]
+                        selfr.wrk1.components[1].vec[:] = 0
+                        selfr.wrk2.vec.data = selfr.R * selfr.wrk1.vec
+                        Rv._mv[i][:] = selfr.wrk2.components[0].vec
+
+            def adj(selfr, v, RHv, workspace=None):
+                if workspace is None:
+                    Mv = ng.MultiVector(v._mv[0], v.m)
+                else:
+                    Mv = workspace._mv[:v.m]
+                with ng.TaskManager():
+                    Mv[:] = M.mat * v._mv
+                    for i in range(v.m):
+                        selfr.wrk1.components[0].vec[:] = Mv[i]
+                        selfr.wrk1.components[1].vec[:] = 0
+                        selfr.wrk2.vec.data = selfr.R.H * selfr.wrk1.vec
+                        RHv._mv[i][:] = selfr.wrk2.components[0].vec
+
+            def rayleigh_nsa(selfr, ql, qr, qAq=not None, qBq=not None,
+                             workspace=None):
+                """
+                Return qAq[i, j] = (𝒜 qr[j], ql[i]) with 𝒜 =  (A - C D⁻¹ B) E
+                and qBq[i, j] = (M qr[j], ql[i]). """
+
+                if workspace is None:
+                    Aqr = ng.MultiVector(qr._mv[0], qr.m)
+                else:
+                    Aqr = workspace._mv[:qr.m]
+
+                with ng.TaskManager():
+                    if qAq is not None:
+                        Aqr[:] = A.mat * qr._mv
+                        for i in range(qr.m):
+                            selfr.tmpY1.vec.data = B.mat * qr._mv[i]
+                            selfr.tmpY2.vec.data = Dinv * selfr.tmpY1.vec
+                            selfr.tmpX1.vec.data = C.mat * selfr.tmpY2.vec
+                            Aqr[i].data -= selfr.tmpX1.vec
+                        qAq = ng.InnerProduct(Aqr, ql._mv).NumPy().T
+
+                    if qBq is not None:
+                        Bqr = Aqr
+                        Bqr[:] = M.mat * qr._mv
+                        qBq = ng.InnerProduct(Bqr, ql._mv).NumPy().T
+
+                return (qAq, qBq)
+
+            def rayleigh(selfr, q, workspace=None):
+                return selfr.rayleigh_nsa(q, q, workspace=workspace)
+
+        # resolvent class definition done -------------------------------
+
+        return ResolventVectorMode, M.mat, A.mat, B.mat, C.mat, D.mat, Dinv
+
+    def bentvecmodes(self, rad, ctr, R_bend, p=2,  seed=None, npts=6,
+                     nspan=10, within=None, rhoinv=0.0,
+                     quadrule='circ_trapez_shift', verbose=True,
+                     inverse='umfpack', **feastkwargs):
+        """
+        Capture bent vector modes whose scaled propagation constants have real
+        part near or in the interval L^2k_0^2 [n_clad^2, n_core^2].
+        """
+
+        R, M, A, B, C, D, Dinv = self.bentmodesystem(p, R_bend,
+                                                     inverse=inverse)
+        X, Y = R.XY.components
+        E = NGvecs(X, nspan, M=M)
+        E.setrandom(seed=seed)
+
+        print('Using FEAST to search for vector guided modes in')
+        print('circle of radius', rad, 'centered at ', ctr)
+        print('assuming not more than %d modes in this interval.' % nspan)
+        print('System size:', E.n, ' x ', E.n, '  Inverse type:', inverse)
+
+        P = SpectralProjNGR(lambda z: R(z, self.index, inverse=inverse),
+                            radius=rad, center=ctr, npts=npts,
+                            within=within, rhoinv=rhoinv,
+                            quadrule=quadrule,
+                            verbose=verbose)
+        Nu_sqrs, E, history, _ = P.feast(E, hermitian=False, **feastkwargs)
+
+        phi = NGvecs(Y, E.m)
+        BE = phi.zeroclone()
+        BE._mv[:] = -B * E._mv
+        phi._mv[:] = Dinv * BE._mv
+
+        return Nu_sqrs, E, phi, R
