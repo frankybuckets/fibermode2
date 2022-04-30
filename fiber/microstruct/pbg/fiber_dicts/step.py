@@ -9,11 +9,11 @@ pattern = []               # pattern determining microstructure
 Λ = 7 * 10**-6             # separation between layers
 r_tube = 1e-6              # radius of inner tubes
 r_core = r_tube            # radius of (computational) core region
-r_fiber = 4 * r_tube       # radius of fiber, end of cladding region
+r_fiber = 1.4 * r_tube       # radius of fiber, end of cladding region
 
 t_poly = 0 * r_tube        # polymer jacket thickness
 t_buffer = 0 * r_tube      # thickness of buffer region
-t_outer = 2 * r_tube       # thickness of PML region
+t_outer = 1 * r_tube       # thickness of PML region
 
 r_poly = r_fiber + t_poly  # end of polymer region, start buffer region
 r_pml = r_poly + t_buffer  # end of buffer, start of PML region
@@ -42,7 +42,7 @@ n0 = n_clad                              # base refractive index for V function
 # PML Parameters
 alpha = 5                       # PML factor
 pml_type = 'square'
-square_buffer = .25
+square_buffer = .125
 
 
 # Mesh Parameters. Non-Dimensional

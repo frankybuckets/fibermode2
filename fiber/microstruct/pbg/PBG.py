@@ -396,10 +396,23 @@ class PBG(ModeSolver):
 
             self.r_pml_square = R_pml * scale  # add as attribute
             self.R_pml_square = R_pml
+            
+            pnts=[(-R_pml,-R_pml),(R_pml,-R_pml),(R_pml,R_pml),(R_pml,-R_pml),
+                 (-R_out,-R_out),(-R_pml,-R_out),(R_pml,-R_out),(R_out,-R_out),
+                 (R_out,-R_pml),(R_out,R_pml),(R_out,R_out),
+                 (R_pml,R_out),(-R_pml,R_out),(-R_out,R_out),
+                 (-R_out,R_pml),(-R_out,-R_pml)]
+
+            pml_pnts = [geo.AppendPoint(*pnt) for pnt in pnts]
+            inner_curves = [["line", pml_pts[i], pml_pts[i+1]]
+                            for i in range(2)]
+
             if R_fiber == R_poly:  # no polymer layer, just buffer
 
                 geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2, rightdomain=4,
                               bc='fiber_buffer_interface')
+                
+                for i in range()
                 geo.AddRectangle((-R_pml, -R_pml), (R_pml, R_pml),
                                  leftdomain=4, rightdomain=5,
                                  bc='buffer_pml_interface')
