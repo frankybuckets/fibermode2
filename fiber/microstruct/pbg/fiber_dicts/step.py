@@ -13,7 +13,7 @@ r_fiber = 1.4 * r_tube       # radius of fiber, end of cladding region
 
 t_poly = 0 * r_tube        # polymer jacket thickness
 t_buffer = 0 * r_tube      # thickness of buffer region
-t_outer = 1 * r_tube       # thickness of PML region
+t_outer = 1.5 * r_tube       # thickness of PML region
 
 r_poly = r_fiber + t_poly  # end of polymer region, start buffer region
 r_pml = r_poly + t_buffer  # end of buffer, start of PML region
@@ -49,10 +49,10 @@ square_buffer = .125
 
 pml_maxh = .5 * r_fiber / scale
 buffer_maxh = .3 * r_fiber / scale
-tube_maxh = .07 * r_fiber / scale
+tube_maxh = .7 * r_fiber / scale
 clad_maxh = .2 * r_fiber / scale
 poly_maxh = .8 * r_fiber / scale
-core_maxh = .01 * r_fiber / scale
+core_maxh = .1 * r_fiber / scale
 
 
 params = {

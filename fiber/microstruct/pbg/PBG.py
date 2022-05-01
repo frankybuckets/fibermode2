@@ -129,7 +129,9 @@ class PBG(ModeSolver):
                                       'tube': self.n_tube,
                                       'buffer': self.n_buffer,
                                       'core': self.n_core,
-                                      'poly': self.n_poly
+                                      'poly': self.n_poly,
+                                      'NS_pml': self.n_outer,
+                                      'EW_pml': self.n_outer
                                       }
         self.index = ng.CoefficientFunction(
             [self.refractive_index_dict[mat]
@@ -201,19 +203,32 @@ class PBG(ModeSolver):
     def create_mesh(self, ref=0, curve=3):
         """Set materials, max diameters and create mesh."""
         # Set the materials for the domain.
-        mat = {6: 'poly', 5: 'Outer', 4: 'buffer',
-               3: 'tube', 2: 'clad', 1: 'core'}
+        if self.pml_type == 'radial':
+            mat = {6: 'poly', 5: 'Outer', 4: 'buffer',
+                   3: 'tube', 2: 'clad', 1: 'core'}
 
-        for domain, material in mat.items():
-            self.geo.SetMaterial(domain, material)
+            for domain, material in mat.items():
+                self.geo.SetMaterial(domain, material)
 
-        # Set the maximum mesh sizes in subdomains
+            self.geo.SetDomainMaxH(5, self.pml_maxh)
 
+        elif self.pml_type == 'square':
+            mat = {8: 'NS_pml', 7: 'EW_pml',
+                   6: 'poly', 5: 'Outer', 4: 'buffer',
+                   3: 'tube', 2: 'clad', 1: 'core'}
+
+            for domain, material in mat.items():
+                self.geo.SetMaterial(domain, material)
+
+            self.geo.SetDomainMaxH(5, self.pml_maxh)
+            self.geo.SetDomainMaxH(7, self.pml_maxh)
+            self.geo.SetDomainMaxH(8, self.pml_maxh)
+
+        # Set maxh on domains
         self.geo.SetDomainMaxH(1, self.core_maxh)
         self.geo.SetDomainMaxH(2, self.clad_maxh)
         self.geo.SetDomainMaxH(3, self.tube_maxh)
         self.geo.SetDomainMaxH(4, self.buffer_maxh)
-        self.geo.SetDomainMaxH(5, self.pml_maxh)
         self.geo.SetDomainMaxH(6, self.poly_maxh)
 
         print("Generating mesh.")
@@ -396,29 +411,29 @@ class PBG(ModeSolver):
 
             self.r_pml_square = R_pml * scale  # add as attribute
             self.R_pml_square = R_pml
-            
-            pnts=[(-R_pml,-R_pml),(R_pml,-R_pml),(R_pml,R_pml),(R_pml,-R_pml),
-                 (-R_out,-R_out),(-R_pml,-R_out),(R_pml,-R_out),(R_out,-R_out),
-                 (R_out,-R_pml),(R_out,R_pml),(R_out,R_out),
-                 (R_pml,R_out),(-R_pml,R_out),(-R_out,R_out),
-                 (-R_out,R_pml),(-R_out,-R_pml)]
+
+            pnts = [(-R_pml, -R_pml), (R_pml, -R_pml),
+                    (R_pml, R_pml), (-R_pml, R_pml),
+                    (-R_out, -R_out), (-R_pml, -R_out),
+                    (R_pml, -R_out), (R_out, -R_out),
+                    (R_out, -R_pml), (R_out, R_pml),
+                    (R_out, R_out), (R_pml, R_out),
+                    (-R_pml, R_out), (-R_out, R_out),
+                    (-R_out, R_pml), (-R_out, -R_pml)]
 
             pml_pnts = [geo.AppendPoint(*pnt) for pnt in pnts]
-            inner_curves = [["line", pml_pts[i], pml_pts[i+1]]
-                            for i in range(2)]
+            inner_curves = [["line", pml_pnts[i], pml_pnts[i+1]]
+                            for i in range(3)]
+            inner_curves.append(["line", pml_pnts[3], pml_pnts[0]])
+
+            outer_curves = [["line", pml_pnts[i], pml_pnts[i+1]]
+                            for i in range(4, len(pnts)-1)]
+            outer_curves.append(["line", pml_pnts[len(pnts)-1], pml_pnts[4]])
 
             if R_fiber == R_poly:  # no polymer layer, just buffer
 
                 geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2, rightdomain=4,
                               bc='fiber_buffer_interface')
-                
-                for i in range()
-                geo.AddRectangle((-R_pml, -R_pml), (R_pml, R_pml),
-                                 leftdomain=4, rightdomain=5,
-                                 bc='buffer_pml_interface')
-                geo.AddRectangle((-R_out, -R_out), (R_out, R_out),
-                                 bc='OuterCircle',
-                                 leftdomain=5)
 
             else:  # must be buffer layer, so we have polymer and buffer
 
@@ -426,11 +441,39 @@ class PBG(ModeSolver):
                               bc='fiber_polymer_interface')
                 geo.AddCircle(c=(0, 0), r=R_poly, leftdomain=6, rightdomain=4,
                               bc='polymer_buffer_interface')
-                geo.AddRectangle((-R_pml, -R_pml), (R_pml, R_pml),
-                                 leftdomain=4, rightdomain=5,
-                                 bc='buffer_pml_interface')
-                geo.AddRectangle((-R_out, -R_out), (R_out, R_out),
-                                 leftdomain=5, bc='OuterCircle')
+
+            for i, c in enumerate(inner_curves):
+                if i % 2 == 0:
+                    geo.Append(c, bc='buffer_pml_interface',
+                               leftdomain=4, rightdomain=8)
+                else:
+                    geo.Append(c, bc='buffer_pml_interface',
+                               leftdomain=4, rightdomain=7)
+
+            for i, c in enumerate(outer_curves):
+                if i in [1, 7]:
+                    geo.Append(c, bc='OuterCircle', leftdomain=8)
+                elif i in [4, 10]:
+                    geo.Append(c, bc='OuterCircle', leftdomain=7)
+                else:
+                    geo.Append(c, bc='OuterCircle', leftdomain=5)
+
+            geo.Append(["line", pml_pnts[5], pml_pnts[0]], bc='int_pml_edge',
+                       leftdomain=5, rightdomain=8)
+            geo.Append(["line", pml_pnts[6], pml_pnts[1]], bc='int_pml_edge',
+                       leftdomain=8, rightdomain=5)
+            geo.Append(["line", pml_pnts[8], pml_pnts[1]], bc='int_pml_edge',
+                       leftdomain=5, rightdomain=7)
+            geo.Append(["line", pml_pnts[9], pml_pnts[2]], bc='int_pml_edge',
+                       leftdomain=7, rightdomain=5)
+            geo.Append(["line", pml_pnts[11], pml_pnts[2]], bc='int_pml_edge',
+                       leftdomain=5, rightdomain=8)
+            geo.Append(["line", pml_pnts[12], pml_pnts[3]], bc='int_pml_edge',
+                       leftdomain=8, rightdomain=5)
+            geo.Append(["line", pml_pnts[14], pml_pnts[3]], bc='int_pml_edge',
+                       leftdomain=5, rightdomain=7)
+            geo.Append(["line", pml_pnts[15], pml_pnts[0]], bc='int_pml_edge',
+                       leftdomain=7, rightdomain=5)
         else:
             raise NotImplementedError('PML type must be square or radial')
 
