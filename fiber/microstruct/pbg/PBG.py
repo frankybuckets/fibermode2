@@ -409,8 +409,11 @@ class PBG(ModeSolver):
             if R_poly == R_pml:  # Need to enforce buffer space
                 R_pml = (1 + square_buffer) * R_poly  # give buffer space
 
-            self.r_pml_square = R_pml * scale  # add as attribute
-            self.R_pml_square = R_pml
+            if R_pml > self.Rout:
+                raise ValueError("Beginning of Pml set to start outside Rout,\
+ adjust buffer width, square buffer factor, or Rout to allow meshing.")
+
+            self.R = R_pml  # reset non-dimensional pml starting radius
 
             pnts = [(-R_pml, -R_pml), (R_pml, -R_pml),
                     (R_pml, R_pml), (-R_pml, R_pml),
@@ -445,35 +448,35 @@ class PBG(ModeSolver):
             for i, c in enumerate(inner_curves):
                 if i % 2 == 0:
                     geo.Append(c, bc='buffer_pml_interface',
-                               leftdomain=4, rightdomain=8)
+                               leftdomain=4, rightdomain=5)
                 else:
                     geo.Append(c, bc='buffer_pml_interface',
-                               leftdomain=4, rightdomain=7)
+                               leftdomain=4, rightdomain=5)
 
             for i, c in enumerate(outer_curves):
                 if i in [1, 7]:
-                    geo.Append(c, bc='OuterCircle', leftdomain=8)
+                    geo.Append(c, bc='OuterCircle', leftdomain=5)
                 elif i in [4, 10]:
-                    geo.Append(c, bc='OuterCircle', leftdomain=7)
+                    geo.Append(c, bc='OuterCircle', leftdomain=5)
                 else:
                     geo.Append(c, bc='OuterCircle', leftdomain=5)
 
             geo.Append(["line", pml_pnts[5], pml_pnts[0]], bc='int_pml_edge',
-                       leftdomain=5, rightdomain=8)
+                       leftdomain=5, rightdomain=5)
             geo.Append(["line", pml_pnts[6], pml_pnts[1]], bc='int_pml_edge',
-                       leftdomain=8, rightdomain=5)
+                       leftdomain=5, rightdomain=5)
             geo.Append(["line", pml_pnts[8], pml_pnts[1]], bc='int_pml_edge',
-                       leftdomain=5, rightdomain=7)
+                       leftdomain=5, rightdomain=5)
             geo.Append(["line", pml_pnts[9], pml_pnts[2]], bc='int_pml_edge',
-                       leftdomain=7, rightdomain=5)
+                       leftdomain=5, rightdomain=5)
             geo.Append(["line", pml_pnts[11], pml_pnts[2]], bc='int_pml_edge',
-                       leftdomain=5, rightdomain=8)
+                       leftdomain=5, rightdomain=5)
             geo.Append(["line", pml_pnts[12], pml_pnts[3]], bc='int_pml_edge',
-                       leftdomain=8, rightdomain=5)
+                       leftdomain=5, rightdomain=5)
             geo.Append(["line", pml_pnts[14], pml_pnts[3]], bc='int_pml_edge',
-                       leftdomain=5, rightdomain=7)
+                       leftdomain=5, rightdomain=5)
             geo.Append(["line", pml_pnts[15], pml_pnts[0]], bc='int_pml_edge',
-                       leftdomain=7, rightdomain=5)
+                       leftdomain=5, rightdomain=5)
         else:
             raise NotImplementedError('PML type must be square or radial')
 
