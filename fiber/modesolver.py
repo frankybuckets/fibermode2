@@ -842,6 +842,58 @@ class ModeSolver:
     # ###################################################################
     # BENT MODES
 
+    def bentscalarmodes(self, rad, ctr, R_bend, p=2,  seed=None, npts=6,
+                        nspan=10, within=None, rhoinv=0.0, niterations=10,
+                        quadrule='circ_trapez_shift', verbose=True,
+                        inverse='umfpack', nrestarts=0, **feastkwargs):
+        """Find bent modes using scalar method.
+
+        Bending radius R_bend should be non-dimensional. Currently
+        implemented without PML, so no losses yet."""
+
+        r = ng.x + R_bend
+        k = self.k * self.index * self.L
+
+        X = ng.H1(self.mesh, order=p, complex=True)
+
+        u, v = X.TnT()
+
+        A0 = ng.BilinearForm(X, check_unused=False)
+        A0 += - r * ng.grad(u) * ng.grad(v) * ng.dx
+        A0 += k ** 2 * r * u * v * ng.dx
+
+        A1 = ng.BilinearForm(X, check_unused=False)
+        A1 += R_bend ** 2 / r * u * v * ng.dx
+
+        AA = [A0, A1]
+
+        with ng.TaskManager():
+            for i in range(len(AA)):
+                try:
+                    AA[i].Assemble()
+                except Exception:
+                    print('*** Trying again with larger heap')
+                    ng.SetHeapSize(int(1e9))
+                    AA[i].Assemble()
+
+        P = SpectralProjNG(X, A0.mat, A1.mat, radius=rad, center=ctr,
+                           npts=npts, rhoinv=.95,
+                           quadrule='ellipse_trapez_shift')
+
+        Y = NGvecs(X, nspan)
+        Y.setrandom(seed=1)
+
+        print('Using FEAST to search for vector guided modes in')
+        print('circle of radius', rad, 'centered at ', ctr)
+        print('assuming not more than %d modes in this interval.' % nspan)
+        print('System size:', X.ndof, ' x ', X.ndof)
+        print('  Inverse type:', inverse)
+
+        Nusqr, Y, hist, _ = P.feast(Y, hermitian=True, nrestarts=nrestarts,
+                                    niterations=niterations, **feastkwargs)
+
+        return Nusqr, Y, hist
+
     def bentmodesystem(self, p, R_bend, alpha=None, inverse=None):
         """
         Prepare eigensystem and resolvents for solving for bent vector modes.
