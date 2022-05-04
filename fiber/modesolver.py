@@ -842,6 +842,73 @@ class ModeSolver:
     # ###################################################################
     # BENT MODES
 
+    def bentscalarmodes(self, rad, ctr, R_bend, p=2, alpha=None, npts=6,
+                        nspan=10, within=None, rhoinv=0.0, niterations=10,
+                        quadrule='circ_trapez_shift', verbose=True,
+                        inverse='umfpack', nrestarts=0, **feastkwargs):
+        """Find bent modes using scalar method.
+
+        Bending radius R_bend should be non-dimensional. If alpha is provided,
+        radial pml from ngsolve is set."""
+
+        if alpha is not None:
+            self.ngspmlset = True
+            radial = ng.pml.Radial(rad=self.R, alpha=alpha*1j, origin=(0, 0))
+            self.mesh.SetPML(radial, 'Outer')
+            print('Set NGSolve automatic PML with p=', p, ' alpha=', alpha,
+                  'and thickness=%.3f' % (self.Rout-self.R))
+
+        r = ng.x + R_bend
+        k = self.k * self.index * self.L
+
+        X = ng.H1(self.mesh, order=p, complex=True)
+
+        u, v = X.TnT()
+
+        A0 = ng.BilinearForm(X, check_unused=False)
+        A0 += - r * ng.grad(u) * ng.grad(v) * ng.dx
+        A0 += k ** 2 * r * u * v * ng.dx
+
+        A1 = ng.BilinearForm(X, check_unused=False)
+        A1 += R_bend ** 2 / r * u * v * ng.dx
+
+        AA = [A0, A1]
+
+        with ng.TaskManager():
+            for i in range(len(AA)):
+                try:
+                    AA[i].Assemble()
+                except Exception:
+                    print('*** Trying again with larger heap')
+                    ng.SetHeapSize(int(1e9))
+                    AA[i].Assemble()
+
+        P = SpectralProjNGGeneral(X, A0.mat, A1.mat, radius=rad, center=ctr,
+                                  npts=npts, rhoinv=rhoinv, quadrule=quadrule)
+
+        Y = NGvecs(X, nspan)
+        Yl = Y.create()
+        Y.setrandom(seed=1)
+        Yl.setrandom(seed=1)
+
+        print('Using FEAST to search for vector guided modes in')
+        print('circle of radius', rad, 'centered at ', ctr)
+        print('assuming not more than %d modes in this interval.' % nspan)
+        print('System size:', X.ndof, ' x ', X.ndof)
+        print('  Inverse type:', inverse)
+
+        Nu_sqrs, Y, hist, _ = P.feast(Y, Yl, hermitian=False,
+                                      nrestarts=nrestarts,
+                                      niterations=niterations, **feastkwargs)
+
+        nus = (Nu_sqrs ** .5) * R_bend
+
+        print('Results:\n Nu²:', Nu_sqrs)
+        print(' Nus:', nus)
+        print(' CL dB/m:', 20 * nus.imag / np.log(10))
+
+        return Nu_sqrs, Y, hist
+
     def bentmodesystem(self, p, R_bend, alpha=None, inverse=None):
         """
         Prepare eigensystem and resolvents for solving for bent vector modes.
@@ -860,15 +927,12 @@ class ModeSolver:
            mesh-based PML.
         """
 
-        # if alpha is not None:
-        #     self.ngspmlset = True
-        #     radial = ng.pml.Radial(rad=self.R,
-        #                            alpha=alpha*1j, origin=(0, 0))
-        #     self.mesh.SetPML(radial, 'Outer')
-        #     print('Set NGSolve automatic PML with p=', p, ' alpha=', alpha,
-        #           'and thickness=%.3f' % (self.Rout-self.R))
-        # elif self.ngspmlset:
-        #     raise RuntimeError('Unexpected NGSolve pml mesh trafo here.')
+        if alpha is not None:
+            self.ngspmlset = True
+            radial = ng.pml.Radial(rad=self.R, alpha=alpha*1j, origin=(0, 0))
+            self.mesh.SetPML(radial, 'Outer')
+            print('Set NGSolve automatic PML with p=', p, ' alpha=', alpha,
+                  'and thickness=%.3f' % (self.Rout-self.R))
 
         n = self.index
         n2 = n*n
@@ -1002,16 +1066,16 @@ class ModeSolver:
 
         return ResolventVectorMode, M.mat, A.mat, B.mat, C.mat, D.mat, Dinv
 
-    def bentvecmodes(self, rad, ctr, R_bend, p=2,  seed=None, npts=6,
-                     nspan=10, within=None, rhoinv=0.0,
-                     quadrule='circ_trapez_shift', verbose=True,
-                     inverse='umfpack', **feastkwargs):
+    def bentvecmodes(self, rad, ctr, R_bend, p=2, alpha=None, seed=1, npts=6,
+                     nspan=10, rhoinv=0.0, niterations=15, nrestarts=0,
+                     quadrule='circ_trapez_shift', inverse='umfpack',
+                     **feastkwargs):
         """
         Capture bent vector modes whose scaled propagation constants have real
         part near or in the interval L^2k_0^2 [n_clad^2, n_core^2].
         """
 
-        R, M, A, B, C, D, Dinv = self.bentmodesystem(p, R_bend,
+        R, M, A, B, C, D, Dinv = self.bentmodesystem(p, R_bend, alpha=alpha,
                                                      inverse=inverse)
         X, Y = R.XY.components
         E = NGvecs(X, nspan, M=M)
@@ -1024,14 +1088,21 @@ class ModeSolver:
 
         P = SpectralProjNGR(lambda z: R(z, self.index, inverse=inverse),
                             radius=rad, center=ctr, npts=npts,
-                            within=within, rhoinv=rhoinv,
-                            quadrule=quadrule,
-                            verbose=verbose)
-        Nu_sqrs, E, history, _ = P.feast(E, hermitian=False, **feastkwargs)
+                            rhoinv=rhoinv, quadrule=quadrule)
+
+        Nu_sqrs, E, history, _ = P.feast(E, hermitian=False,
+                                         niterations=niterations,
+                                         nrestarts=nrestarts, **feastkwargs)
 
         phi = NGvecs(Y, E.m)
         BE = phi.zeroclone()
         BE._mv[:] = -B * E._mv
         phi._mv[:] = Dinv * BE._mv
+
+        nus = (Nu_sqrs ** .5) * R_bend
+
+        print('Results:\n Nu²:', Nu_sqrs)
+        print(' Nus:', nus)
+        print(' CL dB/m:', 20 * nus.imag / np.log(10))
 
         return Nu_sqrs, E, phi, R
