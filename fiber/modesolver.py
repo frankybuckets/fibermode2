@@ -891,7 +891,7 @@ class ModeSolver:
         Y.setrandom(seed=1)
         Yl.setrandom(seed=1)
 
-        print('Using FEAST to search for vector guided modes in')
+        print('Using FEAST to search for scalar bent modes in')
         print('circle of radius', rad, 'centered at ', ctr)
         print('assuming not more than %d modes in this interval.' % nspan)
         print('System size:', X.ndof, ' x ', X.ndof)
@@ -902,12 +902,12 @@ class ModeSolver:
                                       niterations=niterations, **feastkwargs)
 
         nus = (Nu_sqrs ** .5) * R_bend
-
+        CLs = 20 * nus.imag / np.log(10)
         print('Results:\n Nu²:', Nu_sqrs)
         print(' Nus:', nus)
-        print(' CL dB/m:', 20 * nus.imag / np.log(10))
+        print(' CL dB/m:', CLs)
 
-        return Nu_sqrs, Y, hist
+        return Nu_sqrs, Y, P, hist, CLs
 
     def bentmodesystem(self, p, R_bend, alpha=None, inverse=None):
         """
@@ -1081,7 +1081,7 @@ class ModeSolver:
         E = NGvecs(X, nspan, M=M)
         E.setrandom(seed=seed)
 
-        print('Using FEAST to search for vector guided modes in')
+        print('Using FEAST to search for vector bent modes in')
         print('circle of radius', rad, 'centered at ', ctr)
         print('assuming not more than %d modes in this interval.' % nspan)
         print('System size:', E.n, ' x ', E.n, '  Inverse type:', inverse)
@@ -1100,9 +1100,9 @@ class ModeSolver:
         phi._mv[:] = Dinv * BE._mv
 
         nus = (Nu_sqrs ** .5) * R_bend
-
+        CLs = 20 * nus.imag / np.log(10)
         print('Results:\n Nu²:', Nu_sqrs)
         print(' Nus:', nus)
-        print(' CL dB/m:', 20 * nus.imag / np.log(10))
+        print(' CL dB/m:', CLs)
 
-        return Nu_sqrs, E, phi, R
+        return Nu_sqrs, E, phi, R, CLs
