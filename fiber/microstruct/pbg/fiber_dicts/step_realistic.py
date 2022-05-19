@@ -92,4 +92,3 @@ params = {
     'poly_maxh': poly_maxh,
     'core_maxh': core_maxh,
 }
-
