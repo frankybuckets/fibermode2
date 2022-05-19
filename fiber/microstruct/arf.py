@@ -762,8 +762,8 @@ class ARF(ModeSolver):
         self.refined += n
         for i in range(n):
             self.mesh.ngmesh.Refine()
-        self.mesh.ngmesh.SetGeometry(self.geo)
-        self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
+            self.mesh.ngmesh.SetGeometry(self.geo)
+            self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
         self.curve(curve)
         for key in self.epw:
             self.epw[key] = self.epw[key] * (2 ** n)
