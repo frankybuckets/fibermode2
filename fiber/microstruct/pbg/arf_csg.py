@@ -55,7 +55,7 @@ class ARF2(ModeSolver):
             self.T_tube = .42 / scaling
 
             self.T_sheath = 10 / scaling
-            self.T_outer = 50 / scaling
+            self.T_outer = 30 / scaling
             self.T_buffer = 10 / scaling
 
             self.R_sheath = (1 + 2 * self.R_tube + (2 - self.e) *
@@ -68,12 +68,12 @@ class ARF2(ModeSolver):
             self.R_core = ((self.R_tube_center - self.R_tube -
                            self.T_tube) * self.core_factor)
 
-            self.inner_air_maxh = .4
+            self.inner_air_maxh = 4
             self.fill_air_maxh = .35
-            self.tube_maxh = .18
+            self.tube_maxh = .22
             self.sheath_maxh = .5
             self.buffer_maxh = 2
-            self.outer_maxh = 2
+            self.outer_maxh = 4
             self.core_maxh = .25
 
             self.n_glass = 1.4388164768221814
