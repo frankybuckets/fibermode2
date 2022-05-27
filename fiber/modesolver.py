@@ -711,7 +711,7 @@ class ModeSolver:
                             - V * E * v - grad(phi) * v
                             - n2 * phi * psi + n2 * E * grad(psi)) * dx
                 selfr.ZH = ng.BilinearForm(XY, condense=True)
-                selfr.ZH += (z * E * v - curl(E) * curl(v)
+                selfr.ZH += (np.conjugate(z) * E * v - curl(E) * curl(v)
                              - V * E * v - grad(psi) * E
                              - n2 * phi * psi + n2 * v * grad(phi)) * dx
                 with ng.TaskManager():
