@@ -653,6 +653,7 @@ class ModeSolver:
         B = ng.BilinearForm(trialspace=X, testspace=Y)
         B += -n2 * E * grad(psi) * dx
         D = ng.BilinearForm(Y)
+        # D = ng.BilinearForm(Y, condense=True)
         D += n2 * phi * psi * dx
 
         with ng.TaskManager():
@@ -671,6 +672,7 @@ class ModeSolver:
                 C.Assemble()
                 D.Assemble()
             Dinv = D.mat.Inverse(Y.FreeDofs(), inverse=inverse)
+            # Dinv = D.mat.Inverse(Y.FreeDofs(coupling=True), inverse=inverse)
 
         # resolvent of the vector mode problem --------------------------
 
@@ -688,19 +690,42 @@ class ModeSolver:
                 n2 = n*n
                 XY = ng.FESpace([X, Y])
                 (E, phi), (v, psi) = XY.TnT()
-                selfr.zminusOp = ng.BilinearForm(XY)
-                selfr.zminusOp += (z * E * v - curl(E) * curl(v)
-                                   - V * E * v - grad(phi) * v
-                                   - n2 * phi * psi + n2 * E * grad(psi)) * dx
+
+                # selfr.zminusOp = ng.BilinearForm(XY)
+                # selfr.zminusOp += (z * E * v - curl(E) * curl(v)
+                #                    - V * E * v - grad(phi) * v
+                #                    - n2 * phi * psi + n2 * E * grad(psi))
+                # * dx
+                # with ng.TaskManager():
+                #     try:
+                #         selfr.zminusOp.Assemble()
+                #     except Exception:
+                #         print('*** Trying again with larger heap')
+                #         ng.SetHeapSize(int(1e9))
+                #         selfr.zminusOp.Assemble()
+                #     selfr.R = selfr.zminusOp.mat.Inverse(XY.FreeDofs(),
+                #                                          inverse=inverse)
+
+                selfr.Z = ng.BilinearForm(XY, condense=True)
+                selfr.Z += (z * E * v - curl(E) * curl(v)
+                            - V * E * v - grad(phi) * v
+                            - n2 * phi * psi + n2 * E * grad(psi)) * dx
+                selfr.ZH = ng.BilinearForm(XY, condense=True)
+                selfr.ZH += (z * E * v - curl(E) * curl(v)
+                             - V * E * v - grad(psi) * E
+                             - n2 * phi * psi + n2 * v * grad(phi)) * dx
                 with ng.TaskManager():
                     try:
-                        selfr.zminusOp.Assemble()
+                        selfr.Z.Assemble()
+                        selfr.ZH.Assemble()
+
                     except Exception:
                         print('*** Trying again with larger heap')
                         ng.SetHeapSize(int(1e9))
-                        selfr.zminusOp.Assemble()
-                    selfr.R = selfr.zminusOp.mat.Inverse(XY.FreeDofs(),
-                                                         inverse=inverse)
+                        selfr.Z.Assemble()
+                        selfr.ZH.Assemble()
+                    selfr.R_I = selfr.Z.mat.Inverse(XY.FreeDofs(coupling=True),
+                                                    inverse=inverse)
 
             def act(selfr, v, Rv, workspace=None):
                 if workspace is None:
@@ -713,7 +738,17 @@ class ModeSolver:
                     for i in range(v.m):
                         selfr.wrk1.components[0].vec[:] = Mv[i]
                         selfr.wrk1.components[1].vec[:] = 0
-                        selfr.wrk2.vec.data = selfr.R * selfr.wrk1.vec
+
+                        # selfr.wrk2.vec.data = selfr.R * selfr.wrk1.vec
+
+                        selfr.wrk1.vec.data += \
+                            selfr.Z.harmonic_extension_trans * selfr.wrk1.vec
+                        selfr.wrk2.vec.data = selfr.R_I * selfr.wrk1.vec
+                        selfr.wrk2.vec.data += \
+                            selfr.Z.inner_solve * selfr.wrk1.vec
+                        selfr.wrk2.vec.data += \
+                            selfr.Z.harmonic_extension * selfr.wrk2.vec
+
                         Rv._mv[i][:] = selfr.wrk2.components[0].vec
 
             def adj(selfr, v, RHv, workspace=None):
@@ -726,7 +761,17 @@ class ModeSolver:
                     for i in range(v.m):
                         selfr.wrk1.components[0].vec[:] = Mv[i]
                         selfr.wrk1.components[1].vec[:] = 0
-                        selfr.wrk2.vec.data = selfr.R.H * selfr.wrk1.vec
+
+                        # selfr.wrk2.vec.data = selfr.R.H * selfr.wrk1.vec
+
+                        selfr.wrk1.vec.data += \
+                            selfr.ZH.harmonic_extension_trans * selfr.wrk1.vec
+                        selfr.wrk2.vec.data = selfr.R_I.H * selfr.wrk1.vec
+                        selfr.wrk2.vec.data += \
+                            selfr.ZH.inner_solve * selfr.wrk1.vec
+                        selfr.wrk2.vec.data += \
+                            selfr.ZH.harmonic_extension * selfr.wrk2.vec
+
                         RHv._mv[i][:] = selfr.wrk2.components[0].vec
 
             def rayleigh_nsa(selfr, ql, qr, qAq=not None, qBq=not None,
@@ -746,6 +791,15 @@ class ModeSolver:
                         for i in range(qr.m):
                             selfr.tmpY1.vec.data = B.mat * qr._mv[i]
                             selfr.tmpY2.vec.data = Dinv * selfr.tmpY1.vec
+
+                            # selfr.tmpY1.vec.data = \
+                            #     D.harmonic_extension_trans * selfr.tmpY1.vec
+                            # selfr.tmpY2.vec.data = Dinv * selfr.tmpY1.vec
+                            # selfr.tmpY2.vec.data += \
+                            #     D.inner_solve * selfr.tmpY1.vec
+                            # selfr.tmpY2.vec.data = \
+                            #     D.harmonic_extension * selfr.tmpY2.vec
+
                             selfr.tmpX1.vec.data = C.mat * selfr.tmpY2.vec
                             Aqr[i].data -= selfr.tmpX1.vec
                         qAq = ng.InnerProduct(Aqr, ql._mv).NumPy().T
