@@ -17,10 +17,12 @@ class ARF2(ModeSolver):
     Create an ARF fiber using csg2d
     """
 
-    def __init__(self, name=None, refine=0, curve=3, e=None, poly_core=False):
+    def __init__(self, name=None, refine=0, curve=3, e=None,
+                 poly_core=False, shift_capillaries=False):
 
         # Set and check the fiber parameters.
-        self.set_parameters(name=name, e=e)
+        self.set_parameters(name=name, shift_capillaries=shift_capillaries,
+                            e=e)
         self.check_parameters()
 
         # Create geometry
@@ -32,7 +34,7 @@ class ARF2(ModeSolver):
 
         super().__init__(self.mesh, self.scale, self.n0)
 
-    def set_parameters(self, name=None, e=None):
+    def set_parameters(self, name=None, e=None, shift_capillaries=False):
         """
         Set fiber parameters.
         """
@@ -58,15 +60,23 @@ class ARF2(ModeSolver):
             self.T_outer = 30 / scaling
             self.T_buffer = 10 / scaling
 
-            self.R_sheath = (1 + 2 * self.R_tube + (2 - self.e) *
-                             self.T_tube)
+            if shift_capillaries:
+                self.R_sheath = (1 + 2 * self.R_tube + (2 - .025/.42) *
+                                 self.T_tube)
 
-            self.R_tube_center = (self.R_sheath - self.R_tube -
-                                  (1 - self.e) * self.T_tube)
+                self.R_tube_center = (self.R_sheath - self.R_tube -
+                                      (1 - self.e) * self.T_tube)
 
-            self.core_factor = .75
-            self.R_core = ((self.R_tube_center - self.R_tube -
-                           self.T_tube) * self.core_factor)
+                self.core_factor = .75
+                self.R_core = ((self.R_tube_center - self.R_tube -
+                               self.T_tube) * self.core_factor)
+            else:
+                self.R_sheath = (1 + 2 * self.R_tube + (2 - self.e) *
+                                 self.T_tube)
+
+                self.R_tube_center = 1 + self.R_tube + self.T_tube
+                self.core_factor = .75
+                self.R_core = self.core_factor
 
             self.inner_air_maxh = .2
             self.fill_air_maxh = .35
