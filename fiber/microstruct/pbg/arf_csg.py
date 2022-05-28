@@ -68,8 +68,9 @@ class ARF2(ModeSolver):
                                       (1 - self.e) * self.T_tube)
 
                 self.core_factor = .75
-                self.R_core = ((self.R_tube_center - self.R_tube -
-                               self.T_tube) * self.core_factor)
+                self.R_core = .75
+                # self.R_core = ((self.R_tube_center - self.R_tube -
+                #                self.T_tube) * self.core_factor)
             else:
                 self.R_sheath = (1 + 2 * self.R_tube + (2 - self.e) *
                                  self.T_tube)
@@ -78,10 +79,10 @@ class ARF2(ModeSolver):
                 self.core_factor = .75
                 self.R_core = self.core_factor
 
-            self.inner_air_maxh = .2
-            self.fill_air_maxh = .35
+            self.inner_air_maxh = .44
+            self.fill_air_maxh = .44
             self.tube_maxh = .11
-            self.sheath_maxh = .25
+            self.sheath_maxh = .3
             self.buffer_maxh = 2
             self.outer_maxh = 4
             self.core_maxh = .25
@@ -155,7 +156,7 @@ class ARF2(ModeSolver):
                                  'Outer': self.n0
                                  }
         self.refractive_index_dict = refractive_index_dict
-        # mats = refractive_index_dict.keys()
+
         self.index = self.mesh.RegionCF(ng.VOL, refractive_index_dict)
 
         self.V = (self.scale * self.k)**2 * (self.n0 ** 2 - self.index ** 2)
