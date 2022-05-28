@@ -142,6 +142,7 @@ class FiberMode(ModeSolver):
         for i in range(refine):
             ngmesh.Refine()
         mesh = ng.Mesh(ngmesh.Copy())
+        mesh.ngmesh.SetGeometry(self.geo)
         mesh.Curve(curveorder)
         ng.Draw(mesh)
         self.mesh = mesh

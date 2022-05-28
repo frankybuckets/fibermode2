@@ -24,16 +24,15 @@ starting_centers = {'LP01': .93,    # reset to .93 to start at 1.16e-6
 
 
 # Folder setup.  Enter your path to pbg folder. ##################
-pbg_home = '/home/pv/local/fiberamp/fiber/microstruct/pbg/'
-folder = pbg_home + '/outputs/' + fiber_name + \
-    '/' + mode_name + '/' + 'wavelengths'   # Make this directory
+pbg_home = '/home/pv/local/fiberamp/fiber/microstruct/pbg/wavelength_study/'
+folder = pbg_home + 'outputs/'
 
 if not os.path.isdir(os.path.relpath(folder)):
     raise FileNotFoundError("%s is not a directory. Make this \
 directory and begin again." % folder)
 
 # Set wavelength range, polynomial degree and refinements. #############
-wl_min, wl_max, n = 1.16e-6, 2.25e-6, 50
+wl_min, wl_max, n = 1.16e-6, 2.25e-6, 5
 
 wavelengths = np.linspace(wl_min, wl_max, n)
 p = 3

@@ -18,7 +18,7 @@ class ARF(ModeSolver):
 
     def __init__(self, name=None, freecapil=False,
                  outermaterials=None, curve=3, refine=0,
-                 **kwargs):
+                 e=None, **kwargs):
         """
         PARAMETERS:
 
@@ -50,7 +50,7 @@ class ARF(ModeSolver):
         self.freecapil = freecapil
 
         # Set the fiber parameters.
-        self.set(name=name)
+        self.set(name=name, e=e)
 
         # Updatable length attributes. All lengths are in micrometers.
 
@@ -284,7 +284,7 @@ class ARF(ModeSolver):
             [(a*k)**2 * m[mat] for mat in self.mesh.GetMaterials()])
         self.k = k
 
-    def set(self, name=None):
+    def set(self, name=None, e=None):
         """
         Method that sets the geometric parameters of the ARF fiber based
         on the name supplied by the user. Specifying name='poletti'
@@ -326,7 +326,10 @@ class ARF(ModeSolver):
             self.scaling = self.Rc        # scaling for the PDE
             self.num_capillary_tubes = 6  # number of capillaries
             self.s = 0.05
-            self.e = 0.025 / self.t
+            if e is not None:
+                self.e = e
+            else:
+                self.e = 0.025 / self.t
             self._wavelength = 1.8e-6
 
             # Compute the capillary tube separation distance.
@@ -354,7 +357,10 @@ class ARF(ModeSolver):
             self.scaling = self.Rc        # scaling for the PDE
             self.num_capillary_tubes = 8  # number of capillaries
             self.s = 0.05
-            self.e = 2.0 / self.t
+            if e is not None:
+                self.e = e
+            else:
+                self.e = 2.0 / self.t
             self._wavelength = 5.75e-6
 
             # Compute the capillary tube separation distance.
