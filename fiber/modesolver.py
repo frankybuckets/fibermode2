@@ -652,8 +652,8 @@ class ModeSolver:
         C += grad(phi) * v * dx
         B = ng.BilinearForm(trialspace=X, testspace=Y)
         B += -n2 * E * grad(psi) * dx
-        D = ng.BilinearForm(Y)
-        # D = ng.BilinearForm(Y, condense=True)
+        # D = ng.BilinearForm(Y)
+        D = ng.BilinearForm(Y, condense=True)
         D += n2 * phi * psi * dx
 
         with ng.TaskManager():
@@ -671,8 +671,8 @@ class ModeSolver:
                 B.Assemble()
                 C.Assemble()
                 D.Assemble()
-            Dinv = D.mat.Inverse(Y.FreeDofs(), inverse=inverse)
-            # Dinv = D.mat.Inverse(Y.FreeDofs(coupling=True), inverse=inverse)
+            # Dinv = D.mat.Inverse(Y.FreeDofs(), inverse=inverse)
+            Dinv = D.mat.Inverse(Y.FreeDofs(coupling=True), inverse=inverse)
 
         # resolvent of the vector mode problem --------------------------
 
@@ -790,15 +790,15 @@ class ModeSolver:
                         Aqr[:] = A.mat * qr._mv
                         for i in range(qr.m):
                             selfr.tmpY1.vec.data = B.mat * qr._mv[i]
-                            selfr.tmpY2.vec.data = Dinv * selfr.tmpY1.vec
-
-                            # selfr.tmpY1.vec.data = \
-                            #     D.harmonic_extension_trans * selfr.tmpY1.vec
                             # selfr.tmpY2.vec.data = Dinv * selfr.tmpY1.vec
-                            # selfr.tmpY2.vec.data += \
-                            #     D.inner_solve * selfr.tmpY1.vec
-                            # selfr.tmpY2.vec.data = \
-                            #     D.harmonic_extension * selfr.tmpY2.vec
+
+                            selfr.tmpY1.vec.data += \
+                                D.harmonic_extension_trans * selfr.tmpY1.vec
+                            selfr.tmpY2.vec.data = Dinv * selfr.tmpY1.vec
+                            selfr.tmpY2.vec.data += \
+                                D.inner_solve * selfr.tmpY1.vec
+                            selfr.tmpY2.vec.data += \
+                                D.harmonic_extension * selfr.tmpY2.vec
 
                             selfr.tmpX1.vec.data = C.mat * selfr.tmpY2.vec
                             Aqr[i].data -= selfr.tmpX1.vec
