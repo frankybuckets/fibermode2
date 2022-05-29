@@ -10,6 +10,7 @@ import ngsolve as ng
 import numpy as np
 from netgen.geom2d import CSG2d, Circle, Solid2d
 from fiberamp.fiber.modesolver import ModeSolver
+from pyeigfeast.spectralproj.ngs.spectralprojngs import NGvecs
 
 
 class ARF2(ModeSolver):
@@ -38,11 +39,11 @@ class ARF2(ModeSolver):
         """
         Set fiber parameters.
         """
-        # By default, we'll use the 6-capillary fiber.
+        # Default is 6-capillary fiber.
         self.name = 'poletti' if name is None else name
 
         if self.name == 'poletti':
-            # This case gives the default attributes of the fiber.
+
             self.n_tubes = 6
 
             scaling = 15
@@ -91,46 +92,6 @@ class ARF2(ModeSolver):
             self.n_air = 1.00027717
             self.n_buffer = 1.00027717
             self.n0 = 1.00027717
-
-            self.wavelength = 1.8e-6
-
-        elif self.name == 'basic':
-            # This case gives initial trial parameters.
-            self.n_tubes = 6
-            self.R_sheath = 2
-            self.T_sheath = 1.5
-
-            self.R_tube = .5
-            self.T_tube = .1
-
-            self.T_outer = 2
-            self.T_buffer = 1.5
-
-            if e is not None:
-                self.e = e
-            else:
-                self.e = .5
-
-            self.R_tube_center = self.R_sheath - self.R_tube - \
-                (1 - self.e) * self.T_tube
-
-            self.core_factor = .85
-            self.R_core = (self.R_tube_center - self.R_tube -
-                           self.T_tube) * self.core_factor
-
-            self.inner_air_maxh = .3
-            self.fill_air_maxh = .6
-            self.tube_maxh = .1
-            self.sheath_maxh = 1
-            self.buffer_maxh = 2
-            self.outer_maxh = 3
-            self.core_maxh = .2
-
-            self.n_glass = 1.4388164768221814
-            self.n_air = 1.00027717
-            self.n_buffer = 1.00027717
-            self.n0 = 1.00027717
-            self.scale = 1e-6
 
             self.wavelength = 1.8e-6
 
@@ -321,3 +282,17 @@ class ARF2(ModeSolver):
 
             self.geo = geo
             self.spline_geo = geo.GenerateSplineGeometry()
+
+    def E_modes_from_array(self, array, p=1):
+        """Create NGvec object containing modes and set data given by array."""
+        X = ng.HCurl(self.mesh, order=p+1-max(1-p, 0), type1=True,
+                     dirichlet='OuterCircle', complex=True)
+        m = array.shape[1]
+        E = NGvecs(X, m)
+        try:
+            E.fromnumpy(array)
+        except ValueError:
+            raise ValueError("Array is wrong length: make sure your mesh is\
+ constructed the same as for input array and that polynomial degree correspond\
+ing to array has been passed as keyword p.")
+        return E
