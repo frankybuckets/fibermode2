@@ -8,6 +8,7 @@ Created on Fri May 20 20:04:04 2022
 
 import ngsolve as ng
 import numpy as np
+import pickle
 from netgen.geom2d import CSG2d, Circle, Solid2d
 from fiberamp.fiber.modesolver import ModeSolver
 from pyeigfeast.spectralproj.ngs.spectralprojngs import NGvecs
@@ -283,9 +284,11 @@ class ARF2(ModeSolver):
             self.geo = geo
             self.spline_geo = geo.GenerateSplineGeometry()
 
-    def E_modes_from_array(self, array, p=1):
+    def E_modes_from_array(self, array, p=1, mesh=None):
         """Create NGvec object containing modes and set data given by array."""
-        X = ng.HCurl(self.mesh, order=p+1-max(1-p, 0), type1=True,
+        if mesh is None:
+            mesh = self.mesh
+        X = ng.HCurl(mesh, order=p+1-max(1-p, 0), type1=True,
                      dirichlet='OuterCircle', complex=True)
         m = array.shape[1]
         E = NGvecs(X, m)
@@ -296,3 +299,22 @@ class ARF2(ModeSolver):
  constructed the same as for input array and that polynomial degree correspond\
 ing to array has been passed as keyword p.")
         return E
+
+    # SAVE & LOAD #####################################################
+
+    def save_mesh(self, name):
+        """ Save this mesh so it can be loaded later """
+
+        self.mesh.ngmesh.Save(name+'.vol')
+
+    def save_modes(self, E, name):
+        np.save(name, E.tonumpy())
+
+    def load_mesh(self, name):
+        """ Load a saved ARF mesh from .vol file."""
+        return ng.Mesh(name+'.vol')
+
+    def load_modes(self, mesh_name, mode_name):
+        mesh = self.load_mesh(mesh_name)
+        array = np.load(mode_name+'.npy')
+        return self.E_modes_from_array(array, mesh=mesh)
