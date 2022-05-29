@@ -8,7 +8,6 @@ Created on Fri May 20 20:04:04 2022
 
 import ngsolve as ng
 import numpy as np
-import pickle
 from netgen.geom2d import CSG2d, Circle, Solid2d
 from fiberamp.fiber.modesolver import ModeSolver
 from pyeigfeast.spectralproj.ngs.spectralprojngs import NGvecs
