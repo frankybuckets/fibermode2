@@ -8,6 +8,7 @@ Created on Fri May 20 20:04:04 2022
 
 import ngsolve as ng
 import numpy as np
+import pickle
 from netgen.geom2d import CSG2d, Circle, Solid2d
 from fiberamp.fiber.modesolver import ModeSolver
 from pyeigfeast.spectralproj.ngs.spectralprojngs import NGvecs
@@ -69,9 +70,8 @@ class ARF2(ModeSolver):
                                       (1 - self.e) * self.T_tube)
 
                 self.core_factor = .75
-                self.R_core = .75
-                # self.R_core = ((self.R_tube_center - self.R_tube -
-                #                self.T_tube) * self.core_factor)
+                self.R_core = ((self.R_tube_center - self.R_tube -
+                                self.T_tube) * self.core_factor)
             else:
                 self.R_sheath = (1 + 2 * self.R_tube + (2 - self.e) *
                                  self.T_tube)
@@ -87,6 +87,60 @@ class ARF2(ModeSolver):
             self.buffer_maxh = 2
             self.outer_maxh = 4
             self.core_maxh = .25
+            self.glass_maxh = 0
+
+            self.n_glass = 1.4388164768221814
+            self.n_air = 1.00027717
+            self.n_buffer = 1.00027717
+            self.n0 = 1.00027717
+
+            self.wavelength = 1.8e-6
+
+        elif self.name == 'basic':
+
+            self.n_tubes = 6
+
+            scaling = 15
+            self.scale = scaling * 1e-6
+
+            if e is not None:
+                self.e = e
+            else:
+                self.e = .025/.42
+
+            self.R_tube = 12.48 / scaling
+            self.T_tube = .84 / scaling
+
+            self.T_sheath = 10 / scaling
+            self.T_outer = 30 / scaling
+            self.T_buffer = 10 / scaling
+
+            if shift_capillaries:
+                self.R_sheath = (1 + 2 * self.R_tube + (2 - .025/.42) *
+                                 self.T_tube)
+
+                self.R_tube_center = (self.R_sheath - self.R_tube -
+                                      (1 - self.e) * self.T_tube)
+
+                self.core_factor = .75
+                self.R_core = ((self.R_tube_center - self.R_tube -
+                                self.T_tube) * self.core_factor)
+            else:
+                self.R_sheath = (1 + 2 * self.R_tube + (2 - self.e) *
+                                 self.T_tube)
+
+                self.R_tube_center = 1 + self.R_tube + self.T_tube
+                self.core_factor = .75
+                self.R_core = self.core_factor
+
+            self.inner_air_maxh = .44
+            self.fill_air_maxh = .44
+            self.tube_maxh = .11
+            self.sheath_maxh = .3
+            self.buffer_maxh = 2
+            self.outer_maxh = 4
+            self.core_maxh = .25
+            self.glass_maxh = 0
 
             self.n_glass = 1.4388164768221814
             self.n_air = 1.00027717
@@ -101,7 +155,14 @@ class ARF2(ModeSolver):
 
     def check_parameters(self):
         """Check to ensure given parameters give valid geometry."""
-        pass
+        if self.e <= 0 or self.e >= 1:
+            raise ValueError('Embedding parameter e must be strictly between\
+ zero and one.')
+
+        if self.n_tubes >= 2:
+            if self.R_tube_center * np.sin(np.pi / self.n_tubes) \
+                    <= self.R_tube + self.T_tube:
+                raise ValueError('Capillary tubes overlap each other.')
 
     def set_material_properties(self):
         """
@@ -160,11 +221,8 @@ class ARF2(ModeSolver):
         self.R = R_sheath + T_sheath + T_buffer
         self.Rout = R_sheath + T_sheath + T_buffer + T_outer
 
-        if n_tubes <= 2 and poly_core:
-
-            print('Polygonal core only available for n_tubes>2, setting round\
- core.')
-            poly_core = False
+        if self.n_tubes <= 2 and poly_core:
+            raise ValueError('Polygonal core only available for n_tubes>2.')
 
         if poly_core:
 
@@ -199,89 +257,61 @@ class ARF2(ModeSolver):
         core_maxh = self.core_maxh
         buffer_maxh = self.buffer_maxh
         outer_maxh = self.outer_maxh
+        glass_maxh = self.glass_maxh
 
-        if n_tubes == 0:
+        small1 = Circle(center=(0, R_tube_center), radius=R_tube,
+                        mat="inner_air", bc="glass_air_interface")
+        small2 = Circle(center=(0, R_tube_center), radius=R_tube+T_tube,
+                        mat="glass", bc="glass_air_interface")
 
-            fill_air = circle1 - core
-            glass = circle2 - circle1
+        inner_tubes = Solid2d()
+        outer_tubes = Solid2d()
 
-            glass.Maxh(sheath_maxh)
-            glass.Mat('glass')
+        for i in range(0, n_tubes):
+            inner_tubes += inner_tubes + \
+                small1.Copy().Rotate(360/n_tubes * i, center=(0, 0))
+            outer_tubes += outer_tubes + \
+                small2.Copy().Rotate(360/n_tubes * i, center=(0, 0))
 
-            fill_air.Maxh(fill_air_maxh)
-            fill_air.Mat('fill_air')
+        sheath = circle2 - circle1
+        tubes = outer_tubes - inner_tubes
 
-            core.Maxh(core_maxh)
-            core.Mat('core')
+        tubes.Maxh(tube_maxh)
+        sheath.Maxh(sheath_maxh)
+        inner_tubes.Maxh(inner_air_maxh)
 
-            buffer_air = circle3 - circle2
-            buffer_air.Maxh(buffer_maxh)
-            buffer_air.Mat('buffer')
+        glass = sheath + tubes
+        glass.Mat('glass')
 
-            outer = circle4 - circle3
-            outer.Maxh(outer_maxh)
-            outer.Mat('Outer')
+        if glass_maxh > 0:  # setting glass maxh overrides tube and sheath maxh
+            glass.Maxh(glass_maxh)
 
-            geo.Add(core)
-            geo.Add(fill_air)
-            geo.Add(glass)
-            geo.Add(buffer_air)
-            geo.Add(outer)
+        fill_air = circle1 - tubes - inner_tubes - core
+        fill_air.Maxh(fill_air_maxh)
+        fill_air.Mat('fill_air')
 
-            self.geo = geo
-            self.spline_geo = geo.GenerateSplineGeometry()
+        core.Maxh(core_maxh)
+        core.Mat('core')
 
-        else:
+        buffer_air = circle3 - circle2
+        buffer_air.Maxh(buffer_maxh)
+        buffer_air.Mat('buffer')
 
-            small1 = Circle(center=(0, R_tube_center), radius=R_tube,
-                            mat="inner_air", bc="glass_air_interface")
-            small2 = Circle(center=(0, R_tube_center), radius=R_tube+T_tube,
-                            mat="glass", bc="glass_air_interface")
+        outer = circle4 - circle3
+        outer.Maxh(outer_maxh)
+        outer.Mat('Outer')
+        inner_tubes.Mat('inner_air')
 
-            inner_tubes = small1.Copy()
-            outer_tubes = small2.Copy()
-
-            for i in range(1, n_tubes):
-                inner_tubes += inner_tubes + \
-                    small1.Copy().Rotate(360/n_tubes * i, center=(0, 0))
-                outer_tubes += outer_tubes + \
-                    small2.Copy().Rotate(360/n_tubes * i, center=(0, 0))
-
-            sheath = circle2 - circle1
-            tubes = outer_tubes - inner_tubes
-
-            tubes.Maxh(tube_maxh)
-            sheath.Maxh(sheath_maxh)
-            inner_tubes.Maxh(inner_air_maxh)
-
-            glass = sheath + tubes
-            glass.Mat('glass')
-
-            fill_air = circle1 - tubes - inner_tubes - core
-            fill_air.Maxh(fill_air_maxh)
-            fill_air.Mat('fill_air')
-
-            core.Maxh(core_maxh)
-            core.Mat('core')
-
-            buffer_air = circle3 - circle2
-            buffer_air.Maxh(buffer_maxh)
-            buffer_air.Mat('buffer')
-
-            outer = circle4 - circle3
-            outer.Maxh(outer_maxh)
-            outer.Mat('Outer')
-            inner_tubes.Mat('inner_air')
-
-            geo.Add(core)
-            geo.Add(fill_air)
-            geo.Add(glass)
+        geo.Add(core)
+        geo.Add(fill_air)
+        geo.Add(glass)
+        if n_tubes > 0:
             geo.Add(inner_tubes)
-            geo.Add(buffer_air)
-            geo.Add(outer)
+        geo.Add(buffer_air)
+        geo.Add(outer)
 
-            self.geo = geo
-            self.spline_geo = geo.GenerateSplineGeometry()
+        self.geo = geo
+        self.spline_geo = geo.GenerateSplineGeometry()
 
     def E_modes_from_array(self, array, p=1, mesh=None):
         """Create NGvec object containing modes and set data given by array."""
@@ -299,21 +329,46 @@ class ARF2(ModeSolver):
 ing to array has been passed as keyword p.")
         return E
 
+    def phi_modes_from_array(self, array, p=1, mesh=None):
+        """Create NGvec object containing modes and set data given by array."""
+        if mesh is None:
+            mesh = self.mesh
+        Y = ng.H1(self.mesh, order=p+1, dirichlet='OuterCircle', complex=True)
+        m = array.shape[1]
+        phi = NGvecs(Y, m)
+        try:
+            phi.fromnumpy(array)
+        except ValueError:
+            raise ValueError("Array is wrong length: make sure your mesh is\
+ constructed the same as for input array and that polynomial degree correspond\
+ing to array has been passed as keyword p.")
+        return phi
+
     # SAVE & LOAD #####################################################
 
     def save_mesh(self, name):
-        """ Save this mesh so it can be loaded later """
+        """ Save mesh using pickle (allows for mesh curvature). """
+        with open(name, 'wb') as f:
+            pickle.dump(self.mesh, f)
 
-        self.mesh.ngmesh.Save(name+'.vol')
-
-    def save_modes(self, E, name):
-        np.save(name, E.tonumpy())
+    def save_modes(self, modes, name):
+        """Save modes as numpy arrays."""
+        np.save(name, modes.tonumpy())
 
     def load_mesh(self, name):
-        """ Load a saved ARF mesh from .vol file."""
-        return ng.Mesh(name+'.vol')
+        """ Load a saved ARF mesh."""
+        with open(name, 'rb') as f:
+            pmesh = pickle.load(f)
+        return pmesh
 
-    def load_modes(self, mesh_name, mode_name):
+    def load_E_modes(self, mesh_name, mode_name, p=8):
+        """Load transverse vectore E modes and associated mesh"""
         mesh = self.load_mesh(mesh_name)
         array = np.load(mode_name+'.npy')
-        return self.E_modes_from_array(array, mesh=mesh)
+        return self.E_modes_from_array(array, mesh=mesh, p=p)
+
+    def load_phi_modes(self, mesh_name, mode_name, p=8):
+        """Load transverse vectore E modes and associated mesh"""
+        mesh = self.load_mesh(mesh_name)
+        array = np.load(mode_name+'.npy')
+        return self.phi_modes_from_array(array, mesh=mesh, p=p)

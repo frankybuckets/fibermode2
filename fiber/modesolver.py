@@ -81,6 +81,8 @@ class ModeSolver:
         self.n0 = n0
         self.ngspmlset = False
 
+        self.eta0 = np.sqrt(1.25663706e-6 / 8.85418782e-12)
+
         print('ModeSolver: Checking if mesh has required regions')
         print('Mesh has ', mesh.ne, ' elements, ', mesh.nv, ' points, '
               ' and ', mesh.nedge, ' edges.')
@@ -129,6 +131,53 @@ class ModeSolver:
         print('PML decay estimates boundary norm ~ %.1e'
               % max(bdrnrm0))
         return bdrnrm0
+
+    def power(self, E, H):
+        """
+        Find power of mode with transverse electric and magnetic fields E, H.
+        If E and H are from different modes, this method finds 'inner product'
+        of the two modes according to the orthogonality type relationship
+        found in Marcuse, Light Transmission Optics 2nd edition, eq 8.5.12 (and
+        also in Snyder's Optical Waveguide Theory equation 11-13).
+
+        Parameters
+        ----------
+        E : ngsolve coefficient function
+            Transverse electric field E = (Ex, Ey) (or (Er, Ey) for bent modes)
+        H : same type as E
+            Magnetic field of second mode (organized in same way).
+
+        Returns
+        -------
+        p : float or complex
+            Returns power if E and H belong to same mode.  Returns 'dot
+            product type' value if E and H belong to distinct modes.
+
+        """
+        S = E[0] * ng.Conj(H[1]) - E[1] * ng.Conj(H[0])
+        p = 1/2 * ng.Integrate(S, self.mesh)
+        return p
+
+    def HfromE(self, Etv, phi, beta):
+        """Return the H field (Htv, Hz) from transverse E field and
+        phi = i beta Ez.
+
+        We assume the beta is provided unscaled, and we then non-dimensionalize
+        to get beta_s = beta * self.L and k_s = self.k * self.L.  This is then
+        used to form the H field.  These give the appropriate values for the
+        non-dimensionalized mesh we are using.
+
+        """
+        beta_s = beta * self.L
+        k_s = self.k * self.L
+        dEz_dx, dEz_dy = -1j / beta_s * ng.grad(phi)
+        rotEz = ng.CoefficientFunction((dEz_dy, dEz_dx))
+        Etv_perp = ng.CoefficientFunction((Etv[1], -Etv[0]))
+
+        Htv = 1j/k_s * (rotEz + 1j * beta_s * Etv_perp)/self.eta0
+        Hz = 1j/k_s * ng.curl(Etv)/self.eta0
+
+        return Htv, Hz
 
     # ###################################################################
     # FREQ-DEPENDENT PML BY POLYNOMIAL EIGENPROBLEM #####################
@@ -816,7 +865,7 @@ class ModeSolver:
 
         # resolvent class definition done -------------------------------
 
-        return ResolventVectorMode, M.mat, A.mat, B.mat, C.mat, D.mat, Dinv
+        return ResolventVectorMode, M.mat, A.mat, B.mat, C.mat, D, Dinv
 
     def guidedvecmodes(self, rad, ctr, p=3,  seed=None, npts=8, nspan=20,
                        within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
@@ -847,7 +896,11 @@ class ModeSolver:
         phi = NGvecs(Y, E.m)
         BE = phi.zeroclone()
         BE._mv[:] = -B * E._mv
+
+        BE._mv[:] += D.harmonic_extension_trans * BE._mv
         phi._mv[:] = Dinv * BE._mv
+        phi._mv[:] += D.inner_solve * BE._mv
+        phi._mv[:] += D.harmonic_extension * phi._mv
 
         return betas, Zsqrs, E, phi, R
 
@@ -884,7 +937,11 @@ class ModeSolver:
         phi = NGvecs(Y, E.m)
         BE = phi.zeroclone()
         BE._mv[:] = -B * E._mv
+
+        BE._mv[:] += D.harmonic_extension_trans * BE._mv
         phi._mv[:] = Dinv * BE._mv
+        phi._mv[:] += D.inner_solve * BE._mv
+        phi._mv[:] += D.harmonic_extension * phi._mv
 
         betas = self.betafrom(Zsqrs)
         print('Results:\n Z²:', Zsqrs)
@@ -1002,10 +1059,12 @@ class ModeSolver:
         M = ng.BilinearForm(X)
         M += -R_bend ** 2 / r * E * v * dx
         C = ng.BilinearForm(trialspace=Y, testspace=X)
-        C += R_bend * (grad(phi) * v + 1/r * phi * v[0]) * dx
+        C += R_bend * grad(phi) * v * dx
+        C += R_bend / r * phi * v[0] * dx
         B = ng.BilinearForm(trialspace=X, testspace=Y)
         B += -n2 * r * E * grad(psi) * dx
         D = ng.BilinearForm(Y)
+        # D = ng.BilinearForm(Y, condense=True)
         D += n2 * R_bend * phi * psi * dx
 
         with ng.TaskManager():
@@ -1024,7 +1083,7 @@ class ModeSolver:
                 C.Assemble()
                 D.Assemble()
             Dinv = D.mat.Inverse(Y.FreeDofs(), inverse=inverse)
-
+            # Dinv = D.mat.Inverse(Y.FreeDofs(coupling=True), inverse=inverse)
         # resolvent of the vector mode problem --------------------------
 
         class ResolventVectorMode():
