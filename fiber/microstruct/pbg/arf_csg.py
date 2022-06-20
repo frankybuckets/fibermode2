@@ -82,8 +82,8 @@ class ARF2(ModeSolver):
 
             self.inner_air_maxh = .44
             self.fill_air_maxh = .44
-            self.tube_maxh = .22
-            self.sheath_maxh = .3
+            self.tube_maxh = .14
+            self.sheath_maxh = .5
             self.buffer_maxh = 2
             self.outer_maxh = 4
             self.core_maxh = .25
@@ -135,7 +135,7 @@ class ARF2(ModeSolver):
 
             self.inner_air_maxh = .44
             self.fill_air_maxh = .44
-            self.tube_maxh = .22
+            self.tube_maxh = .14
             self.sheath_maxh = .3
             self.buffer_maxh = 2
             self.outer_maxh = 4
