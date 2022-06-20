@@ -82,7 +82,7 @@ class ARF2(ModeSolver):
 
             self.inner_air_maxh = .44
             self.fill_air_maxh = .44
-            self.tube_maxh = .18
+            self.tube_maxh = .16
             self.sheath_maxh = .3
             self.buffer_maxh = 2
             self.outer_maxh = 4
@@ -135,7 +135,7 @@ class ARF2(ModeSolver):
 
             self.inner_air_maxh = .44
             self.fill_air_maxh = .44
-            self.tube_maxh = .14
+            self.tube_maxh = .16
             self.sheath_maxh = .3
             self.buffer_maxh = 2
             self.outer_maxh = 4
@@ -333,7 +333,7 @@ ing to array has been passed as keyword p.")
         """Create NGvec object containing modes and set data given by array."""
         if mesh is None:
             mesh = self.mesh
-        Y = ng.H1(self.mesh, order=p+1, dirichlet='OuterCircle', complex=True)
+        Y = ng.H1(mesh, order=p+1, dirichlet='OuterCircle', complex=True)
         m = array.shape[1]
         phi = NGvecs(Y, m)
         try:
