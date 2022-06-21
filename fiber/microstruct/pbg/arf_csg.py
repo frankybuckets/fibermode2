@@ -63,7 +63,7 @@ class ARF2(ModeSolver):
 
             self.T_sheath = 10 / scaling
             self.T_outer = 30 / scaling
-            self.T_buffer = 10 / scaling
+            self.T_buffer = 20 / scaling
 
             if shift_capillaries:
                 self.R_sheath = (1 + 2 * self.R_tube + (2 - .025/.42) *
@@ -83,13 +83,13 @@ class ARF2(ModeSolver):
                 self.core_factor = .75
                 self.R_core = self.core_factor
 
-            self.inner_air_maxh = 2
-            self.fill_air_maxh = 2
-            self.tube_maxh = .22
+            self.inner_air_maxh = .25
+            self.fill_air_maxh = .44
+            self.tube_maxh = .12
             self.sheath_maxh = 2
             self.buffer_maxh = 2
             self.outer_maxh = 4
-            self.core_maxh = 2
+            self.core_maxh = .3
             self.glass_maxh = 0  # Overrides maxh in tubes and cladding
 
             self.n_glass = 1.4388164768221814
