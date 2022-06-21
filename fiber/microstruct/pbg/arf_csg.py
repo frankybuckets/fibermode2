@@ -301,25 +301,25 @@ class ARF2(ModeSolver):
         small2 = Circle(center=(0, R_tube_center), radius=R_tube+T_tube,
                         mat="glass", bc="glass_air_interface")
 
-        # # previous method
-        # inner_tubes = small1.Copy()
-        # outer_tubes = small2.Copy()
+        # previous method
+        inner_tubes = small1.Copy()
+        outer_tubes = small2.Copy()
 
-        # for i in range(1, n_tubes):
-        #     inner_tubes += small1.Copy().Rotate(360/n_tubes * i,
-        #                                         center=(0, 0))
-        #     outer_tubes += small2.Copy().Rotate(360/n_tubes * i,
-        #                                         center=(0, 0))
-
-        # Second method
-        inner_tubes = Solid2d()
-        outer_tubes = Solid2d()
-
-        for i in range(0, n_tubes):
+        for i in range(1, n_tubes):
             inner_tubes += small1.Copy().Rotate(360/n_tubes * i,
                                                 center=(0, 0))
             outer_tubes += small2.Copy().Rotate(360/n_tubes * i,
                                                 center=(0, 0))
+
+        # # Second method
+        # inner_tubes = Solid2d()
+        # outer_tubes = Solid2d()
+
+        # for i in range(0, n_tubes):
+        #     inner_tubes += small1.Copy().Rotate(360/n_tubes * i,
+        #                                         center=(0, 0))
+        #     outer_tubes += small2.Copy().Rotate(360/n_tubes * i,
+        #                                         center=(0, 0))
 
         sheath = circle2 - circle1
         tubes = outer_tubes - inner_tubes
@@ -327,7 +327,7 @@ class ARF2(ModeSolver):
         tubes.Maxh(self.tube_maxh)
         sheath.Maxh(self.sheath_maxh)
         inner_tubes.Maxh(self.inner_air_maxh)
-        inner_tubes.Mat('inner_air')
+        # inner_tubes.Mat('inner_air')
 
         glass = sheath + tubes
         glass.Mat('glass')
