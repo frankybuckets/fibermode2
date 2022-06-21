@@ -83,13 +83,13 @@ class ARF2(ModeSolver):
                 self.core_factor = .75
                 self.R_core = self.core_factor
 
-            self.inner_air_maxh = .2
+            self.inner_air_maxh = .4
             self.fill_air_maxh = .44
-            self.tube_maxh = .16
+            self.tube_maxh = .18
             self.sheath_maxh = 2
             self.buffer_maxh = 2
             self.outer_maxh = 4
-            self.core_maxh = .2
+            self.core_maxh = .3
             self.glass_maxh = 0  # Overrides maxh in tubes and cladding
 
             self.n_glass = 1.4388164768221814
