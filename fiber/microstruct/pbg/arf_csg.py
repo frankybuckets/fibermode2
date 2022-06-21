@@ -27,6 +27,9 @@ class ARF2(ModeSolver):
                             e=e)
         self.check_parameters()
 
+        if self.name == 'original':  # Override for original fiber
+            poly_core = False
+
         # Create geometry
         self.create_geometry(poly_core=poly_core)
         self.create_mesh(refine=refine, curve=curve)
@@ -82,17 +85,60 @@ class ARF2(ModeSolver):
 
             self.inner_air_maxh = .44
             self.fill_air_maxh = .44
-            self.tube_maxh = .14
-            self.sheath_maxh = .5
+            self.tube_maxh = .22
+            self.sheath_maxh = 2
             self.buffer_maxh = 2
             self.outer_maxh = 4
             self.core_maxh = .25
-            self.glass_maxh = 0
+            self.glass_maxh = 0  # Overrides maxh in tubes and cladding
 
             self.n_glass = 1.4388164768221814
             self.n_air = 1.00027717
-            self.n_buffer = 1.00027717
-            self.n0 = 1.00027717
+            self.n_buffer = self.n_air
+            self.n0 = self.n_air
+
+            self.wavelength = 1.8e-6
+
+        elif self.name == 'original':  # Ben's original parameters
+
+            shift_capillaries = True
+            self.n_tubes = 6
+
+            scaling = 15
+            self.scale = scaling * 1e-6
+
+            if e is not None:
+                self.e = e
+            else:
+                self.e = .025/.42
+
+            self.R_tube = 12.48 / scaling
+            self.T_tube = .42 / scaling
+
+            self.T_sheath = 10 / scaling
+            self.T_outer = 50 / scaling
+            self.T_buffer = 10 / scaling
+
+            self.R_sheath = (1 + 2 * self.R_tube + (2 - self.e) *
+                             self.T_tube)
+
+            self.R_tube_center = 1 + self.R_tube + self.T_tube
+            self.core_factor = .75
+            self.R_core = self.core_factor
+
+            self.inner_air_maxh = .25
+            self.fill_air_maxh = .25
+            self.tube_maxh = .04
+            self.sheath_maxh = .33
+            self.buffer_maxh = 2
+            self.outer_maxh = 2
+            self.core_maxh = .1
+            self.glass_maxh = 0  # Overrides maxh in tubes and cladding
+
+            self.n_glass = 1.4388164768221814
+            self.n_air = 1.00027717
+            self.n_buffer = self.n_air
+            self.n0 = self.n_air
 
             self.wavelength = 1.8e-6
 
@@ -140,12 +186,12 @@ class ARF2(ModeSolver):
             self.buffer_maxh = 2
             self.outer_maxh = 4
             self.core_maxh = .25
-            self.glass_maxh = 0
+            self.glass_maxh = 0  # Overrides maxh in tubes and cladding
 
             self.n_glass = 1.4388164768221814
             self.n_air = 1.00027717
-            self.n_buffer = 1.00027717
-            self.n0 = 1.00027717
+            self.n_buffer = self.n_air
+            self.n0 = self.n_air
 
             self.wavelength = 1.8e-6
 
@@ -222,7 +268,7 @@ class ARF2(ModeSolver):
         self.Rout = R_sheath + T_sheath + T_buffer + T_outer
 
         if self.n_tubes <= 2 and poly_core:
-            raise ValueError('Polygonal core only available for n_tubes>2.')
+            raise ValueError('Polygonal core only available for n_tubes > 2.')
 
         if poly_core:
 
@@ -250,62 +296,64 @@ class ARF2(ModeSolver):
                          radius=self.Rout,
                          mat="Outer", bc="OuterCircle")
 
-        tube_maxh = self.tube_maxh
-        sheath_maxh = self.sheath_maxh
-        inner_air_maxh = self.inner_air_maxh
-        fill_air_maxh = self.fill_air_maxh
-        core_maxh = self.core_maxh
-        buffer_maxh = self.buffer_maxh
-        outer_maxh = self.outer_maxh
-        glass_maxh = self.glass_maxh
-
         small1 = Circle(center=(0, R_tube_center), radius=R_tube,
                         mat="inner_air", bc="glass_air_interface")
         small2 = Circle(center=(0, R_tube_center), radius=R_tube+T_tube,
                         mat="glass", bc="glass_air_interface")
 
+        # # previous method
+        # inner_tubes = small1.Copy()
+        # outer_tubes = small2.Copy()
+
+        # for i in range(1, n_tubes):
+        #     inner_tubes += small1.Copy().Rotate(360/n_tubes * i,
+        #                                         center=(0, 0))
+        #     outer_tubes += small2.Copy().Rotate(360/n_tubes * i,
+        #                                         center=(0, 0))
+
+        # Second method
         inner_tubes = Solid2d()
         outer_tubes = Solid2d()
 
         for i in range(0, n_tubes):
-            inner_tubes += inner_tubes + \
-                small1.Copy().Rotate(360/n_tubes * i, center=(0, 0))
-            outer_tubes += outer_tubes + \
-                small2.Copy().Rotate(360/n_tubes * i, center=(0, 0))
+            inner_tubes += small1.Copy().Rotate(360/n_tubes * i,
+                                                center=(0, 0))
+            outer_tubes += small2.Copy().Rotate(360/n_tubes * i,
+                                                center=(0, 0))
 
         sheath = circle2 - circle1
         tubes = outer_tubes - inner_tubes
 
-        tubes.Maxh(tube_maxh)
-        sheath.Maxh(sheath_maxh)
-        inner_tubes.Maxh(inner_air_maxh)
+        tubes.Maxh(self.tube_maxh)
+        sheath.Maxh(self.sheath_maxh)
+        inner_tubes.Maxh(self.inner_air_maxh)
+        inner_tubes.Mat('inner_air')
 
         glass = sheath + tubes
         glass.Mat('glass')
 
-        if glass_maxh > 0:  # setting glass maxh overrides tube and sheath maxh
-            glass.Maxh(glass_maxh)
+        if self.glass_maxh > 0:  # setting overrides tube and sheath maxh
+            glass.Maxh(self.glass_maxh)
 
         fill_air = circle1 - tubes - inner_tubes - core
-        fill_air.Maxh(fill_air_maxh)
+        fill_air.Maxh(self.fill_air_maxh)
         fill_air.Mat('fill_air')
 
-        core.Maxh(core_maxh)
+        core.Maxh(self.core_maxh)
         core.Mat('core')
 
         buffer_air = circle3 - circle2
-        buffer_air.Maxh(buffer_maxh)
+        buffer_air.Maxh(self.buffer_maxh)
         buffer_air.Mat('buffer')
 
         outer = circle4 - circle3
-        outer.Maxh(outer_maxh)
+        outer.Maxh(self.outer_maxh)
         outer.Mat('Outer')
-        inner_tubes.Mat('inner_air')
 
         geo.Add(core)
         geo.Add(fill_air)
         geo.Add(glass)
-        if n_tubes > 0:
+        if n_tubes > 0:  # Meshing fails if you add empty Solid2d instance
             geo.Add(inner_tubes)
         geo.Add(buffer_air)
         geo.Add(outer)
