@@ -152,7 +152,7 @@ class ARF2(ModeSolver):
             if e is not None:
                 self.e = e
             else:
-                self.e = .025/.84
+                self.e = .025/.42
 
             self.R_tube = 12.06 / scaling
             self.T_tube = .84 / scaling
