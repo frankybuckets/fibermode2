@@ -152,9 +152,9 @@ class ARF2(ModeSolver):
             if e is not None:
                 self.e = e
             else:
-                self.e = .025/.42
+                self.e = .025/.84
 
-            self.R_tube = 12.48 / scaling
+            self.R_tube = 12.06 / scaling
             self.T_tube = .84 / scaling
 
             self.T_sheath = 10 / scaling
@@ -179,10 +179,10 @@ class ARF2(ModeSolver):
                 self.core_factor = .75
                 self.R_core = self.core_factor
 
-            self.inner_air_maxh = .44
-            self.fill_air_maxh = .44
-            self.tube_maxh = .14
-            self.sheath_maxh = .5
+            self.inner_air_maxh = .2
+            self.fill_air_maxh = .35
+            self.tube_maxh = .11
+            self.sheath_maxh = .25
             self.buffer_maxh = 2
             self.outer_maxh = 4
             self.core_maxh = .25
