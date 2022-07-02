@@ -20,11 +20,12 @@ class ARF2(ModeSolver):
     """
 
     def __init__(self, name=None, refine=0, curve=3, e=None,
-                 poly_core=False, shift_capillaries=False):
+                 poly_core=False, shift_capillaries=False,
+                 outer_materials=None):
 
         # Set and check the fiber parameters.
         self.set_parameters(name=name, shift_capillaries=shift_capillaries,
-                            e=e)
+                            e=e, outer_materials=outer_materials)
         self.check_parameters()
 
         if self.name == 'original':  # Override for original fiber
@@ -39,7 +40,8 @@ class ARF2(ModeSolver):
 
         super().__init__(self.mesh, self.scale, self.n0)
 
-    def set_parameters(self, name=None, e=None, shift_capillaries=False):
+    def set_parameters(self, name=None, e=None, shift_capillaries=False,
+                       outer_materials=None):
         """
         Set fiber parameters.
         """
@@ -61,41 +63,69 @@ class ARF2(ModeSolver):
             self.R_tube = 12.48 / scaling
             self.T_tube = .42 / scaling
 
-            self.T_sheath = 10 / scaling
+            self.T_cladding = 10 / scaling
             self.T_outer = 30 / scaling
             self.T_buffer = 10 / scaling
+            self.T_soft_polymer = 30 / scaling
+            self.T_hard_polymer = 30 / scaling
 
             if shift_capillaries:
-                self.R_sheath = (1 + 2 * self.R_tube + (2 - .025/.42) *
-                                 self.T_tube)
+                self.R_cladding = (1 + 2 * self.R_tube + (2 - .025/.42) *
+                                   self.T_tube)
 
-                self.R_tube_center = (self.R_sheath - self.R_tube -
+                self.R_tube_center = (self.R_cladding - self.R_tube -
                                       (1 - self.e) * self.T_tube)
 
                 self.core_factor = .75
                 self.R_core = ((self.R_tube_center - self.R_tube -
                                 self.T_tube) * self.core_factor)
             else:
-                self.R_sheath = (1 + 2 * self.R_tube + (2 - self.e) *
-                                 self.T_tube)
+                self.R_cladding = (1 + 2 * self.R_tube + (2 - self.e) *
+                                   self.T_tube)
 
                 self.R_tube_center = 1 + self.R_tube + self.T_tube
                 self.core_factor = .75
                 self.R_core = self.core_factor
 
+            self.n_glass = 1.4388164768221814
+            self.n_air = 1.00027717
+            self.n_soft_polymer = 1.44
+            self.n_hard_polymer = 1.56
+            self.n_buffer = self.n_air
+            self.n0 = self.n_air
+
+            if outer_materials is not None:
+                self.outer_materials = outer_materials
+            else:
+                self.outer_materials = [
+
+                    # {'material': 'soft_polymer',
+                    #  'n': self.n_soft_polymer,
+                    #  'T': self.T_soft_polymer,
+                    #  'maxh': 2},
+
+                    # {'material': 'hard_polymer',
+                    #  'n': self.n_hard_polymer,
+                    #  'T': self.T_hard_polymer,
+                    #  'maxh': 2},
+
+                    {'material': 'buffer',
+                     'n': self.n_buffer,
+                     'T': self.T_buffer,
+                     'maxh': 2},
+
+                    {'material': 'Outer',
+                     'n': self.n0,
+                     'T': self.T_outer,
+                     'maxh': 4}
+                ]
+
             self.inner_air_maxh = .2
             self.fill_air_maxh = .35
             self.tube_maxh = .11
-            self.sheath_maxh = .25
-            self.buffer_maxh = 2
-            self.outer_maxh = 4
+            self.cladding_maxh = .25
             self.core_maxh = .25
             self.glass_maxh = 0  # Overrides maxh in tubes and cladding
-
-            self.n_glass = 1.4388164768221814
-            self.n_air = 1.00027717
-            self.n_buffer = self.n_air
-            self.n0 = self.n_air
 
             self.wavelength = 1.8e-6
 
@@ -115,30 +145,58 @@ class ARF2(ModeSolver):
             self.R_tube = 12.48 / scaling
             self.T_tube = .42 / scaling
 
-            self.T_sheath = 10 / scaling
+            self.T_cladding = 10 / scaling
             self.T_outer = 50 / scaling
             self.T_buffer = 10 / scaling
+            self.T_soft_polymer = 30 / scaling
+            self.T_hard_polymer = 30 / scaling
 
-            self.R_sheath = (1 + 2 * self.R_tube + (2 - self.e) *
-                             self.T_tube)
+            self.R_cladding = (1 + 2 * self.R_tube + (2 - self.e) *
+                               self.T_tube)
 
             self.R_tube_center = 1 + self.R_tube + self.T_tube
             self.core_factor = .75
             self.R_core = self.core_factor
 
+            self.n_glass = 1.4388164768221814
+            self.n_air = 1.00027717
+            self.n_soft_polymer = 1.44
+            self.n_hard_polymer = 1.56
+            self.n_buffer = self.n_air
+            self.n0 = self.n_air
+
+            if outer_materials is not None:
+                self.outer_materials = outer_materials
+            else:
+                self.outer_materials = [
+
+                    # {'material': 'soft_polymer',
+                    #  'n': self.n_soft_polymer,
+                    #  'T': self.T_soft_polymer,
+                    #  'maxh': 2},
+
+                    # {'material': 'hard_polymer',
+                    #  'n': self.n_hard_polymer,
+                    #  'T': self.T_hard_polymer,
+                    #  'maxh': 2},
+
+                    {'material': 'buffer',
+                     'n': self.n_buffer,
+                     'T': self.T_buffer,
+                     'maxh': 2},
+
+                    {'material': 'Outer',
+                     'n': self.n0,
+                     'T': self.T_outer,
+                     'maxh': 4}
+                ]
+
             self.inner_air_maxh = .25
             self.fill_air_maxh = .25
             self.tube_maxh = .04
-            self.sheath_maxh = .33
-            self.buffer_maxh = 2
-            self.outer_maxh = 2
+            self.cladding_maxh = .33
             self.core_maxh = .1
             self.glass_maxh = 0  # Overrides maxh in tubes and cladding
-
-            self.n_glass = 1.4388164768221814
-            self.n_air = 1.00027717
-            self.n_buffer = self.n_air
-            self.n0 = self.n_air
 
             self.wavelength = 1.8e-6
 
@@ -157,41 +215,69 @@ class ARF2(ModeSolver):
             self.R_tube = 12.06 / scaling
             self.T_tube = .84 / scaling
 
-            self.T_sheath = 10 / scaling
+            self.T_cladding = 10 / scaling
             self.T_outer = 30 / scaling
             self.T_buffer = 10 / scaling
+            self.T_soft_polymer = 30 / scaling
+            self.T_hard_polymer = 30 / scaling
 
             if shift_capillaries:
-                self.R_sheath = (1 + 2 * self.R_tube + (2 - .025/.42) *
-                                 self.T_tube)
+                self.R_cladding = (1 + 2 * self.R_tube + (2 - .025/.42) *
+                                   self.T_tube)
 
-                self.R_tube_center = (self.R_sheath - self.R_tube -
+                self.R_tube_center = (self.R_cladding - self.R_tube -
                                       (1 - self.e) * self.T_tube)
 
                 self.core_factor = .75
                 self.R_core = ((self.R_tube_center - self.R_tube -
                                 self.T_tube) * self.core_factor)
             else:
-                self.R_sheath = (1 + 2 * self.R_tube + (2 - self.e) *
-                                 self.T_tube)
+                self.R_cladding = (1 + 2 * self.R_tube + (2 - self.e) *
+                                   self.T_tube)
 
                 self.R_tube_center = 1 + self.R_tube + self.T_tube
                 self.core_factor = .75
                 self.R_core = self.core_factor
 
-            self.inner_air_maxh = .2
-            self.fill_air_maxh = .35
-            self.tube_maxh = .11
-            self.sheath_maxh = .25
-            self.buffer_maxh = 2
-            self.outer_maxh = 4
-            self.core_maxh = .25
-            self.glass_maxh = 0  # Overrides maxh in tubes and cladding
-
             self.n_glass = 1.4388164768221814
             self.n_air = 1.00027717
+            self.n_soft_polymer = 1.44
+            self.n_hard_polymer = 1.56
             self.n_buffer = self.n_air
             self.n0 = self.n_air
+
+            if outer_materials is not None:
+                self.outer_materials = outer_materials
+            else:
+                self.outer_materials = [
+
+                    # {'material': 'soft_polymer',
+                    #  'n': self.n_soft_polymer,
+                    #  'T': self.T_soft_polymer,
+                    #  'maxh': 2},
+
+                    # {'material': 'hard_polymer',
+                    #  'n': self.n_hard_polymer,
+                    #  'T': self.T_hard_polymer,
+                    #  'maxh': 2},
+
+                    {'material': 'buffer',
+                     'n': self.n_buffer,
+                     'T': self.T_buffer,
+                     'maxh': 2},
+
+                    {'material': 'Outer',
+                     'n': self.n0,
+                     'T': self.T_outer,
+                     'maxh': 4}
+                ]
+
+            self.core_maxh = .25
+            self.fill_air_maxh = .35
+            self.tube_maxh = .11
+            self.inner_air_maxh = .2
+            self.cladding_maxh = .25
+            self.glass_maxh = 0  # Overrides maxh in tubes and cladding
 
             self.wavelength = 1.8e-6
 
@@ -216,15 +302,18 @@ class ARF2(ModeSolver):
         """
         self.k = 2 * np.pi / self.wavelength
 
+        # Set up inner region refractive indices
         refractive_index_dict = {'core': self.n_air,
                                  'fill_air': self.n_air,
                                  'glass': self.n_glass,
                                  'inner_air': self.n_air,
-                                 'buffer': self.n_buffer,
-                                 'Outer': self.n0
                                  }
-        self.refractive_index_dict = refractive_index_dict
 
+        # Add outer material refractive indices
+        for i, d in enumerate(self.outer_materials):
+            refractive_index_dict[d['material']] = d['n']
+
+        self.refractive_index_dict = refractive_index_dict
         self.index = self.mesh.RegionCF(ng.VOL, refractive_index_dict)
 
         self.V = (self.scale * self.k)**2 * (self.n0 ** 2 - self.index ** 2)
@@ -256,16 +345,11 @@ class ARF2(ModeSolver):
 
         n_tubes = self.n_tubes
         R_core = self.R_core
-        R_sheath = self.R_sheath
-        T_sheath = self.T_sheath
-        T_buffer = self.T_buffer
-        T_outer = self.T_outer
+        R_cladding = self.R_cladding
+        T_cladding = self.T_cladding
         R_tube = self.R_tube
         T_tube = self.T_tube
         R_tube_center = self.R_tube_center
-
-        self.R = R_sheath + T_sheath + T_buffer
-        self.Rout = R_sheath + T_sheath + T_buffer + T_outer
 
         if self.n_tubes <= 2 and poly_core:
             raise ValueError('Polygonal core only available for n_tubes > 2.')
@@ -284,17 +368,11 @@ class ARF2(ModeSolver):
                           mat="core", bc="core_fill_air_interface")
 
         circle1 = Circle(center=(0, 0),
-                         radius=R_sheath,
+                         radius=R_cladding,
                          mat="fill_air", bc="glass_air_interface")
         circle2 = Circle(center=(0, 0),
-                         radius=R_sheath+T_sheath,
-                         mat="glass", bc="sheathing_buffer_interface")
-        circle3 = Circle(center=(0, 0),
-                         radius=self.R,
-                         mat="buffer", bc="buffer_pml_interface")
-        circle4 = Circle(center=(0, 0),
-                         radius=self.Rout,
-                         mat="Outer", bc="OuterCircle")
+                         radius=R_cladding+T_cladding,
+                         mat="glass", bc="cladding_outer_materials_interface")
 
         small1 = Circle(center=(0, R_tube_center), radius=R_tube,
                         mat="inner_air", bc="glass_air_interface")
@@ -321,18 +399,17 @@ class ARF2(ModeSolver):
         #     outer_tubes += small2.Copy().Rotate(360/n_tubes * i,
         #                                         center=(0, 0))
 
-        sheath = circle2 - circle1
+        cladding = circle2 - circle1
         tubes = outer_tubes - inner_tubes
 
         tubes.Maxh(self.tube_maxh)
-        sheath.Maxh(self.sheath_maxh)
+        cladding.Maxh(self.cladding_maxh)
         inner_tubes.Maxh(self.inner_air_maxh)
-        # inner_tubes.Mat('inner_air')
 
-        glass = sheath + tubes
+        glass = cladding + tubes
         glass.Mat('glass')
 
-        if self.glass_maxh > 0:  # setting overrides tube and sheath maxh
+        if self.glass_maxh > 0:  # setting overrides tube and cladding maxh
             glass.Maxh(self.glass_maxh)
 
         fill_air = circle1 - tubes - inner_tubes - core
@@ -342,22 +419,47 @@ class ARF2(ModeSolver):
         core.Maxh(self.core_maxh)
         core.Mat('core')
 
-        buffer_air = circle3 - circle2
-        buffer_air.Maxh(self.buffer_maxh)
-        buffer_air.Mat('buffer')
-
-        outer = circle4 - circle3
-        outer.Maxh(self.outer_maxh)
-        outer.Mat('Outer')
-
         geo.Add(core)
         geo.Add(fill_air)
         geo.Add(glass)
+
         if n_tubes > 0:  # Meshing fails if you add empty Solid2d instance
             geo.Add(inner_tubes)
-        geo.Add(buffer_air)
-        geo.Add(outer)
 
+        # Create and add outer materials including PML region
+
+        self.Rout = R_cladding + T_cladding  # set base Rout
+
+        n = len(self.outer_materials)
+
+        for i, d in enumerate(self.outer_materials):
+
+            circle1 = circle2  # increment circles
+
+            self.Rout += d['T']  # add thickness of materials
+
+            # Take care of boundary naming
+            if i < (n-1):
+                mat = d['material']
+                next_mat = self.outer_materials[i+1]['material']
+                bc = mat + '_' + next_mat + '_interface'
+            else:
+                bc = 'OuterCircle'
+                mat = 'Outer'
+
+            # Make new outermost circle
+            circle2 = Circle(center=(0, 0),
+                             radius=self.Rout,
+                             mat=mat,
+                             bc=bc)
+
+            # Create and add region to geometry
+            region = circle2 - circle1
+            region.Mat(mat)
+            region.Maxh(d['maxh'])
+            geo.Add(region)
+
+        self.R = self.Rout - self.outer_materials[-1]['T']
         self.geo = geo
         self.spline_geo = geo.GenerateSplineGeometry()
 
