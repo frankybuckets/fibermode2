@@ -10,6 +10,7 @@ import ngsolve as ng
 import numpy as np
 import pickle
 from netgen.geom2d import CSG2d, Circle, Solid2d
+from netgen.geom2d import EdgeInfo as EI
 from fiberamp.fiber.modesolver import ModeSolver
 from pyeigfeast.spectralproj.ngs.spectralprojngs import NGvecs
 
@@ -21,7 +22,7 @@ class ARF2(ModeSolver):
 
     def __init__(self, name=None, refine=0, curve=3, e=None,
                  poly_core=False, shift_capillaries=False,
-                 outer_materials=None):
+                 outer_materials=None, fill=None):
 
         # Set and check the fiber parameters.
         self.set_parameters(name=name, shift_capillaries=shift_capillaries,
@@ -32,7 +33,7 @@ class ARF2(ModeSolver):
             poly_core = False
 
         # Create geometry
-        self.create_geometry(poly_core=poly_core)
+        self.create_geometry(poly_core=poly_core, fill=fill)
         self.create_mesh(refine=refine, curve=curve)
 
         # Set physical properties
@@ -117,7 +118,7 @@ class ARF2(ModeSolver):
                     {'material': 'Outer',
                      'n': self.n0,
                      'T': self.T_outer,
-                     'maxh': 4}
+                     'maxh': 2}
                 ]
 
             self.inner_air_maxh = .2
@@ -131,7 +132,6 @@ class ARF2(ModeSolver):
 
         elif self.name == 'original':  # Ben's original parameters
 
-            shift_capillaries = True
             self.n_tubes = 6
 
             scaling = 15
@@ -336,7 +336,7 @@ class ARF2(ModeSolver):
 
         self.mesh.Curve(curve)
 
-    def create_geometry(self, poly_core=True):
+    def create_geometry(self, poly_core=True, fill=None):
         """
         Create geometry and mesh
         """
@@ -388,6 +388,13 @@ class ARF2(ModeSolver):
                                                 center=(0, 0))
             outer_tubes += small2.Copy().Rotate(360/n_tubes * i,
                                                 center=(0, 0))
+        if fill is not None:
+            fills = self.get_fill(fill)
+            fills = fills - small2
+            all_fill = fills.Copy()
+            for i in range(1, n_tubes):
+                all_fill += fills.Copy().Rotate(360/n_tubes * i,
+                                                center=(0, 0))
 
         # # Second method
         # inner_tubes = Solid2d()
@@ -407,12 +414,20 @@ class ARF2(ModeSolver):
         inner_tubes.Maxh(self.inner_air_maxh)
 
         glass = cladding + tubes
+
+        if fill is not None:
+            glass += all_fill
+
         glass.Mat('glass')
 
         if self.glass_maxh > 0:  # setting overrides tube and cladding maxh
             glass.Maxh(self.glass_maxh)
 
-        fill_air = circle1 - tubes - inner_tubes - core
+        fill_air = circle1 - outer_tubes - core
+
+        if fill is not None:
+            fill_air = fill_air - all_fill
+
         fill_air.Maxh(self.fill_air_maxh)
         fill_air.Mat('fill_air')
 
@@ -425,6 +440,7 @@ class ARF2(ModeSolver):
 
         if n_tubes > 0:  # Meshing fails if you add empty Solid2d instance
             geo.Add(inner_tubes)
+            pass
 
         # Create and add outer materials including PML region
 
@@ -462,6 +478,103 @@ class ARF2(ModeSolver):
         self.R = self.Rout - self.outer_materials[-1]['T']
         self.geo = geo
         self.spline_geo = geo.GenerateSplineGeometry()
+
+    def get_fill(self, fill):
+        """Create fill."""
+        # Get fill parameters from dictionary.
+        beta, sigma = fill['beta'], fill['sigma']
+
+        if beta <= 0 or beta > np.pi/6:
+            raise ValueError('Fill angle beta must be in (0, pi/6]')
+
+        if sigma < -1 or sigma > 1:
+            raise ValueError('Fill convexity factor sigma must be in [-1,1]')
+
+        # Get relevant names
+        R_cladding = self.R_cladding
+        T_cladding = self.T_cladding
+        R_tube = self.R_tube
+        T_tube = self.T_tube
+        R_tube_center = self.R_tube_center
+
+        # Point P: intersection of embedded capillary tube with cladding
+        Py = (R_tube_center**2 + R_cladding**2 -
+              (R_tube + T_tube)**2) / (2 * R_tube_center)
+        Px = np.sqrt(R_cladding**2 - Py**2)
+
+        # Point p: on radial line through capillary tube as P,
+        # but shifted to lie inside capillary wall.
+        # This assists with correct mesh construction for CSG2d.
+        px, py = Px, Py - R_tube_center
+        px *= (2*R_tube + T_tube)/(2*(R_tube + T_tube))
+        py *= (2*R_tube + T_tube)/(2*(R_tube + T_tube))
+        py += R_tube_center
+
+        # Point Q: location on exterior of capillary tube at which fill begins
+        Qx = Px * np.cos(beta) + (Py - R_tube_center) * np.sin(beta)
+        Qy = (Py - R_tube_center) * np.cos(beta) - \
+            Px * np.sin(beta) + R_tube_center
+
+        # Point q: on radial line through capillary tube as Q,
+        # but shifted to lie inside capillary wall.
+        # This assists with correct mesh construction for CSG2d.
+        qx, qy = Qx, Qy - R_tube_center
+        qx *= (2*R_tube + T_tube)/(2*(R_tube + T_tube))
+        qy *= (2*R_tube + T_tube)/(2*(R_tube + T_tube))
+        qy += R_tube_center
+
+        # Angle theta: angle away from vertical in which to go towards
+        # cladding from point Q
+        # This is chosen so that the angle with the capillary wall and
+        # cladding wall are equal
+        theta = np.arctan(Qx / (Qy - R_tube_center + (R_tube_center *
+                          (R_tube + T_tube) / (R_cladding +
+                                               (R_tube + T_tube)))))
+
+        # Unit vector e: points from Q toward cladding in direction we want
+        ex, ey = np.sin(theta), np.cos(theta)
+
+        # Dot products
+        Qe = Qx * ex + Qy * ey
+        QQ = Qx * Qx + Qy * Qy
+
+        # Length t: distance from outer capillary wall to cladding
+        # along (flat) fill
+        t = -Qe + np.sqrt(Qe**2 + R_cladding**2 - QQ)
+
+        # Point T: Point on inner cladding wall where fill begins
+        Tx, Ty = Qx + t * ex, Qy + t * ey
+
+        # Vector TP
+        TPx, TPy = Px - Tx, Py - Ty
+
+        # Distance d: perpendicular distance from (flat) fill to line in
+        # direction TP
+        d = t/2 * np.sqrt((TPx * TPx + TPy * TPy)/(ex * TPx + ey * TPy)**2 - 1)
+
+        # Modified points T and P lying inside interiors of relevant regions
+        # Necessary to ensure fill extends to cladding and for meshing purposes
+        O1x = (2*R_cladding + T_cladding) / (2*R_cladding) * Tx
+        O1y = (2*R_cladding + T_cladding) / (2*R_cladding) * Ty
+
+        O2x = (2*R_cladding + T_cladding) / (2*R_cladding) * Px
+        O2y = (2*R_cladding + T_cladding) / (2*R_cladding) * Py
+
+        # Control point c: lies along perpendicular to (flat) fill at
+        # midpoint of fill.
+        cx = Qx + t/2 * ex + d * sigma * ey
+        cy = Qy + t/2 * ey - d * sigma * ex
+
+        if sigma != 0:
+            fill_r = Solid2d([(px, py), (qx, qy), (Qx, Qy), EI((cx, cy)),
+                              (Tx, Ty), (O1x, O1y), (O2x, O2y)])
+        else:
+            fill_r = Solid2d([(px, py), (qx, qy), (Qx, Qy),
+                              (Tx, Ty), (O1x, O1y), (O2x, O2y)])
+
+        fill_l = fill_r.Copy().Scale((-1, 1))
+
+        return fill_r + fill_l
 
     def E_modes_from_array(self, array, p=1, mesh=None):
         """Create NGvec object containing modes and set data given by array."""
