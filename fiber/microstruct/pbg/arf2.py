@@ -398,7 +398,7 @@ class ARF2(ModeSolver):
         else:
             # Need to calculate polar angle nu from y axis to
             # fill/cladding interface
-            _, _, _, nu = self.get_fill_points(fill['beta'], fill['sigma'])
+            _, _, _, nu = self.get_fill_points(fill['delta'], fill['sigma'])
             psi = sector - 2 * nu
             D = self.R_cladding / np.cos(psi / 2)
 
@@ -589,15 +589,15 @@ class ARF2(ModeSolver):
         else:
             points = np.zeros((2, 13))
 
-            beta, sigma = fill['beta'], fill['sigma']
-            T, C, Q, _ = self.get_fill_points(beta, sigma)
+            delta, sigma = fill['delta'], fill['sigma']
+            T, C, Q, _ = self.get_fill_points(delta, sigma)
 
             # Compute the angle inside of the capillary tube to determine some
             # of the subsequent spline points for the upper half of the outer
             # capillary tube.
             acos_frac = (self.R_cladding * np.sin(phi) -
                          c[0]) / (self.R_tube + self.T_tube)
-            psi = np.arccos(acos_frac) - beta
+            psi = np.arccos(acos_frac) - delta
 
             # The control points for the right fill.
             points[:, 0] = [(T[0] - c[0])/(self.R_tube + self.T_tube),
@@ -649,7 +649,7 @@ class ARF2(ModeSolver):
 
         return capillary_points
 
-    def get_fill_points(self, beta, sigma):
+    def get_fill_points(self, delta, sigma):
 
         if sigma < -1:
             raise ValueError('Sigma must be greater than -1.')
@@ -660,9 +660,9 @@ class ARF2(ModeSolver):
         Px = np.sqrt(self.R_cladding**2 - Py**2)
 
         # Point Q: location on exterior of capillary tube at which fill begins
-        Qx = Px * np.cos(beta) + (Py - self.R_tube_center) * np.sin(beta)
-        Qy = (Py - self.R_tube_center) * np.cos(beta) - \
-            Px * np.sin(beta) + self.R_tube_center
+        Qx = Px * np.cos(delta) + (Py - self.R_tube_center) * np.sin(delta)
+        Qy = (Py - self.R_tube_center) * np.cos(delta) - \
+            Px * np.sin(delta) + self.R_tube_center
 
         # Angle theta: angle away from vertical in which to go towards
         # cladding from point Q
@@ -693,7 +693,7 @@ class ARF2(ModeSolver):
 
         if nu > (np.pi/self.n_tubes):
             raise ValueError(
-                "Value for fill angle beta too large, fills overlap.")
+                "Value for fill angle delta too large, fills overlap.")
 
         # Vector TP
         TPx, TPy = Px - Tx, Py - Ty
