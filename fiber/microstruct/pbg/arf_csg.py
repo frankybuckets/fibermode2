@@ -15,7 +15,7 @@ from fiberamp.fiber.modesolver import ModeSolver
 from pyeigfeast.spectralproj.ngs.spectralprojngs import NGvecs
 
 
-class ARF2(ModeSolver):
+class ARFcsg(ModeSolver):
     """
     Create an ARF fiber using csg2d
     """
