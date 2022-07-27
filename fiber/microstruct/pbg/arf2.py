@@ -245,7 +245,7 @@ class ARF2(ModeSolver):
 
             self.T_cladding = 10 / scaling
             self.T_outer = 30 / scaling
-            self.T_buffer = 30 / scaling
+            self.T_buffer = 10 / scaling
             self.T_soft_polymer = 30 / scaling
             self.T_hard_polymer = 30 / scaling
 
@@ -302,7 +302,7 @@ class ARF2(ModeSolver):
                 ]
 
             self.inner_air_maxh = .2
-            self.fill_air_maxh = .2
+            self.fill_air_maxh = .35
             self.tube_maxh = .11
             self.cladding_maxh = .25
 
