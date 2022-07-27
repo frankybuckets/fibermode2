@@ -10,7 +10,6 @@ import ngsolve as ng
 import numpy as np
 import pickle
 from netgen.geom2d import CSG2d, Circle, Solid2d
-from netgen.geom2d import EdgeInfo as EI
 from fiberamp.fiber.modesolver import ModeSolver
 from pyeigfeast.spectralproj.ngs.spectralprojngs import NGvecs
 
@@ -22,18 +21,15 @@ class ARFcsg(ModeSolver):
 
     def __init__(self, name=None, refine=0, curve=3, e=None,
                  poly_core=False, shift_capillaries=False,
-                 outer_materials=None, fill=None):
+                 outer_materials=None):
 
         # Set and check the fiber parameters.
         self.set_parameters(name=name, shift_capillaries=shift_capillaries,
                             e=e, outer_materials=outer_materials)
         self.check_parameters()
 
-        if self.name == 'original':  # Override for original fiber
-            poly_core = False
-
         # Create geometry
-        self.create_geometry(poly_core=poly_core, fill=fill)
+        self.create_geometry(poly_core=poly_core)
         self.create_mesh(refine=refine, curve=curve)
 
         # Set physical properties
@@ -121,81 +117,11 @@ class ARFcsg(ModeSolver):
                      'maxh': 2}
                 ]
 
-            self.inner_air_maxh = .2
-            self.fill_air_maxh = .35
-            self.tube_maxh = .11
-            self.cladding_maxh = .25
-            self.core_maxh = .25
-            self.glass_maxh = 0  # Overrides maxh in tubes and cladding
-
-            self.wavelength = 1.8e-6
-
-        elif self.name == 'original':  # Ben's original parameters
-
-            self.n_tubes = 6
-
-            scaling = 15
-            self.scale = scaling * 1e-6
-
-            if e is not None:
-                self.e = e
-            else:
-                self.e = .025/.42
-
-            self.R_tube = 12.48 / scaling
-            self.T_tube = .42 / scaling
-
-            self.T_cladding = 10 / scaling
-            self.T_outer = 50 / scaling
-            self.T_buffer = 10 / scaling
-            self.T_soft_polymer = 30 / scaling
-            self.T_hard_polymer = 30 / scaling
-
-            self.R_cladding = (1 + 2 * self.R_tube + (2 - self.e) *
-                               self.T_tube)
-
-            self.R_tube_center = 1 + self.R_tube + self.T_tube
-            self.core_factor = .75
-            self.R_core = self.core_factor
-
-            self.n_glass = 1.4388164768221814
-            self.n_air = 1.00027717
-            self.n_soft_polymer = 1.44
-            self.n_hard_polymer = 1.56
-            self.n_buffer = self.n_air
-            self.n0 = self.n_air
-
-            if outer_materials is not None:
-                self.outer_materials = outer_materials
-            else:
-                self.outer_materials = [
-
-                    # {'material': 'soft_polymer',
-                    #  'n': self.n_soft_polymer,
-                    #  'T': self.T_soft_polymer,
-                    #  'maxh': 2},
-
-                    # {'material': 'hard_polymer',
-                    #  'n': self.n_hard_polymer,
-                    #  'T': self.T_hard_polymer,
-                    #  'maxh': 2},
-
-                    {'material': 'buffer',
-                     'n': self.n_buffer,
-                     'T': self.T_buffer,
-                     'maxh': 2},
-
-                    {'material': 'Outer',
-                     'n': self.n0,
-                     'T': self.T_outer,
-                     'maxh': 4}
-                ]
-
             self.inner_air_maxh = .25
             self.fill_air_maxh = .25
-            self.tube_maxh = .04
+            self.tube_maxh = .11
             self.cladding_maxh = .33
-            self.core_maxh = .1
+            self.core_maxh = .25
             self.glass_maxh = 0  # Overrides maxh in tubes and cladding
 
             self.wavelength = 1.8e-6
@@ -278,6 +204,87 @@ class ARFcsg(ModeSolver):
             self.inner_air_maxh = .2
             self.cladding_maxh = .25
             self.glass_maxh = 0  # Overrides maxh in tubes and cladding
+
+            self.wavelength = 1.8e-6
+
+        elif self.name == 'fine_cladding':
+
+            self.n_tubes = 6
+
+            scaling = 15
+            self.scale = scaling * 1e-6
+
+            if e is not None:
+                self.e = e
+            else:
+                self.e = .025/.42
+
+            self.R_tube = 12.48 / scaling
+            self.T_tube = .42 / scaling
+
+            self.T_cladding = 10 / scaling
+            self.T_outer = 30 / scaling
+            self.T_buffer = 30 / scaling
+            self.T_soft_polymer = 30 / scaling
+            self.T_hard_polymer = 30 / scaling
+
+            if shift_capillaries:
+                self.R_cladding = (1 + 2 * self.R_tube + (2 - .025/.42) *
+                                   self.T_tube)
+
+                self.R_tube_center = (self.R_cladding - self.R_tube -
+                                      (1 - self.e) * self.T_tube)
+
+                self.core_factor = .75
+                self.R_core = ((self.R_tube_center - self.R_tube -
+                                self.T_tube) * self.core_factor)
+            else:
+                self.R_cladding = (1 + 2 * self.R_tube + (2 - self.e) *
+                                   self.T_tube)
+
+                self.R_tube_center = 1 + self.R_tube + self.T_tube
+                self.core_factor = .75
+                self.R_core = self.core_factor
+
+            self.n_glass = 1.4388164768221814
+            self.n_air = 1.00027717
+            self.n_soft_polymer = 1.44
+            self.n_hard_polymer = 1.56
+            self.n_buffer = self.n_air
+            self.n0 = self.n_air
+
+            if outer_materials is not None:
+                self.outer_materials = outer_materials
+            else:
+                self.outer_materials = [
+
+                    # {'material': 'soft_polymer',
+                    #  'n': self.n_soft_polymer,
+                    #  'T': self.T_soft_polymer,
+                    #  'maxh': 2},
+
+                    # {'material': 'hard_polymer',
+                    #  'n': self.n_hard_polymer,
+                    #  'T': self.T_hard_polymer,
+                    #  'maxh': 2},
+
+                    {'material': 'buffer',
+                     'n': self.n_buffer,
+                     'T': self.T_buffer,
+                     'maxh': .5},
+
+                    {'material': 'Outer',
+                     'n': self.n0,
+                     'T': self.T_outer,
+                     'maxh': 2}
+                ]
+
+            self.inner_air_maxh = .2
+            self.fill_air_maxh = .2
+            self.tube_maxh = .11
+            self.cladding_maxh = .25
+            self.core_maxh = .25
+            self.glass_maxh = 0.05  # Overrides maxh in tubes and cladding
 
             self.wavelength = 1.8e-6
 
@@ -379,32 +386,25 @@ class ARFcsg(ModeSolver):
         small2 = Circle(center=(0, R_tube_center), radius=R_tube+T_tube,
                         mat="glass", bc="glass_air_interface")
 
-        # previous method
-        inner_tubes = small1.Copy()
-        outer_tubes = small2.Copy()
+        # # previous method
+        # inner_tubes = small1.Copy()
+        # outer_tubes = small2.Copy()
 
-        for i in range(1, n_tubes):
-            inner_tubes += small1.Copy().Rotate(360/n_tubes * i,
-                                                center=(0, 0))
-            outer_tubes += small2.Copy().Rotate(360/n_tubes * i,
-                                                center=(0, 0))
-        if fill is not None:
-            fills = self.get_fill(fill)
-            fills = fills - small2
-            all_fill = fills.Copy()
-            for i in range(1, n_tubes):
-                all_fill += fills.Copy().Rotate(360/n_tubes * i,
-                                                center=(0, 0))
-
-        # # Second method
-        # inner_tubes = Solid2d()
-        # outer_tubes = Solid2d()
-
-        # for i in range(0, n_tubes):
+        # for i in range(1, n_tubes):
         #     inner_tubes += small1.Copy().Rotate(360/n_tubes * i,
         #                                         center=(0, 0))
         #     outer_tubes += small2.Copy().Rotate(360/n_tubes * i,
         #                                         center=(0, 0))
+
+        # Second method
+        inner_tubes = Solid2d()
+        outer_tubes = Solid2d()
+
+        for i in range(0, n_tubes):
+            inner_tubes += small1.Copy().Rotate(360/n_tubes * i,
+                                                center=(0, 0))
+            outer_tubes += small2.Copy().Rotate(360/n_tubes * i,
+                                                center=(0, 0))
 
         cladding = circle2 - circle1
         tubes = outer_tubes - inner_tubes
@@ -415,19 +415,12 @@ class ARFcsg(ModeSolver):
 
         glass = cladding + tubes
 
-        if fill is not None:
-            glass += all_fill
-
         glass.Mat('glass')
 
         if self.glass_maxh > 0:  # setting overrides tube and cladding maxh
             glass.Maxh(self.glass_maxh)
 
         fill_air = circle1 - outer_tubes - core
-
-        if fill is not None:
-            fill_air = fill_air - all_fill
-
         fill_air.Maxh(self.fill_air_maxh)
         fill_air.Mat('fill_air')
 
@@ -479,103 +472,6 @@ class ARFcsg(ModeSolver):
         self.geo = geo
         self.spline_geo = geo.GenerateSplineGeometry()
 
-    def get_fill(self, fill):
-        """Create fill."""
-        # Get fill parameters from dictionary.
-        beta, sigma = fill['beta'], fill['sigma']
-
-        if beta <= 0 or beta > np.pi/6:
-            raise ValueError('Fill angle beta must be in (0, pi/6]')
-
-        if sigma < -1 or sigma > 1:
-            raise ValueError('Fill convexity factor sigma must be in [-1,1]')
-
-        # Get relevant names
-        R_cladding = self.R_cladding
-        T_cladding = self.T_cladding
-        R_tube = self.R_tube
-        T_tube = self.T_tube
-        R_tube_center = self.R_tube_center
-
-        # Point P: intersection of embedded capillary tube with cladding
-        Py = (R_tube_center**2 + R_cladding**2 -
-              (R_tube + T_tube)**2) / (2 * R_tube_center)
-        Px = np.sqrt(R_cladding**2 - Py**2)
-
-        # Point p: on radial line through capillary tube as P,
-        # but shifted to lie inside capillary wall.
-        # This assists with correct mesh construction for CSG2d.
-        px, py = Px, Py - R_tube_center
-        px *= (2*R_tube + T_tube)/(2*(R_tube + T_tube))
-        py *= (2*R_tube + T_tube)/(2*(R_tube + T_tube))
-        py += R_tube_center
-
-        # Point Q: location on exterior of capillary tube at which fill begins
-        Qx = Px * np.cos(beta) + (Py - R_tube_center) * np.sin(beta)
-        Qy = (Py - R_tube_center) * np.cos(beta) - \
-            Px * np.sin(beta) + R_tube_center
-
-        # Point q: on radial line through capillary tube as Q,
-        # but shifted to lie inside capillary wall.
-        # This assists with correct mesh construction for CSG2d.
-        qx, qy = Qx, Qy - R_tube_center
-        qx *= (2*R_tube + T_tube)/(2*(R_tube + T_tube))
-        qy *= (2*R_tube + T_tube)/(2*(R_tube + T_tube))
-        qy += R_tube_center
-
-        # Angle theta: angle away from vertical in which to go towards
-        # cladding from point Q
-        # This is chosen so that the angle with the capillary wall and
-        # cladding wall are equal
-        theta = np.arctan(Qx / (Qy - R_tube_center + (R_tube_center *
-                          (R_tube + T_tube) / (R_cladding +
-                                               (R_tube + T_tube)))))
-
-        # Unit vector e: points from Q toward cladding in direction we want
-        ex, ey = np.sin(theta), np.cos(theta)
-
-        # Dot products
-        Qe = Qx * ex + Qy * ey
-        QQ = Qx * Qx + Qy * Qy
-
-        # Length t: distance from outer capillary wall to cladding
-        # along (flat) fill
-        t = -Qe + np.sqrt(Qe**2 + R_cladding**2 - QQ)
-
-        # Point T: Point on inner cladding wall where fill begins
-        Tx, Ty = Qx + t * ex, Qy + t * ey
-
-        # Vector TP
-        TPx, TPy = Px - Tx, Py - Ty
-
-        # Distance d: perpendicular distance from (flat) fill to line in
-        # direction TP
-        d = t/2 * np.sqrt((TPx * TPx + TPy * TPy)/(ex * TPx + ey * TPy)**2 - 1)
-
-        # Modified points T and P lying inside interiors of relevant regions
-        # Necessary to ensure fill extends to cladding and for meshing purposes
-        O1x = (2*R_cladding + T_cladding) / (2*R_cladding) * Tx
-        O1y = (2*R_cladding + T_cladding) / (2*R_cladding) * Ty
-
-        O2x = (2*R_cladding + T_cladding) / (2*R_cladding) * Px
-        O2y = (2*R_cladding + T_cladding) / (2*R_cladding) * Py
-
-        # Control point c: lies along perpendicular to (flat) fill at
-        # midpoint of fill.
-        cx = Qx + t/2 * ex + d * sigma * ey
-        cy = Qy + t/2 * ey - d * sigma * ex
-
-        if sigma != 0:
-            fill_r = Solid2d([(px, py), (qx, qy), (Qx, Qy), EI((cx, cy)),
-                              (Tx, Ty), (O1x, O1y), (O2x, O2y)])
-        else:
-            fill_r = Solid2d([(px, py), (qx, qy), (Qx, Qy),
-                              (Tx, Ty), (O1x, O1y), (O2x, O2y)])
-
-        fill_l = fill_r.Copy().Scale((-1, 1))
-
-        return fill_r + fill_l
-
     def E_modes_from_array(self, array, p=1, mesh=None):
         """Create NGvec object containing modes and set data given by array."""
         if mesh is None:
@@ -609,29 +505,36 @@ ing to array has been passed as keyword p.")
 
     # SAVE & LOAD #####################################################
 
-    def save_mesh(self, name):
+    def save_mesh(self, name, use_pickle=True):
         """ Save mesh using pickle (allows for mesh curvature). """
-        with open(name, 'wb') as f:
-            pickle.dump(self.mesh, f)
+        if use_pickle:
+            with open(name, 'wb') as f:
+                pickle.dump(self.mesh, f)
+        else:
+            self.mesh.ngmesh.Save(name + '.vol')
 
     def save_modes(self, modes, name):
         """Save modes as numpy arrays."""
         np.save(name, modes.tonumpy())
 
-    def load_mesh(self, name):
+    def load_mesh(self, name, use_pickle=True):
         """ Load a saved ARF mesh."""
-        with open(name, 'rb') as f:
-            pmesh = pickle.load(f)
-        return pmesh
+        if use_pickle:
+            with open(name, 'rb') as f:
+                mesh = pickle.load(f)
+        else:
+            mesh = ng.Mesh(name + '.vol')
 
-    def load_E_modes(self, mesh_name, mode_name, p=8):
-        """Load transverse vectore E modes and associated mesh"""
-        mesh = self.load_mesh(mesh_name)
-        array = np.load(mode_name+'.npy')
-        return self.E_modes_from_array(array, mesh=mesh, p=p)
+        return mesh
 
-    def load_phi_modes(self, mesh_name, mode_name, p=8):
+    def load_E_modes(self, mesh_name, mode_name, p=8, use_pickle=True):
         """Load transverse vectore E modes and associated mesh"""
-        mesh = self.load_mesh(mesh_name)
+        mesh = self.load_mesh(mesh_name, use_pickle=use_pickle)
         array = np.load(mode_name+'.npy')
-        return self.phi_modes_from_array(array, mesh=mesh, p=p)
+        return mesh, self.E_modes_from_array(array, mesh=mesh, p=p)
+
+    def load_phi_modes(self, mesh_name, mode_name, p=8, use_pickle=True):
+        """Load transverse vectore E modes and associated mesh"""
+        mesh = self.load_mesh(mesh_name, use_pickle=use_pickle)
+        array = np.load(mode_name+'.npy')
+        return mesh, self.phi_modes_from_array(array, mesh=mesh, p=p)

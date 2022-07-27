@@ -50,6 +50,7 @@ class ARF2(ModeSolver):
         if self.name == 'poletti':
 
             self.n_tubes = 6
+
             scaling = 15
             self.scale = scaling * 1e-6
 
@@ -111,6 +112,7 @@ class ARF2(ModeSolver):
 
             if outer_materials is not None:
                 self.outer_materials = outer_materials
+                self.n0 = outer_materials[-1]['n']  # Need to reset n0
             else:
                 self.outer_materials = [
 
@@ -127,77 +129,7 @@ class ARF2(ModeSolver):
                     {'material': 'buffer',
                      'n': self.n_buffer,
                      'T': self.T_buffer,
-                     'maxh': 2},
-
-                    {'material': 'Outer',
-                     'n': self.n0,
-                     'T': self.T_outer,
-                     'maxh': 4}
-                ]
-
-            self.wavelength = 1.8e-6
-
-        elif self.name == 'original':  # Ben's original parameters
-
-            self.n_tubes = 6
-
-            scaling = 15
-            self.scale = scaling * 1e-6
-
-            if e is not None:
-                self.e = e
-            else:
-                self.e = .025/.42
-
-            self.R_tube = 12.48 / scaling
-            self.T_tube = .42 / scaling
-
-            self.T_cladding = 10 / scaling
-            self.T_outer = 50 / scaling
-            self.T_buffer = 10 / scaling
-            self.T_soft_polymer = 30 / scaling
-            self.T_hard_polymer = 30 / scaling
-
-            self.R_cladding = (1 + 2 * self.R_tube + (2 - self.e) *
-                               self.T_tube)
-
-            self.R_tube_center = 1 + self.R_tube + self.T_tube
-            self.core_factor = .75
-            self.R_core = self.core_factor
-
-            self.n_glass = 1.4388164768221814
-            self.n_air = 1.00027717
-            self.n_soft_polymer = 1.44
-            self.n_hard_polymer = 1.56
-            self.n_buffer = self.n_air
-            self.n0 = self.n_air
-
-            self.inner_air_maxh = .25
-            self.fill_air_maxh = .25
-            self.tube_maxh = .04
-            self.cladding_maxh = .33
-            self.core_maxh = .1
-            self.glass_maxh = 0
-
-            if outer_materials is not None:
-                self.outer_materials = outer_materials
-            else:
-                self.outer_materials = [
-
-                    # {'material': 'soft_polymer',
-                    #  'n': self.n_soft_polymer,
-                    #  'T': self.T_soft_polymer,
-                    #  'maxh': 2},
-
-                    # {'material': 'hard_polymer',
-                    #  'n': self.n_hard_polymer,
-                    #  'T': self.T_hard_polymer,
-                    #  'maxh': 2},
-
-                    {'material': 'buffer',
-                     'n': self.n_buffer,
-                     'T': self.T_buffer,
-                     'maxh': 2},
+                     'maxh': .5},
 
                     {'material': 'Outer',
                      'n': self.n0,
@@ -253,15 +185,23 @@ class ARF2(ModeSolver):
             self.n_buffer = self.n_air
             self.n0 = self.n_air
 
-            self.inner_air_maxh = .25
-            self.fill_air_maxh = .25
-            self.tube_maxh = .04
-            self.cladding_maxh = .33
-            self.core_maxh = .1
+            self.inner_air_maxh = .2
+            self.fill_air_maxh = .35
+            self.tube_maxh = .11
+            self.cladding_maxh = .25
+
+            self.inner_tube_edge_maxh = .11
+            self.outer_tube_edge_maxh = .11
+            self.inner_cladding_edge_maxh = .25
+            self.outer_cladding_edge_maxh = .25
+            self.fill_edge_maxh = .11
+
+            self.core_maxh = .25
             self.glass_maxh = 0
 
             if outer_materials is not None:
                 self.outer_materials = outer_materials
+                self.n0 = outer_materials[-1]['n']  # Need to reset n0
             else:
                 self.outer_materials = [
 
@@ -285,6 +225,95 @@ class ARF2(ModeSolver):
                      'T': self.T_outer,
                      'maxh': 4}
                 ]
+
+            self.wavelength = 1.8e-6
+
+        elif self.name == 'fine_cladding':
+
+            self.n_tubes = 6
+
+            scaling = 15
+            self.scale = scaling * 1e-6
+
+            if e is not None:
+                self.e = e
+            else:
+                self.e = .025/.42
+
+            self.R_tube = 12.48 / scaling
+            self.T_tube = .42 / scaling
+
+            self.T_cladding = 10 / scaling
+            self.T_outer = 30 / scaling
+            self.T_buffer = 30 / scaling
+            self.T_soft_polymer = 30 / scaling
+            self.T_hard_polymer = 30 / scaling
+
+            if shift_capillaries:
+                self.R_cladding = (1 + 2 * self.R_tube + (2 - .025/.42) *
+                                   self.T_tube)
+
+                self.R_tube_center = (self.R_cladding - self.R_tube -
+                                      (1 - self.e) * self.T_tube)
+
+                self.core_factor = .75
+                self.R_core = ((self.R_tube_center - self.R_tube -
+                                self.T_tube) * self.core_factor)
+            else:
+                self.R_cladding = (1 + 2 * self.R_tube + (2 - self.e) *
+                                   self.T_tube)
+
+                self.R_tube_center = 1 + self.R_tube + self.T_tube
+                self.core_factor = .75
+                self.R_core = self.core_factor
+
+            self.n_glass = 1.4388164768221814
+            self.n_air = 1.00027717
+            self.n_soft_polymer = 1.44
+            self.n_hard_polymer = 1.56
+            self.n_buffer = self.n_air
+            self.n0 = self.n_air
+
+            if outer_materials is not None:
+                self.outer_materials = outer_materials
+                self.n0 = outer_materials[-1]['n']  # Need to reset n0
+            else:
+                self.outer_materials = [
+
+                    # {'material': 'soft_polymer',
+                    #  'n': self.n_soft_polymer,
+                    #  'T': self.T_soft_polymer,
+                    #  'maxh': 2},
+
+                    # {'material': 'hard_polymer',
+                    #  'n': self.n_hard_polymer,
+                    #  'T': self.T_hard_polymer,
+                    #  'maxh': 2},
+
+                    {'material': 'buffer',
+                     'n': self.n_buffer,
+                     'T': self.T_buffer,
+                     'maxh': .5},
+
+                    {'material': 'Outer',
+                     'n': self.n0,
+                     'T': self.T_outer,
+                     'maxh': 2}
+                ]
+
+            self.inner_air_maxh = .2
+            self.fill_air_maxh = .2
+            self.tube_maxh = .11
+            self.cladding_maxh = .25
+
+            self.inner_tube_edge_maxh = .11
+            self.outer_tube_edge_maxh = .11
+            self.inner_cladding_edge_maxh = .25
+            self.outer_cladding_edge_maxh = .25
+            self.fill_edge_maxh = .11
+
+            self.core_maxh = .25
+            self.glass_maxh = 0.05
 
             self.wavelength = 1.8e-6
 
@@ -346,7 +375,10 @@ class ARF2(ModeSolver):
 
         n_tubes = self.n_tubes
         if n_tubes <= 2 and poly_core:
-            raise ValueError('Polygonal core only available for n_tubes > 2.')
+            print('Polygonal core only available for n_tubes > 2.')
+            poly_core = False
+
+        # We build the fiber starting from inside to outside: core first
 
         if poly_core:
 
@@ -369,120 +401,163 @@ class ARF2(ModeSolver):
             geo.AddCircle(c=(0, 0), r=self.R_core, leftdomain=1,
                           rightdomain=2, bc='core_fill_air_interface')
 
-        # The angle 'phi' corresponds to the polar angle that gives the
-        # intersection of the two circles of radius Rcladi and Rto, resp.
-        # The coordinates of the intersection can then be recovered as
-        # (Rcladi * cos(phi), Rcladi * sin(phi)) and
-        # (-Rcladi * cos(phi), Rcladi * sin(phi)).
+        # Now we add the microtubes and cladding
 
-        numerator = self.R_cladding**2 + \
-            self.R_tube_center**2 - (self.R_tube + self.T_tube)**2
-        denominator = 2 * self.R_tube_center * self.R_cladding
-        acos_frac = numerator / denominator
-        phi = np.arccos(acos_frac)
-
-        # The angle of a given sector that bisects two adjacent capillary
-        # tubes. Visually, this looks like a wedge in the computational domain
-        # that contains a half capillary tube on each side of the widest part
-        # of the wedge.
-        sector = 2 * np.pi / self.n_tubes
-
-        # Obtain the angle of the arc between two capillaries. This subtends
-        # the arc between the two points where two adjacent capillary tubes
-        # embed into the outer glass jacket.
-        if fill is None:
-            psi = sector - 2 * phi
-            # Get the distance to the middle control point for the
-            # aforementioned arc.
-            D = self.R_cladding / np.cos(psi / 2)
+        if n_tubes == 0:
+            geo.AddCircle(c=(0, 0), r=self.R_cladding, leftdomain=2,
+                          rightdomain=4, bc='fill_air_cladding_interface')
         else:
-            # Need to calculate polar angle nu from y axis to
-            # fill/cladding interface
-            _, _, _, nu = self.get_fill_points(fill['delta'], fill['sigma'])
-            psi = sector - 2 * nu
-            D = self.R_cladding / np.cos(psi / 2)
+            # The angle 'phi' corresponds to the polar angle that gives the
+            # intersection of the two circles of radius Rcladi and Rto, resp.
+            # The coordinates of the intersection can then be recovered as
+            # (Rcladi * cos(phi), Rcladi * sin(phi)) and
+            # (-Rcladi * cos(phi), Rcladi * sin(phi)).
 
-        # The center of the top capillary tube.
-        c = (0, self.R_tube_center)
+            numerator = self.R_cladding**2 + \
+                self.R_tube_center**2 - (self.R_tube + self.T_tube)**2
+            denominator = 2 * self.R_tube_center * self.R_cladding
+            acos_frac = numerator / denominator
+            phi = np.arccos(acos_frac)
 
-        capillary_points = []
+            # The angle of a given sector that bisects two adjacent capillary
+            # tubes. Visually, this looks like a wedge in the computational
+            # domain that contains a half capillary tube on each side of the
+            # widest part of the wedge.
+            sector = 2 * np.pi / self.n_tubes
 
-        for k in range(self.n_tubes):
-            # Compute the rotation angle needed for rotating the north
-            # capillary spline points to the other capillary locations in the
-            # domain.
-            rotation_angle = k * sector
-
-            # Compute the middle control point for the outer arc subtended by
-            # the angle psi + rotation_angle.
+            # Obtain the angle of the arc between two capillaries. This
+            # subtends the arc between the two points where two adjacent
+            # capillary tubes embed into the outer glass cladding.
             if fill is None:
-                ctrl_pt_angle = np.pi / 2 - phi - psi / 2 + rotation_angle
+                psi = sector - 2 * phi
+                # Get the distance to the middle control point for the
+                # aforementioned arc.
+                D = self.R_cladding / np.cos(psi / 2)
             else:
-                ctrl_pt_angle = np.pi / 2 - nu - psi / 2 + rotation_angle
+                # Need to calculate polar angle nu from y axis to
+                # fill/cladding interface
+                _, _, _, nu = self.get_fill_points(
+                    fill['delta'], fill['sigma'])
+                psi = sector - 2 * nu
+                D = self.R_cladding / np.cos(psi / 2)
 
-            capillary_points += [(D * np.cos(ctrl_pt_angle),
-                                  D * np.sin(ctrl_pt_angle))]
+            # The center of the top capillary tube.
+            c = (0, self.R_tube_center)
 
-            # Obtain the control points for the capillary tube immediately
-            # counterclockwise from the above control point.
-            capillary_points += \
-                self.get_capillary_spline_points(
-                    c, phi, rotation_angle, fill=fill)
+            capillary_points = []
 
-        # Add the capillary points to the geometry
-        capnums = [geo.AppendPoint(x, y) for x, y in capillary_points]
-        NP = len(capillary_points)    # number of capillary point IDs.
-        if fill is None:
-            for k in range(1, NP + 1, 2):  # add the splines.
-                if k % 10 != 9:
-                    maxh = self.outer_tube_edge_maxh
+            if self.n_tubes == 1:
+                rotation_angle = 0
+
+                if fill is None:
+                    hard1 = (self.R_cladding, self.R_cladding *
+                             (1 - np.sin(phi)) / np.cos(phi))
+                    hard2 = (-self.R_cladding, self.R_cladding *
+                             (1 - np.sin(phi)) / np.cos(phi))
                 else:
-                    maxh = self.inner_cladding_edge_maxh
-                geo.Append(
-                    [
-                        'spline3',
-                        capnums[k % NP],
-                        capnums[(k + 1) % NP],
-                        capnums[(k + 2) % NP]
-                    ], leftdomain=2, rightdomain=4, maxh=maxh,
-                    bc='fill_air_glass_interface')
-        else:
-            for k in range(1, NP + 1, 2):  # add the splines.
-                if k % 14 == 1 or k % 14 == 11:
-                    maxh = self.fill_edge_maxh
-                elif k % 14 == 13:
-                    maxh = self.inner_cladding_edge_maxh
-                else:
-                    maxh = self.outer_tube_edge_maxh
-                geo.Append(
-                    [
-                        'spline3',
-                        capnums[k % NP],
-                        capnums[(k + 1) % NP],
-                        capnums[(k + 2) % NP]
-                    ], leftdomain=2, rightdomain=4, maxh=maxh,
-                    bc='fill_air_glass_interface')
+                    hard1 = (self.R_cladding, self.R_cladding *
+                             (1 - np.sin(nu)) / np.cos(nu))
+                    hard2 = (-self.R_cladding, self.R_cladding *
+                             (1 - np.sin(nu)) / np.cos(nu))
 
-        # --------------------------------------------------------------------
-        # Add capillary tubes.
-        # --------------------------------------------------------------------
+                capillary_points += [hard1]
 
-        # Spacing for the angles we need to add the inner circles for the
-        # capillaries.
-        theta = np.pi / 2.0 + np.linspace(0, 2*np.pi,
-                                          num=self.n_tubes,
-                                          endpoint=False)
+                capillary_points += \
+                    self.get_capillary_spline_points(c, phi, rotation_angle,
+                                                     fill=fill)
 
-        # The radial distance to the capillary tube centers.
-        dist = self.R_tube_center
+                capillary_points += [hard2]
+                capillary_points += [(-self.R_cladding, 0),
+                                     (-self.R_cladding, -self.R_cladding),
+                                     (0, -self.R_cladding),
+                                     (self.R_cladding, -self.R_cladding),
+                                     (self.R_cladding, 0)]
 
-        for t in theta:
-            c = (dist*np.cos(t), dist*np.sin(t))
+            else:
+                for k in range(self.n_tubes):
+                    # Compute the rotation angle needed for rotating the north
+                    # capillary spline points to the other capillary locations
+                    # inthe domain.
+                    rotation_angle = k * sector
 
-            geo.AddCircle(c=c, r=self.R_tube,
-                          leftdomain=3, rightdomain=4,
-                          bc='inner_air_glass_interface',
-                          maxh=self.inner_tube_edge_maxh)
+                    # Compute the middle control point for the outer arc
+                    # subtended by the angle psi + rotation_angle.
+                    if fill is None:
+                        ctrl_pt_angle = np.pi / 2 - phi - psi / 2 \
+                            + rotation_angle
+                    else:
+                        ctrl_pt_angle = np.pi / 2 - nu - psi / 2 \
+                            + rotation_angle
+
+                    capillary_points += [(D * np.cos(ctrl_pt_angle),
+                                          D * np.sin(ctrl_pt_angle))]
+
+                    # Obtain the control points for the capillary tube
+                    # immediately counterclockwise from the above control point
+                    capillary_points += \
+                        self.get_capillary_spline_points(
+                            c, phi, rotation_angle, fill=fill)
+
+            # Add the capillary points to the geometry
+            capnums = [geo.AppendPoint(x, y) for x, y in capillary_points]
+            NP = len(capillary_points)    # number of capillary point IDs.
+            if fill is None:
+                for k in range(1, NP + 1, 2):  # add the splines.
+                    if k % 10 != 9:
+                        maxh = self.outer_tube_edge_maxh
+                        bc = 'fill_air_capillary_interface'
+                    else:
+                        maxh = self.inner_cladding_edge_maxh
+                        bc = 'fill_air_cladding_interface'
+                    geo.Append(
+                        [
+                            'spline3',
+                            capnums[k % NP],
+                            capnums[(k + 1) % NP],
+                            capnums[(k + 2) % NP]
+                        ], leftdomain=2, rightdomain=4, maxh=maxh,
+                        bc=bc)
+            else:
+                for k in range(1, NP + 1, 2):  # add the splines.
+                    if k % 14 == 1 or k % 14 == 11:
+                        maxh = self.fill_edge_maxh
+                        bc = 'fill_air_geometric_fill_interface'
+
+                    elif k % 14 == 13:
+                        maxh = self.inner_cladding_edge_maxh
+                        bc = 'fill_air_cladding_interface'
+                    else:
+                        maxh = self.outer_tube_edge_maxh
+                        bc = 'fill_air_capillary_interface'
+                    geo.Append(
+                        [
+                            'spline3',
+                            capnums[k % NP],
+                            capnums[(k + 1) % NP],
+                            capnums[(k + 2) % NP]
+                        ], leftdomain=2, rightdomain=4, maxh=maxh,
+                        bc=bc)
+
+            # ----------------------------------------------------------------
+            # Add capillary tubes.
+            # ----------------------------------------------------------------
+
+            # Spacing for the angles we need to add the inner circles for the
+            # capillaries.
+            theta = np.pi / 2.0 + np.linspace(0, 2*np.pi,
+                                              num=self.n_tubes,
+                                              endpoint=False)
+
+            # The radial distance to the capillary tube centers.
+            dist = self.R_tube_center
+
+            for t in theta:
+                c = (dist*np.cos(t), dist*np.sin(t))
+
+                geo.AddCircle(c=c, r=self.R_tube,
+                              leftdomain=3, rightdomain=4,
+                              bc='inner_air_capillary_interface',
+                              maxh=self.inner_tube_edge_maxh)
 
         self.Rout = self.R_cladding + self.T_cladding  # set base Rout
 
