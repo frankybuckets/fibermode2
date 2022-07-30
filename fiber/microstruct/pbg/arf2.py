@@ -819,15 +819,21 @@ ing to array has been passed as keyword p.")
 
     def save_mesh(self, name):
         """ Save mesh using pickle (allows for mesh curvature). """
+        if name[-4:] != '.pkl':
+            name += '.pkl'
         with open(name, 'wb') as f:
             pickle.dump(self.mesh, f)
 
     def save_modes(self, modes, name):
         """Save modes as numpy arrays."""
+        if name[-4:] == '.npy':
+            name -= '.npy'
         np.save(name, modes.tonumpy())
 
     def load_mesh(self, name):
         """ Load a saved ARF mesh."""
+        if name[-4:] != '.pkl':
+            name += '.pkl'
         with open(name, 'rb') as f:
             pmesh = pickle.load(f)
         return pmesh
@@ -835,6 +841,8 @@ ing to array has been passed as keyword p.")
     def load_E_modes(self, mesh_name, mode_name, p=8):
         """Load transverse vectore E modes and associated mesh"""
         mesh = self.load_mesh(mesh_name)
+        if mode_name[-4:] == '.npy':
+            mode_name -= '.npy'
         array = np.load(mode_name+'.npy')
         return self.E_modes_from_array(array, mesh=mesh, p=p)
 
