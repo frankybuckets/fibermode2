@@ -21,11 +21,12 @@ class ARF2(ModeSolver):
 
     def __init__(self, name=None, refine=0, curve=3, e=None,
                  poly_core=False, shift_capillaries=False,
-                 outer_materials=None, fill=None):
+                 outer_materials=None, fill=None, T_cladding=10):
 
         # Set and check the fiber parameters.
         self.set_parameters(name=name, shift_capillaries=shift_capillaries,
-                            e=e, outer_materials=outer_materials)
+                            e=e, outer_materials=outer_materials,
+                            T_cladding=T_cladding)
         self.check_parameters()
 
         if self.name == 'original':  # Override for original fiber
@@ -41,7 +42,7 @@ class ARF2(ModeSolver):
         super().__init__(self.mesh, self.scale, self.n0)
 
     def set_parameters(self, name=None, e=None, shift_capillaries=False,
-                       outer_materials=None):
+                       outer_materials=None, T_cladding=10):
         """
         Set fiber parameters.
         """
@@ -62,7 +63,7 @@ class ARF2(ModeSolver):
             self.R_tube = 12.48 / scaling
             self.T_tube = .42 / scaling
 
-            self.T_cladding = 10 / scaling
+            self.T_cladding = T_cladding / scaling
             self.T_outer = 30 / scaling
             self.T_buffer = 10 / scaling
 
@@ -154,7 +155,7 @@ class ARF2(ModeSolver):
             self.R_tube = 12.06 / scaling
             self.T_tube = .84 / scaling
 
-            self.T_cladding = 10 / scaling
+            self.T_cladding = T_cladding / scaling
             self.T_outer = 30 / scaling
             self.T_buffer = 10 / scaling
             self.T_soft_polymer = 30 / scaling
@@ -243,7 +244,7 @@ class ARF2(ModeSolver):
             self.R_tube = 12.48 / scaling
             self.T_tube = .42 / scaling
 
-            self.T_cladding = 10 / scaling
+            self.T_cladding = T_cladding / scaling
             self.T_outer = 30 / scaling
             self.T_buffer = 10 / scaling
             self.T_soft_polymer = 30 / scaling
