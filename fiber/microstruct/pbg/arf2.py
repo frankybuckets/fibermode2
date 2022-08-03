@@ -294,7 +294,7 @@ class ARF2(ModeSolver):
                     {'material': 'buffer',
                      'n': self.n_buffer,
                      'T': self.T_buffer,
-                     'maxh': .5},
+                     'maxh': .1},
 
                     {'material': 'Outer',
                      'n': self.n0,
