@@ -21,12 +21,13 @@ class ARF2(ModeSolver):
 
     def __init__(self, name=None, refine=0, curve=3, e=None,
                  poly_core=False, shift_capillaries=False,
-                 outer_materials=None, fill=None, T_cladding=10):
+                 outer_materials=None, fill=None, T_cladding=10,
+                 wl=1.8e-6):
 
         # Set and check the fiber parameters.
         self.set_parameters(name=name, shift_capillaries=shift_capillaries,
                             e=e, outer_materials=outer_materials,
-                            T_cladding=T_cladding)
+                            T_cladding=T_cladding, wl=wl)
         self.check_parameters()
 
         if self.name == 'original':  # Override for original fiber
@@ -42,7 +43,7 @@ class ARF2(ModeSolver):
         super().__init__(self.mesh, self.scale, self.n0)
 
     def set_parameters(self, name=None, e=None, shift_capillaries=False,
-                       outer_materials=None, T_cladding=10):
+                       outer_materials=None, T_cladding=10, wl=1.8e-6):
         """
         Set fiber parameters.
         """
@@ -138,7 +139,7 @@ class ARF2(ModeSolver):
                      'maxh': 4}
                 ]
 
-            self.wavelength = 1.8e-6
+            self.wavelength = wl
 
         elif self.name == 'basic':
 
@@ -227,7 +228,7 @@ class ARF2(ModeSolver):
                      'maxh': 4}
                 ]
 
-            self.wavelength = 1.8e-6
+            self.wavelength = wl
 
         elif self.name == 'fine_cladding':
 
@@ -316,7 +317,7 @@ class ARF2(ModeSolver):
             self.core_maxh = .25
             self.glass_maxh = 0.05
 
-            self.wavelength = 1.8e-6
+            self.wavelength = wl
 
         else:
             err_str = 'Fiber \'{:s}\' not implemented.'.format(self.name)
