@@ -190,8 +190,8 @@ class ARF2(ModeSolver):
             self.n_buffer = self.n_air
             self.n0 = self.n_air
 
-            self.inner_air_maxh = .2
-            self.fill_air_maxh = .35
+            self.inner_air_maxh = .15
+            self.fill_air_maxh = .25
             self.tube_maxh = .11
             self.cladding_maxh = .25
 
@@ -201,8 +201,8 @@ class ARF2(ModeSolver):
             self.outer_cladding_edge_maxh = .25
             self.fill_edge_maxh = .11
 
-            self.core_maxh = .25
-            self.glass_maxh = 0.04
+            self.core_maxh = .2
+            self.glass_maxh = 0.03
 
             if outer_materials is not None:
                 self.outer_materials = outer_materials
