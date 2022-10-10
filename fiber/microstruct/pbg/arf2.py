@@ -12,6 +12,7 @@ import pickle
 from netgen.geom2d import SplineGeometry
 from fiberamp.fiber.modesolver import ModeSolver
 from pyeigfeast.spectralproj.ngs.spectralprojngs import NGvecs
+from fiberamp.fiber import sellmeier
 
 
 class ARF2(ModeSolver):
@@ -89,7 +90,8 @@ class ARF2(ModeSolver):
                 self.core_factor = .75
                 self.R_core = self.core_factor
 
-            self.n_glass = 1.4388164768221814
+            self.wavelength = wl
+            self.n_glass = sellmeier.index(wl, material='FusedSilica')
             self.n_air = 1.00027717
 
             # self.n_soft_polymer = 1.44
@@ -139,8 +141,6 @@ class ARF2(ModeSolver):
                      'maxh': 4}
                 ]
 
-            self.wavelength = wl
-
         elif self.name == 'kolyadin':
 
             self.n_tubes = 8
@@ -181,7 +181,8 @@ class ARF2(ModeSolver):
                 self.core_factor = .75
                 self.R_core = self.core_factor
 
-            self.n_glass = 1.4388164768221814
+            self.wavelength = wl
+            self.n_glass = sellmeier.index(wl, material='FusedSilica')
             self.n_air = 1.00027717
 
             # self.n_soft_polymer = 1.44
@@ -230,8 +231,6 @@ class ARF2(ModeSolver):
                      'T': self.T_outer,
                      'maxh': .4}
                 ]
-
-            self.wavelength = wl
 
         elif self.name == 'basic':
 
