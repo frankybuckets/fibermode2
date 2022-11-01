@@ -6,9 +6,12 @@ Created on Sun Jan 16 18:48:03 2022
 @author: pv
 
 """
-import netgen.geom2d as geom2d
-from ngsolve import Mesh, CoefficientFunction
 import numpy as np
+import netgen.geom2d as geom2d
+import ngsolve as ng
+import pickle
+
+from pyeigfeast.spectralproj.ngs import NGvecs
 from fiberamp.fiber import ModeSolver
 from opticalmaterialspy import Air, SiO2
 
@@ -50,7 +53,7 @@ class Bragg(ModeSolver):
         """
         Create mesh from geometry.
         """
-        self.mesh = Mesh(self.geo.GenerateMesh())
+        self.mesh = ng.Mesh(self.geo.GenerateMesh())
 
         self.refinements = 0
         for i in range(ref):
@@ -58,7 +61,7 @@ class Bragg(ModeSolver):
 
         self.refinements += ref
         self.mesh.ngmesh.SetGeometry(self.geo)
-        self.mesh = Mesh(self.mesh.ngmesh.Copy())
+        self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
         self.mesh.Curve(curve)
 
     def create_geometry(self):
@@ -83,7 +86,75 @@ class Bragg(ModeSolver):
         self.k = 2 * np.pi / self.wavelength
         self.refractive_indices = [self.ns[i](
             self.wavelength) for i in range(len(self.ns))]
-        self.index = CoefficientFunction(self.refractive_indices)
+        self.index = ng.CoefficientFunction(self.refractive_indices)
         self.n0 = self.refractive_indices[-1]
 
         self.V = (self.L * self.k)**2 * (self.n0 ** 2 - self.index ** 2)
+
+    def E_modes_from_array(self, array, p=1, mesh=None):
+        """Create NGvec object containing modes and set data given by array."""
+        if mesh is None:
+            mesh = self.mesh
+        X = ng.HCurl(mesh, order=p+1-max(1-p, 0), type1=True,
+                     dirichlet='OuterCircle', complex=True)
+        m = array.shape[1]
+        E = NGvecs(X, m)
+        try:
+            E.fromnumpy(array)
+        except ValueError:
+            raise ValueError("Array is wrong length: make sure your mesh is\
+ constructed the same as for input array and that polynomial degree correspond\
+ing to array has been passed as keyword p.")
+        return E
+
+    def phi_modes_from_array(self, array, p=1, mesh=None):
+        """Create NGvec object containing modes and set data given by array."""
+        if mesh is None:
+            mesh = self.mesh
+        Y = ng.H1(mesh, order=p+1, dirichlet='OuterCircle', complex=True)
+        m = array.shape[1]
+        phi = NGvecs(Y, m)
+        try:
+            phi.fromnumpy(array)
+        except ValueError:
+            raise ValueError("Array is wrong length: make sure your mesh is\
+ constructed the same as for input array and that polynomial degree correspond\
+ing to array has been passed as keyword p.")
+        return phi
+
+    # SAVE & LOAD #####################################################
+
+    def save_mesh(self, name):
+        """ Save mesh using pickle (allows for mesh curvature). """
+        if name[-4:] != '.pkl':
+            name += '.pkl'
+        with open(name, 'wb') as f:
+            pickle.dump(self.mesh, f)
+
+    def save_modes(self, modes, name):
+        """Save modes as numpy arrays."""
+        if name[-4:] == '.npy':
+            name -= '.npy'
+        np.save(name, modes.tonumpy())
+
+    def load_mesh(self, name):
+        """ Load a saved ARF mesh."""
+        if name[-4:] != '.pkl':
+            name += '.pkl'
+        with open(name, 'rb') as f:
+            pmesh = pickle.load(f)
+        return pmesh
+
+    def load_E_modes(self, mesh_name, mode_name, p=8):
+        """Load transverse vectore E modes and associated mesh"""
+        mesh = self.load_mesh(mesh_name)
+        if mode_name[-4:] == '.npy':
+            mode_name -= '.npy'
+        array = np.load(mode_name+'.npy')
+        return self.E_modes_from_array(array, mesh=mesh, p=p)
+
+    def load_phi_modes(self, mesh_name, mode_name, p=8):
+        """Load transverse vectore E modes and associated mesh"""
+        mesh = self.load_mesh(mesh_name)
+        array = np.load(mode_name+'.npy')
+        return self.phi_modes_from_array(array, mesh=mesh, p=p)
