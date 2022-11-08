@@ -10,7 +10,7 @@ import numpy as np
 import netgen.geom2d as geom2d
 import ngsolve as ng
 
-from ngsolve import x, y, cos, sin, CF
+from ngsolve import x, y, exp, CF
 from opticalmaterialspy import Air, SiO2
 
 from scipy.special import jv, jvp, h1vp, h2vp, yv, yvp
@@ -107,12 +107,11 @@ class BraggExact():
 
         X, Y = K1*rho,  K2*rho
 
+        expr = (1 / Y - Y / X**2)
+
         F1 = (K2 * n1 ** 2) / (K1 * n2 ** 2)
-
-        F2 = nu * beta / (k0 * n2 ** 2) * (Y/X**2 - 1/Y)
-
-        F3 = nu * beta / k0 * (Y/X**2 - 1/Y)
-
+        F2 = nu * beta / (k0 * n2 ** 2)
+        F3 = nu * beta / k0
         F4 = K2 / K1
 
         Ymat = np.zeros_like(M)
@@ -132,29 +131,41 @@ class BraggExact():
 
         M[..., 0, :] = np.array([(z1(nu, X) * z2p(nu, Y) -
                                   F1 * z1p(nu, X) * z2(nu, Y)).T,
+
                                  (z2(nu, X) * z2p(nu, Y) -
                                  F1 * z2p(nu, X) * z2(nu, Y)).T,
-                                 (-F2 * z1(nu, X) * z2(nu, Y)).T,
-                                 (-F2 * z2(nu, X) * z2(nu, Y)).T]).T
+
+                                 (1j*F2 * z1(nu, X) * z2(nu, Y)*expr).T,
+
+                                 (1j*F2 * z2(nu, X) * z2(nu, Y)*expr).T]).T
 
         M[..., 1, :] = np.array([(F1 * z1p(nu, X) * z1(nu, Y) -
                                 z1(nu, X) * z1p(nu, Y)).T,
+
                                  (F1 * z2p(nu, X) * z1(nu, Y) -
                                 z2(nu, X) * z1p(nu, Y)).T,
-                                 (F2 * z1(nu, X) * z1(nu, Y)).T,
-                                 (F2 * z2(nu, X) * z1(nu, Y)).T]).T
 
-        M[..., 2, :] = np.array([(-F3 * z1(nu, X) * z2(nu, Y)).T,
-                                 (-F3 * z2(nu, X) * z2(nu, Y)).T,
+                                 (-1j*F2 * z1(nu, X) * z1(nu, Y)*expr).T,
+
+                                 (-1j*F2 * z2(nu, X) * z1(nu, Y)*expr).T]).T
+
+        M[..., 2, :] = np.array([(-1j * F3 * z1(nu, X) * z2(nu, Y) * expr).T,
+
+                                 (-1j * F3 * z2(nu, X) * z2(nu, Y) * expr).T,
+
                                  (z1(nu, X) * z2p(nu, Y) - F4 *
                                  z1p(nu, X) * z2(nu, Y)).T,
+
                                  (z2(nu, X) * z2p(nu, Y) - F4 *
                                   z2p(nu, X) * z2(nu, Y)).T]).T
 
-        M[..., 3, :] = np.array([(F3 * z1(nu, X) * z1(nu, Y)).T,
-                                 (F3 * z2(nu, X) * z1(nu, Y)).T,
+        M[..., 3, :] = np.array([(1j * F3 * z1(nu, X) * z1(nu, Y) * expr).T,
+
+                                 (1j * F3 * z2(nu, X) * z1(nu, Y) * expr).T,
+
                                  (F4 * z1p(nu, X) * z1(nu, Y) -
                                  z1(nu, X) * z1p(nu, Y)).T,
+
                                  (F4 * z2p(nu, X) * z1(nu, Y) -
                                  z2(nu, X) * z1p(nu, Y)).T]).T
 
@@ -196,15 +207,15 @@ class BraggExact():
 
         L[..., 1, :] = np.array([(k0 * n**2 / (beta * K) * z1p(nu, K * rho)).T,
                                  (k0 * n**2 / (beta * K) * z2p(nu, K * rho)).T,
-                                 (nu / (K**2 * rho) * z1(nu, K * rho)).T,
-                                 (nu / (K**2 * rho) * z2(nu, K * rho)).T]).T
+                                 (1j*nu / (K**2 * rho) * z1(nu, K * rho)).T,
+                                 (1j*nu / (K**2 * rho) * z2(nu, K * rho)).T]).T
 
         L[..., 2, :] = np.array([Z, Z, z1(nu, K * rho).T, z2(nu, K * rho).T]).T
 
-        L[..., 3, :] = np.array([(nu / (K**2 * rho) * z1(nu, K * rho)).T,
-                                 (nu / (K**2 * rho) * z2(nu, K * rho)).T,
-                                 (k0 / (beta * K) * z1p(nu, K * rho)).T,
-                                 (k0 / (beta * K) * z2p(nu, K * rho)).T]).T
+        L[..., 3, :] = np.array([(1j*nu / (K**2 * rho) * z1(nu, K * rho)).T,
+                                 (1j*nu / (K**2 * rho) * z2(nu, K * rho)).T,
+                                 (-k0 / (beta * K) * z1p(nu, K * rho)).T,
+                                 (-k0 / (beta * K) * z2p(nu, K * rho)).T]).T
 
         return L
 
@@ -242,23 +253,23 @@ class BraggExact():
 
         L[..., 0, :] = np.array([z2p(nu, X).T,
                                  (-F1 * z2(nu, X)).T,
-                                 (F2 * z2(nu, X)).T,
+                                 (1j * F2 * z2(nu, X)).T,
                                  Z]).T
 
         L[..., 1, :] = np.array([(-z1p(nu, X)).T,
                                  (F1 * z1(nu, X)).T,
-                                 (-F2 * z1(nu, X)).T,
+                                 (-1j * F2 * z1(nu, X)).T,
                                  Z]).T
 
-        L[..., 2, :] = np.array([(F3 * z2(nu, X)).T,
+        L[..., 2, :] = np.array([(-1j * F3 * z2(nu, X)).T,
                                  Z,
                                  z2p(nu, X).T,
-                                 (-F4 * z2(nu, X)).T]).T
+                                 (F4 * z2(nu, X)).T]).T
 
-        L[..., 3, :] = np.array([(-F3 * z1(nu, X)).T,
+        L[..., 3, :] = np.array([(-1j * F3 * z1(nu, X)).T,
                                  Z,
                                  -z1p(nu, X).T,
-                                 (F4 * z1(nu, X)).T]).T
+                                 (-F4 * z1(nu, X)).T]).T
 
         L[..., :, :] = np.pi * X / 2 * L[..., :, :]
 
@@ -266,6 +277,10 @@ class BraggExact():
 
     def determinant(self, beta, nu=1, outer='h2', return_coeffs=False,
                     return_matrix=False):
+        """Return determinant of matching matrix.
+
+        Provided beta should be scaled.  This zeros of this functions are the
+        propagation constants for the fiber."""
 
         if return_coeffs and return_matrix:
             raise ValueError("Only one of return_matrix and return_coeffs\
@@ -299,17 +314,17 @@ class BraggExact():
         a, b, e, f = L[..., 0, 0], L[..., 0, 1], L[..., 1, 0], L[..., 1, 1]
         c, d, g, h = L[..., 2, 0], L[..., 2, 1], L[..., 3, 0], L[..., 3, 1]
 
-        alpha, beta = R[..., 0, 0], R[..., 2, 1]
+        alpha, Beta = R[..., 0, 0], R[..., 2, 1]
         gamma, delta = R[..., 1, 0], R[..., 1, 1]
         epsilon, sigma = R[..., 3, 0], R[..., 3, 1]
 
-        A = e - (a/alpha * gamma + c/beta * delta)
-        B = f - (b/alpha * gamma + d/beta * delta)
-        C = g - (a/alpha * epsilon + c/beta * sigma)
-        D = h - (b/alpha * epsilon + d/beta * sigma)
+        A = e - (a/alpha * gamma + c/Beta * delta)
+        B = f - (b/alpha * gamma + d/Beta * delta)
+        C = g - (a/alpha * epsilon + c/Beta * sigma)
+        D = h - (b/alpha * epsilon + d/Beta * sigma)
 
         if return_coeffs:
-            return A, B, C, D, a, b, c, d, alpha, beta
+            return A, B, C, D, a, b, c, d, alpha, Beta
         else:
             if return_matrix:
                 M = np.zeros(beta.shape + (4, 4), dtype=complex)
@@ -320,11 +335,34 @@ class BraggExact():
                 return C * B - A * D
 
     def coefficients(self, beta, nu=1, outer='h2'):
+        """Return coefficients for fields of bragg fiber.
+
+        Returns an array where each row gives the coeffiencts of the fields
+        in the associated region of the fiber."""
 
         A, B, C, D, a, b, c, d, \
             alpha, Beta = self.determinant(beta, nu, outer,
                                            return_coeffs=True)
-        v1, v2 = B, -A
+
+        # A, B, or C,D can be used to make v1,v2 for core, but if mode
+        # is transverse one of thes pairs is zero, below we account for this
+        Vs = np.array([A, B, C, D])
+        Vn = ((Vs*Vs.conj()).real) ** .5
+
+        if max(Vn) < 1e-13:  # Check that not all are too small
+            raise ValueError("Error in coefficients: small matrix elements\
+ are all too small.")
+
+        imax = np.argmax(Vn)
+
+        if imax in [0, 1]:
+            print("Using A,B")
+            v1, v2 = B, -A  # If C,D too small, assign with B,A
+
+        else:
+            print("using C, D")
+            v1, v2 = D, -C  # Otherwise use C and D
+
         v = np.array([v1, v2])
 
         w1, w2 = (a*v1 + b*v2) / alpha, (c*v1 + d*v2) / Beta
@@ -355,10 +393,17 @@ class BraggExact():
 
         M[-1, inds] = w1, w2
 
-        return 1 / v1 * M  # Normalize so Ez coeff in core is 1
+        if nu > 0:  # Hybrid, Ez non zero in core
+            return 1 / v1 * M  # Normalize so Ez coeff in core is 1
+
+        else:  # TE or TM,
+            # Find non-zero coefficient (either for Ez or Hz) and use to scale
+            vscale = v[np.argmax((v*v.conj()).real)]
+            return 1/vscale * M
 
     def regional_fields(self, beta, coeffs, index, nu=1, outer='h2',
                         zfunc='bessel'):
+        """Create fields on one region of the fiber."""
 
         A, B, C, D = coeffs[:]
 
@@ -378,13 +423,15 @@ class BraggExact():
         else:
             raise TypeError("zfunc must be 'bessel' or 'hankel'.")
 
-        Ez = (A * Z1(K*r, nu) + B * Z2(K*r, nu)) * cos(nu * theta)
-        dEzdr = K * (A * Z1p(K*r, nu) + B * Z2p(K*r, nu)) * cos(nu * theta)
-        dEzdt = -nu * (A * Z1(K*r, nu) + B * Z2(K*r, nu)) * sin(nu * theta)
+        einu = exp(1j * nu * theta)
 
-        Hz = (C * Z1(K*r, nu) + D * Z2(K*r, nu)) * sin(nu * theta)
-        dHzdr = K * (C * Z1p(K*r, nu) + D * Z2p(K*r, nu)) * sin(nu * theta)
-        dHzdt = nu * (C * Z1(K*r, nu) + D * Z2(K*r, nu)) * cos(nu * theta)
+        Ez = (A * Z1(K*r, nu) + B * Z2(K*r, nu)) * einu
+        dEzdr = K * (A * Z1p(K*r, nu) + B * Z2p(K*r, nu)) * einu
+        dEzdt = 1j * nu * Ez
+
+        Hz = (C * Z1(K*r, nu) + D * Z2(K*r, nu)) * einu
+        dHzdr = K * (C * Z1p(K*r, nu) + D * Z2p(K*r, nu)) * einu
+        dHzdt = 1j * nu * Hz
 
         Er = F * (dEzdr + k0 / (beta * r) * dHzdt)
         Ephi = F * (1 / r * dEzdt - k0 / beta * dHzdr)
@@ -402,6 +449,7 @@ class BraggExact():
                 'Hphi': Hphi,  'Ex': Ex, 'Ey': Ey, 'Hx': Hx, 'Hy': Hy}
 
     def all_fields(self, beta, nu=1, outer='h2'):
+        """Create total fields for fiber from regional fields."""
         M = self.coefficients(beta, nu, outer)
 
         Ez, Hz = [], []
