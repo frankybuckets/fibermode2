@@ -36,7 +36,11 @@ class BraggExact():
                  maxhs=[.4, .1, .1, .1],
                  wl=1.8e-6, ref=0, curve=8):
 
+        # Check inputs for errors
+        self.check_parameters(ts, ns, mats, maxhs)
+
         self.scale = scale
+        self.L = scale
         self.ts = np.array(ts)
         self.mats = mats
         self.rhos = np.array([sum(ts[:i]) for i in range(1, len(ts)+1)])
@@ -44,12 +48,38 @@ class BraggExact():
 
         self.wavelength = wl
         self.k0 = 2 * np.pi / self.wavelength
+
+        self.n_funcs = ns
         self.ns = np.array([ns[i](wl) for i in range(len(ns))])
         self.ks = self.k0 * self.ns
 
         # Create geometry
         self.create_geometry()
         self.create_mesh(ref=ref, curve=curve)
+
+    def check_parameters(self, ts, ns, mats, maxhs):
+
+        # Check that all relevant inputs have same length
+        lengths = [len(ts), len(ns), len(mats), len(maxhs)]
+        lengths = np.array(lengths)
+        names = ['ts', 'ns', 'mats', 'maxhs']
+
+        same = all(x == lengths[0] for x in lengths)
+
+        if not same:
+            string = "Provided parameters not of same length: \n\n"
+            for name, length in zip(names, lengths):
+                string += name + ': ' + str(length) + '\n'
+            raise ValueError(string + "\nModify above inputs as necessary and \
+try again.")
+
+        all_callable = all(callable(ns[i]) for i in range(len(ns)))
+
+        if not all_callable:
+            raise ValueError("One of the provided ns is not callable.  \
+Refractive indices in this class should be provided as callables to allow for \
+dependence on wavelength.  If not desiring this dependence, provide fixed n \
+as a lambda function: lambda x: n.")
 
     def create_mesh(self, ref=0, curve=8):
         """
@@ -356,11 +386,9 @@ class BraggExact():
         imax = np.argmax(Vn)
 
         if imax in [0, 1]:
-            print("Using A,B")
             v1, v2 = B, -A  # If C,D too small, assign with B,A
 
         else:
-            print("using C, D")
             v1, v2 = D, -C  # Otherwise use C and D
 
         v = np.array([v1, v2])

@@ -31,7 +31,11 @@ class Bragg(ModeSolver):
                  maxhs=[.4, .1, .1, .1],
                  wl=1.8e-6, ref=0, curve=8):
 
+        # Check inputs for errors
+        self.check_parameters(ts, ns, mats, maxhs)
+
         self.L = scale
+        self.scale = scale
         self.ts = ts
         self.mats = mats
         self.Ts = np.array(ts) / scale
@@ -48,6 +52,30 @@ class Bragg(ModeSolver):
         self.set_material_properties()
 
         super(Bragg, self).__init__(self.mesh, self.L, self.n0)
+
+    def check_parameters(self, ts, ns, mats, maxhs):
+
+        # Check that all relevant inputs have same length
+        lengths = [len(ts), len(ns), len(mats), len(maxhs)]
+        lengths = np.array(lengths)
+        names = ['ts', 'ns', 'mats', 'maxhs']
+
+        same = all(x == lengths[0] for x in lengths)
+
+        if not same:
+            string = "Provided parameters not of same length: \n\n"
+            for name, length in zip(names, lengths):
+                string += name + ': ' + str(length) + '\n'
+            raise ValueError(string + "\nModify above inputs as necessary and \
+try again.")
+
+        all_callable = all(callable(ns[i]) for i in range(len(ns)))
+
+        if not all_callable:
+            raise ValueError("One of the provided ns is not callable.  \
+Refractive indices in this class should be provided as callables to allow for \
+dependence on wavelength.  If not desiring this dependence, provide fixed n \
+as a lambda function: lambda x: n.")
 
     def create_mesh(self, ref=0, curve=8):
         """
