@@ -114,10 +114,11 @@ as a lambda function: lambda x: n.")
         self.k = 2 * np.pi / self.wavelength
         self.refractive_indices = [self.ns[i](
             self.wavelength) for i in range(len(self.ns))]
-        self.index = ng.CoefficientFunction(self.refractive_indices)
+        self.index = ng.CF(self.refractive_indices)
         self.n0 = self.refractive_indices[-1]
 
-        self.V = (self.L * self.k)**2 * (self.n0 ** 2 - self.index ** 2)
+        n0sq = ng.CF([self.n0**2 for i in range(len(self.ns))])
+        self.V = (self.L * self.k)**2 * (n0sq - self.index ** 2)
 
     def E_modes_from_array(self, array, p=1, mesh=None):
         """Create NGvec object containing modes and set data given by array."""

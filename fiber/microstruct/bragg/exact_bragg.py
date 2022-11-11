@@ -316,6 +316,9 @@ as a lambda function: lambda x: n.")
             raise ValueError("Only one of return_matrix and return_coeffs\
  can be set to True")
 
+        if outer not in ['h1', 'h2', 'pcb']:
+            raise ValueError("Outer must be either 'h1', 'h2' or 'pcb'.")
+
         beta = np.array(beta, dtype=np.complex128)
 
         rhos = self.rhos
@@ -323,46 +326,67 @@ as a lambda function: lambda x: n.")
         L = np.zeros(beta.shape + (4, 2), dtype=complex)
         L[..., :, :] = np.eye(4)[:, [0, 2]]  # pick J columns for core
 
-        for i in range(len(rhos)-2):
-            nl, nr = ns[i], ns[i+1]
-            rho = rhos[i]
-            L = self.transfer_matrix(beta, nu, rho, nl, nr) @ L
+        if outer != 'pcb':
+            for i in range(len(rhos)-2):
+                nl, nr = ns[i], ns[i+1]
+                rho = rhos[i]
+                L = self.transfer_matrix(beta, nu, rho, nl, nr) @ L
 
-        L = self.state_matrix(beta, nu, rhos[-2], ns[-2]) @ L
+            L = self.state_matrix(beta, nu, rhos[-2], ns[-2]) @ L
 
-        if outer == 'h2':
-            inds = [1, 3]
-        elif outer == 'h1':
-            inds = [0, 2]
-        else:
-            raise TypeError("Outer function must be 'h1' (guided) or 'h2'\
- (leaky).")
-
-        R = self.state_matrix(beta, nu, rhos[-2],
-                              ns[-1], zfunc='hankel')[..., inds]
-
-        a, b, e, f = L[..., 0, 0], L[..., 0, 1], L[..., 1, 0], L[..., 1, 1]
-        c, d, g, h = L[..., 2, 0], L[..., 2, 1], L[..., 3, 0], L[..., 3, 1]
-
-        alpha, Beta = R[..., 0, 0], R[..., 2, 1]
-        gamma, delta = R[..., 1, 0], R[..., 1, 1]
-        epsilon, sigma = R[..., 3, 0], R[..., 3, 1]
-
-        A = e - (a/alpha * gamma + c/Beta * delta)
-        B = f - (b/alpha * gamma + d/Beta * delta)
-        C = g - (a/alpha * epsilon + c/Beta * sigma)
-        D = h - (b/alpha * epsilon + d/Beta * sigma)
-
-        if return_coeffs:
-            return A, B, C, D, a, b, c, d, alpha, Beta
-        else:
-            if return_matrix:
-                M = np.zeros(beta.shape + (4, 4), dtype=complex)
-                M[..., : 2] = L
-                M[..., 2:] = R
-                return M
+            if outer == 'h2':
+                inds = [1, 3]
+            elif outer == 'h1':
+                inds = [0, 2]
             else:
-                return C * B - A * D
+                raise TypeError("Outer function must be 'h1' (guided) or 'h2'\
+     (leaky).")
+
+            R = self.state_matrix(beta, nu, rhos[-2],
+                                  ns[-1], zfunc='hankel')[..., inds]
+
+            a, b, e, f = L[..., 0, 0], L[..., 0, 1], L[..., 1, 0], L[..., 1, 1]
+            c, d, g, h = L[..., 2, 0], L[..., 2, 1], L[..., 3, 0], L[..., 3, 1]
+
+            alpha, Beta = R[..., 0, 0], R[..., 2, 1]
+            gamma, delta = R[..., 1, 0], R[..., 1, 1]
+            epsilon, sigma = R[..., 3, 0], R[..., 3, 1]
+
+            A = e - (a/alpha * gamma + c/Beta * delta)
+            B = f - (b/alpha * gamma + d/Beta * delta)
+            C = g - (a/alpha * epsilon + c/Beta * sigma)
+            D = h - (b/alpha * epsilon + d/Beta * sigma)
+
+            if return_coeffs:
+                return A, B, C, D, a, b, c, d, alpha, Beta
+            else:
+                if return_matrix:
+                    M = np.zeros(beta.shape + (4, 4), dtype=complex)
+                    M[..., : 2] = L
+                    M[..., 2:] = R
+                    return M
+                else:
+                    return C * B - A * D
+        else:
+            for i in range(len(rhos)-1):
+                nl, nr = ns[i], ns[i+1]
+                rho = rhos[i]
+                L = self.transfer_matrix(beta, nu, rho, nl, nr) @ L
+
+            L = self.state_matrix(beta, nu, rhos[-1], ns[-1]) @ L
+            R = np.zeros(beta.shape + (2, 4), dtype=complex)
+            R[..., :, :] = np.eye(4)[[0, 3], :]
+            L = R @ L
+
+            A, B, C, D = L[..., 0, 0], L[..., 0, 1], L[..., 1, 0], L[..., 1, 1]
+
+            if return_coeffs:
+                return A, B, C, D
+            else:
+                if return_matrix:
+                    return L, R
+                else:
+                    return A * D - B * C
 
     def coefficients(self, beta, nu=1, outer='h2'):
         """Return coefficients for fields of bragg fiber.
@@ -370,64 +394,113 @@ as a lambda function: lambda x: n.")
         Returns an array where each row gives the coeffiencts of the fields
         in the associated region of the fiber."""
 
-        A, B, C, D, a, b, c, d, \
-            alpha, Beta = self.determinant(beta, nu, outer,
-                                           return_coeffs=True)
+        if outer not in ['h1', 'h2', 'pcb']:
+            raise ValueError("Outer must be either 'h1', 'h2' or 'pcb'.")
+        if outer != 'pcb':
 
-        # A, B, or C,D can be used to make v1,v2 for core, but if mode
-        # is transverse one of thes pairs is zero, below we account for this
-        Vs = np.array([A, B, C, D])
-        Vn = ((Vs*Vs.conj()).real) ** .5
+            A, B, C, D, a, b, c, d, \
+                alpha, Beta = self.determinant(beta, nu, outer,
+                                               return_coeffs=True)
 
-        if max(Vn) < 1e-13:  # Check that not all are too small
-            raise ValueError("Error in coefficients: small matrix elements\
- are all too small.")
+            # A, B, or C,D can be used to make v1,v2 for core, but if mode
+            # is transverse one of thes pairs is zero, here we account for this
+            Vs = np.array([A, B, C, D])
+            Vn = ((Vs*Vs.conj()).real) ** .5
 
-        imax = np.argmax(Vn)
+            if max(Vn) < 1e-13:  # Check that not all are too small
+                raise ValueError("Error in coefficients: small matrix elements\
+     are all too small.")
 
-        if imax in [0, 1]:
-            v1, v2 = B, -A  # If C,D too small, assign with B,A
+            imax = np.argmax(Vn)
 
+            if imax in [0, 1]:
+                v1, v2 = B, -A  # If C,D too small, assign with B,A
+
+            else:
+                v1, v2 = D, -C  # Otherwise use C and D
+
+            v = np.array([v1, v2])
+
+            w1, w2 = (a*v1 + b*v2) / alpha, (c*v1 + d*v2) / Beta
+
+            rhos = self.rhos
+            ns = self.ns
+
+            M = np.zeros((len(self.rhos), 4), dtype=complex)
+            L = np.zeros((4, 2), dtype=complex)
+
+            L[:, :] = np.eye(4)[:, [0, 2]]
+            L = L @ v
+            M[0, :] = L
+
+            for i in range(len(rhos)-2):
+                nl, nr = ns[i], ns[i+1]
+                rho = rhos[i]
+                L = self.transfer_matrix(beta, nu, rho, nl, nr) @ L
+                M[i+1, :] = L
+
+            if outer == 'h2':
+                inds = [1, 3]
+            elif outer == 'h1':
+                inds = [0, 2]
+            else:
+                raise TypeError("Outer function must be 'h1' (guided) or 'h2'\
+         (leaky).")
+
+            M[-1, inds] = w1, w2
+
+            if nu > 0:  # Hybrid, Ez non zero in core
+                return 1 / v1 * M  # Normalize so Ez coeff in core is 1
+
+            else:  # TE or TM,
+                # Find non-zero coefficient (either Ez or Hz) and use to scale
+                vscale = v[np.argmax((v*v.conj()).real)]
+                return 1/vscale * M
         else:
-            v1, v2 = D, -C  # Otherwise use C and D
+            A, B, C, D = self.determinant(beta, nu, outer, return_coeffs=True)
 
-        v = np.array([v1, v2])
+            # A, B, or C,D can be used to make v1,v2 for core, but if mode
+            # is transverse one of thes pairs is zero, here we account for this
+            Vs = np.array([A, B, C, D])
+            Vn = ((Vs*Vs.conj()).real) ** .5
 
-        w1, w2 = (a*v1 + b*v2) / alpha, (c*v1 + d*v2) / Beta
+            if max(Vn) < 1e-13:  # Check that not all are too small
+                raise ValueError("Error in coefficients: small matrix elements\
+       are all too small.")
 
-        rhos = self.rhos
-        ns = self.ns
+            imax = np.argmax(Vn)
 
-        M = np.zeros((len(self.rhos), 4), dtype=complex)
-        L = np.zeros((4, 2), dtype=complex)
+            if imax in [0, 1]:
+                v1, v2 = B, -A  # If C,D too small, assign with B,A
 
-        L[:, :] = np.eye(4)[:, [0, 2]]
-        L = L @ v
-        M[0, :] = L
+            else:
+                v1, v2 = D, -C  # Otherwise use C and D
 
-        for i in range(len(rhos)-2):
-            nl, nr = ns[i], ns[i+1]
-            rho = rhos[i]
-            L = self.transfer_matrix(beta, nu, rho, nl, nr) @ L
-            M[i+1, :] = L
+            v = np.array([v1, v2])
 
-        if outer == 'h2':
-            inds = [1, 3]
-        elif outer == 'h1':
-            inds = [0, 2]
-        else:
-            raise TypeError("Outer function must be 'h1' (guided) or 'h2'\
-     (leaky).")
+            rhos = self.rhos
+            ns = self.ns
 
-        M[-1, inds] = w1, w2
+            M = np.zeros((len(self.rhos), 4), dtype=complex)
+            L = np.zeros((4, 2), dtype=complex)
 
-        if nu > 0:  # Hybrid, Ez non zero in core
-            return 1 / v1 * M  # Normalize so Ez coeff in core is 1
+            L[:, :] = np.eye(4)[:, [0, 2]]
+            L = L @ v
+            M[0, :] = L
 
-        else:  # TE or TM,
-            # Find non-zero coefficient (either for Ez or Hz) and use to scale
-            vscale = v[np.argmax((v*v.conj()).real)]
-            return 1/vscale * M
+            for i in range(len(rhos)-1):
+                nl, nr = ns[i], ns[i+1]
+                rho = rhos[i]
+                L = self.transfer_matrix(beta, nu, rho, nl, nr) @ L
+                M[i+1, :] = L
+
+            if nu > 0:  # Hybrid, Ez non zero in core
+                return 1 / v1 * M  # Normalize so Ez coeff in core is 1
+
+            else:  # TE or TM,
+                # Find non-zero coefficient (either Ez or Hz) and use to scale
+                vscale = v[np.argmax((v*v.conj()).real)]
+                return 1/vscale * M
 
     def regional_fields(self, beta, coeffs, index, nu=1, outer='h2',
                         zfunc='bessel'):
@@ -487,7 +560,7 @@ as a lambda function: lambda x: n.")
 
         for i in range(len(self.ns)):
             coeffs = M[i]
-            if i == len(self.ns) - 1:
+            if i == len(self.ns) - 1 and outer != 'pcb':
                 zfunc = 'hankel'
             else:
                 zfunc = 'bessel'
