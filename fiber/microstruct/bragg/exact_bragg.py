@@ -33,7 +33,7 @@ class BraggExact():
     def __init__(self, scale=15e-6, ts=[15e-6, 15*.5e-6, 15e-6, 15*.5e-6],
                  mats=['air', 'glass', 'air', 'Outer'],
                  ns=[Air().n, SiO2().n, Air().n, SiO2().n],
-                 maxhs=[.4, .1, .1, .1],
+                 maxhs=[.4, .1, .1, .1], no_mesh=False,
                  wl=1.8e-6, ref=0, curve=8):
 
         # Check inputs for errors
@@ -41,21 +41,44 @@ class BraggExact():
 
         self.scale = scale
         self.L = scale
-        self.ts = np.array(ts)
+        self.ts = ts
         self.mats = mats
-        self.rhos = np.array([sum(ts[:i]) for i in range(1, len(ts)+1)])
         self.maxhs = np.array(maxhs) * self.rhos / scale
 
-        self.wavelength = wl
-        self.k0 = 2 * np.pi / self.wavelength
-
         self.n_funcs = ns
-        self.ns = np.array([ns[i](wl) for i in range(len(ns))])
+
+        self.wavelength = wl
+
+        if not no_mesh:
+            # Create geometry
+            self.create_geometry()
+            self.create_mesh(ref=ref, curve=curve)
+
+    @property
+    def wavelength(self):
+        """Get wavelength."""
+        return self._wavelength
+
+    @wavelength.setter
+    def wavelength(self, wl):
+        """ Set wavelength and associated material parameters."""
+        self._wavelength = wl
+        self.k0 = 2 * np.pi / wl
+        N = len(self.n_funcs)
+        self.ns = np.array([self.n_funcs[i](wl) for i in range(N)])
         self.ks = self.k0 * self.ns
 
-        # Create geometry
-        self.create_geometry()
-        self.create_mesh(ref=ref, curve=curve)
+    @property
+    def ts(self):
+        """Get ts."""
+        return self._ts
+
+    @ts.setter
+    def ts(self, ts):
+        """ Set wavelength and associated material parameters."""
+        ts = np.array(ts)
+        self._ts = ts
+        self.rhos = np.array([sum(ts[:i]) for i in range(1, len(ts)+1)])
 
     def check_parameters(self, ts, ns, mats, maxhs):
 

@@ -28,7 +28,7 @@ class Bragg(ModeSolver):
     def __init__(self, scale=1e-6, ts=[1e-6, .5e-6, .5e-6, .5e-6],
                  mats=['air', 'glass', 'air', 'Outer'],
                  ns=[Air().n, SiO2().n, Air().n, Air().n],
-                 maxhs=[.4, .1, .1, .1],
+                 maxhs=[.4, .1, .1, .1], fan=False,
                  wl=1.8e-6, ref=0, curve=8):
 
         # Check inputs for errors
@@ -47,7 +47,7 @@ class Bragg(ModeSolver):
         self.ns = ns
 
         # Create geometry
-        self.create_geometry()
+        self.create_geometry(fan=fan)
         self.create_mesh(ref=ref, curve=curve)
         self.set_material_properties()
 
@@ -92,20 +92,117 @@ as a lambda function: lambda x: n.")
         self.mesh = ng.Mesh(self.mesh.ngmesh.Copy())
         self.mesh.Curve(curve)
 
-    def create_geometry(self):
+    def create_geometry(self, fan=False):
         """Construct and return Non-Dimensionalized geometry."""
         self.geo = geom2d.SplineGeometry()
 
-        for i, R in enumerate(self.Rs[:-1]):
-            self.geo.AddCircle(c=(0, 0), r=R, leftdomain=i+1,
-                               rightdomain=i+2)
+        if not fan:
+            for i, R in enumerate(self.Rs[:-1]):
+                self.geo.AddCircle(c=(0, 0), r=R, leftdomain=i+1,
+                                   rightdomain=i+2)
 
-        self.geo.AddCircle(c=(0, 0), r=self.Rs[-1], leftdomain=len(self.Rs),
-                           bc='OuterCircle')
+            self.geo.AddCircle(c=(0, 0), r=self.Rs[-1],
+                               leftdomain=len(self.Rs),
+                               bc='OuterCircle')
 
-        for i, (mat, maxh) in enumerate(zip(self.mats, self.maxhs)):
-            self.geo.SetMaterial(i+1, mat)
-            self.geo.SetDomainMaxH(i+1, maxh)
+            for i, (mat, maxh) in enumerate(zip(self.mats, self.maxhs)):
+                self.geo.SetMaterial(i+1, mat)
+                self.geo.SetDomainMaxH(i+1, maxh)
+        else:
+            for i, R in enumerate(self.Rs[:-3]):
+                self.geo.AddCircle(c=(0, 0), r=R, leftdomain=i+1,
+                                   rightdomain=i+2)
+
+            self.add_fan()
+
+            for i, (mat, maxh) in enumerate(zip(self.mats, self.maxhs)):
+                self.geo.SetMaterial(i+1, mat)
+                self.geo.SetDomainMaxH(i+1, maxh)
+
+    def add_fan(self):
+        r1, r2, r3 = self.Rs[-3:]
+
+        dom_indx = [i+1 for i in range(len(self.Rs))]
+        dom_indx = dom_indx[-3:]
+
+        lower_points = [(-r1, 0), (-r1, -r1), (0, -r1), (r1, -r1), (r1, 0)]
+        inner_points = [(r1, r1), (0, r1), (-r1, r1)]
+
+        mid_points = [(r2, 0), (r2, r2), (0, r2), (-r2, r2), (-r2, 0)]
+        outer_points = [(r3, 0), (r3, r3), (0, r3), (-r3, r3), (-r3, 0)]
+
+        lower_pt_ids = [self.geo.AppendPoint(*p) for p in lower_points]
+
+        inner_pt_ids = [self.geo.AppendPoint(*p) for p in inner_points]
+        inner_pt_ids.insert(0, lower_pt_ids[-1])
+        inner_pt_ids.append(lower_pt_ids[0])
+
+        mid_pt_ids = [self.geo.AppendPoint(*p) for p in mid_points]
+
+        outer_pt_ids = [self.geo.AppendPoint(*p) for p in outer_points]
+
+        seg_pts = [outer_pt_ids[-1], mid_pt_ids[-1], lower_pt_ids[0],
+                   lower_pt_ids[-1], mid_pt_ids[0], outer_pt_ids[0]]
+
+        NP = len(lower_pt_ids)
+
+        for k in range(0, NP - 1, 2):
+            bc = 'OuterCircle'
+            self.geo.Append(
+                ['spline3',
+                 lower_pt_ids[k % NP],
+                 lower_pt_ids[(k + 1) % NP],
+                 lower_pt_ids[(k + 2) % NP]], leftdomain=dom_indx[-3], bc=bc)
+
+        NP = len(inner_pt_ids)
+
+        for k in range(0, NP - 1, 2):
+            bc = 'fiber_buffer_interface'
+            self.geo.Append(
+                ['spline3',
+                 inner_pt_ids[k % NP],
+                 inner_pt_ids[(k + 1) % NP],
+                 inner_pt_ids[(k + 2) % NP]],
+                leftdomain=dom_indx[-3],
+                rightdomain=dom_indx[-2],
+                bc=bc)
+
+        NP = len(mid_pt_ids)
+
+        for k in range(0, NP-1, 2):
+            bc = 'buffer_Outer_interface'
+            self.geo.Append(
+                ['spline3',
+                 mid_pt_ids[k % NP],
+                 mid_pt_ids[(k + 1) % NP],
+                 mid_pt_ids[(k + 2) % NP]],
+                leftdomain=dom_indx[-2],
+                rightdomain=dom_indx[-1],
+                bc=bc)
+
+        NP = len(outer_pt_ids)
+
+        for k in range(0, NP-1, 2):
+            bc = 'OuterCircle'
+            self.geo.Append(
+                ['spline3',
+                 outer_pt_ids[k % NP],
+                 outer_pt_ids[(k + 1) % NP],
+                 outer_pt_ids[(k + 2) % NP]],
+                leftdomain=dom_indx[-1],
+                bc=bc)
+
+        self.geo.Append(["line", seg_pts[0], seg_pts[1]], bc='OuterCircle',
+                        leftdomain=dom_indx[-1])
+
+        self.geo.Append(["line", seg_pts[1], seg_pts[2]], bc='OuterCircle',
+                        leftdomain=dom_indx[-2])
+
+        self.geo.Append(["line", seg_pts[3], seg_pts[4]], bc='OuterCircle',
+                        leftdomain=dom_indx[-2])
+
+        self.geo.Append(["line", seg_pts[4], seg_pts[5]], bc='OuterCircle',
+                        leftdomain=dom_indx[-1])
 
     def set_material_properties(self):
         """
