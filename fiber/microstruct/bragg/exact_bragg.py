@@ -40,19 +40,18 @@ class BraggExact():
         self.check_parameters(ts, ns, mats, maxhs)
 
         self.scale = scale
+        self.no_mesh = no_mesh
+        self.ref = ref
+        self.curve = curve
         self.L = scale
-        self.ts = ts
         self.mats = mats
-        self.maxhs = np.array(maxhs) * self.rhos / scale
+        self.maxhs_in = maxhs
+
+        self.ts = ts
 
         self.n_funcs = ns
 
         self.wavelength = wl
-
-        if not no_mesh:
-            # Create geometry
-            self.create_geometry()
-            self.create_mesh(ref=ref, curve=curve)
 
     @property
     def wavelength(self):
@@ -79,6 +78,12 @@ class BraggExact():
         ts = np.array(ts)
         self._ts = ts
         self.rhos = np.array([sum(ts[:i]) for i in range(1, len(ts)+1)])
+        self.maxhs = np.array(self.maxhs_in) * self.rhos / self.scale
+
+        if not self.no_mesh:
+            # Create geometry
+            self.create_geometry()
+            self.create_mesh(ref=self.ref, curve=self.curve)
 
     def check_parameters(self, ts, ns, mats, maxhs):
 
