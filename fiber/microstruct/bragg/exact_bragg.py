@@ -9,6 +9,7 @@ Created on Sun Jan 16 18:48:03 2022
 import numpy as np
 import netgen.geom2d as geom2d
 import ngsolve as ng
+from warnings import warn
 
 from ngsolve import x, y, exp, CF
 from opticalmaterialspy import Air, SiO2
@@ -229,7 +230,8 @@ as a lambda function: lambda x: n.")
 
         return np.pi / 2 * Ymat * M
 
-    def state_matrix(self, beta, nu, rho, n, zfunc='bessel'):
+    def state_matrix(self, beta, nu, rho, n, zfunc='bessel', pml=None,
+                     zero_radial=False):
         """Return matching matrix from Yeh et al Theory of Bragg Fiber.
 
         This matrix appears as equation 34 in that paper. Again we have scaled
@@ -241,12 +243,19 @@ as a lambda function: lambda x: n.")
         that provided beta is scaled, but the provided rho is not scaled."""
 
         beta = np.array(beta, dtype=np.complex128)
+        rho /= self.scale
+
+        # State matrix is only changed here by PML
+        if pml is not None:
+            alpha, R0 = pml['alpha'], pml['R0']
+            R0 /= self.scale
+            rho = (rho - R0) * (1 - alpha * 1j) + R0
+        else:
+            alpha = 0
 
         k0 = self.k0 * self.scale
         k = k0 * n
         K = np.sqrt(k ** 2 - beta ** 2, dtype=complex)
-
-        rho /= self.scale
 
         L = np.zeros(beta.shape + (4, 4), dtype=complex)
         Z = np.zeros_like(beta).T
@@ -260,20 +269,46 @@ as a lambda function: lambda x: n.")
         else:
             raise TypeError("zfunc must be 'bessel' or 'hankel'.")
 
-        L[..., 0, :] = np.array([z1(nu, K * rho).T, z2(nu, K * rho).T,
-                                 Z, Z]).T
+        L[..., 0, :] = np.array([
+            z1(nu, K * rho).T,
+            z2(nu, K * rho).T,
+            Z,
+            Z
+        ]).T
 
-        L[..., 1, :] = np.array([(k0 * n**2 / (beta * K) * z1p(nu, K * rho)).T,
-                                 (k0 * n**2 / (beta * K) * z2p(nu, K * rho)).T,
-                                 (1j*nu / (K**2 * rho) * z1(nu, K * rho)).T,
-                                 (1j*nu / (K**2 * rho) * z2(nu, K * rho)).T]).T
+        L[..., 1, :] = np.array([
+            (k0 * n**2 / (beta * K) * z1p(nu, K * rho)).T,
+            (k0 * n**2 / (beta * K) * z2p(nu, K * rho)).T,
+            (1j * nu / (K ** 2 * rho) * z1(nu, K * rho)).T,
+            (1j * nu / (K ** 2 * rho) * z2(nu, K * rho)).T
+        ]).T
 
-        L[..., 2, :] = np.array([Z, Z, z1(nu, K * rho).T, z2(nu, K * rho).T]).T
+        L[..., 2, :] = np.array([
+            Z,
+            Z,
+            z1(nu, K * rho).T,
+            z2(nu, K * rho).T
+        ]).T
 
-        L[..., 3, :] = np.array([(1j*nu / (K**2 * rho) * z1(nu, K * rho)).T,
-                                 (1j*nu / (K**2 * rho) * z2(nu, K * rho)).T,
-                                 (-k0 / (beta * K) * z1p(nu, K * rho)).T,
-                                 (-k0 / (beta * K) * z2p(nu, K * rho)).T]).T
+        L[..., 3, :] = np.array([
+            (1j * nu / (K ** 2 * rho) * z1(nu, K * rho)).T,
+            (1j * nu / (K ** 2 * rho) * z2(nu, K * rho)).T,
+            (-k0 / (beta * K) * z1p(nu, K * rho)).T,
+            (-k0 / (beta * K) * z2p(nu, K * rho)).T
+        ]).T
+
+        if zero_radial:
+            N = np.zeros(beta.shape + (1, 4), dtype=complex)
+
+            N[..., 0, :] = np.array([
+                (1 / K * z1p(nu, K * rho)).T,
+                (1 / K * z2p(nu, K * rho)).T,
+                ((1j * nu * k0) / (K**2 * beta * rho) * z1(nu, K * rho)).T,
+                ((1j * nu * k0) / (K**2 * beta * rho) * z2(nu, K * rho)).T
+            ]).T
+            ns = np.array(N.shape)
+            axis = np.where(ns == 1)[0][0]
+            L = np.concatenate((L, N), axis=axis)
 
         return L
 
@@ -333,8 +368,8 @@ as a lambda function: lambda x: n.")
 
         return L
 
-    def determinant(self, beta, nu=1, outer='h2', return_coeffs=False,
-                    return_matrix=False):
+    def determinant(self, beta, nu=1, outer='h2', pml=None, zero_radial=False,
+                    return_coeffs=False, return_matrix=False):
         """Return determinant of matching matrix.
 
         Provided beta should be scaled.  This zeros of this functions are the
@@ -347,6 +382,17 @@ as a lambda function: lambda x: n.")
         if outer not in ['h1', 'h2', 'pcb']:
             raise ValueError("Outer must be either 'h1', 'h2' or 'pcb'.")
 
+        if pml is not None and outer != 'pcb':
+            warn("Using PML without PCBCs won't change anything.")
+
+        if pml is not None and self.ns[-1] != self.ns[-2]:
+            raise ValueError("Last two regions should have same index of \
+refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
+                                                            self.ns[-1]))
+        if zero_radial and outer != 'pcb':
+            raise ValueError("Can only zero out radial electric component \
+when also using perfectly conducting bcs.")
+
         beta = np.array(beta, dtype=np.complex128)
 
         rhos = self.rhos
@@ -354,14 +400,18 @@ as a lambda function: lambda x: n.")
         L = np.zeros(beta.shape + (4, 2), dtype=complex)
         L[..., :, :] = np.eye(4)[:, [0, 2]]  # pick J columns for core
 
-        if outer != 'pcb':
+        if outer != 'pcb':  # not perfect conducting bcs
+
+            # apply transfer matrix up to second to last layer
             for i in range(len(rhos)-2):
                 nl, nr = ns[i], ns[i+1]
                 rho = rhos[i]
                 L = self.transfer_matrix(beta, nu, rho, nl, nr) @ L
 
+            # Apply state matrix to get left hand side at last layer
             L = self.state_matrix(beta, nu, rhos[-2], ns[-2]) @ L
 
+            # Now need to match coeffs at second to last layer with last layer
             if outer == 'h2':
                 inds = [1, 3]
             elif outer == 'h1':
@@ -395,28 +445,58 @@ as a lambda function: lambda x: n.")
                     return M
                 else:
                     return C * B - A * D
-        else:
-            for i in range(len(rhos)-1):
+
+        else:   # perfectly conducting bcs need one more layer
+
+            for i in range(len(rhos)-1):  # apply transfer one more layer
                 nl, nr = ns[i], ns[i+1]
                 rho = rhos[i]
                 L = self.transfer_matrix(beta, nu, rho, nl, nr) @ L
 
-            L = self.state_matrix(beta, nu, rhos[-1], ns[-1]) @ L
-            R = np.zeros(beta.shape + (2, 4), dtype=complex)
-            R[..., :, :] = np.eye(4)[[0, 3], :]
-            L = R @ L
+            # At last rho, Ez and Ephi = 0
+            # These equations correspond to rows 0 and 3 in the state matrix
+            L = self.state_matrix(beta, nu, rhos[-1], ns[-1],
+                                  pml=pml, zero_radial=zero_radial) @ L
 
-            A, B, C, D = L[..., 0, 0], L[..., 0, 1], L[..., 1, 0], L[..., 1, 1]
+            if not zero_radial:
+                R = np.zeros(beta.shape + (2, 4), dtype=complex)
+                R[..., :, :] = np.eye(4)[[0, 3], :]
+                L = R @ L
+                # Since L was 4x2 before last operation, it's now 2x2 so we can
+                # easily take the determinant.
+                A, B, C, D = L[..., 0, 0], L[..., 0,
+                                             1], L[..., 1, 0], L[..., 1, 1]
 
-            if return_coeffs:
-                return A, B, C, D
-            else:
-                if return_matrix:
-                    return L, R
+                if return_coeffs:
+                    return A, B, C, D
                 else:
-                    return A * D - B * C
+                    if return_matrix:
+                        return L, R
+                    else:
+                        return A * D - B * C
+            else:
+                R = np.zeros(beta.shape + (3, 5), dtype=complex)
+                sm = np.zeros((3, 5), dtype=complex)
+                sm[0, 0], sm[1, 3], sm[2, 4] = 1, 1, 1
+                R[..., :, :] = sm
 
-    def coefficients(self, beta, nu=1, outer='h2'):
+                L = R @ L
+
+                A, B = L[..., 0, 0], L[..., 0, 1]
+                C, D = L[..., 1, 0], L[..., 1, 1]
+                E, F = L[..., 2, 0], L[..., 2, 1]
+
+                if return_coeffs:
+                    return A, B, C, D
+                else:
+                    if return_matrix:
+                        return L, R
+                    else:
+                        return np.abs(A * D - B * C)**2 + \
+                            np.abs(A * F - B * E)**2
+
+    def coefficients(self, beta, nu=1, outer='h2', pml=None,
+                     zero_radial=False):
         """Return coefficients for fields of bragg fiber.
 
         Returns an array where each row gives the coeffiencts of the fields
@@ -424,6 +504,18 @@ as a lambda function: lambda x: n.")
 
         if outer not in ['h1', 'h2', 'pcb']:
             raise ValueError("Outer must be either 'h1', 'h2' or 'pcb'.")
+
+        if pml is not None and outer != 'pcb':
+            warn("Using PML without PCBCs won't change eigenvalues.")
+
+        if pml is not None and self.ns[-1] != self.ns[-2]:
+            raise ValueError("Last two regions should have same index of \
+refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
+                                                            self.ns[-1]))
+        if zero_radial and outer != 'pcb':
+            raise ValueError("Can only zero out radial electric component \
+when also using perfectly conducting bcs.")
+
         if outer != 'pcb':
 
             A, B, C, D, a, b, c, d, \
@@ -431,7 +523,7 @@ as a lambda function: lambda x: n.")
                                                return_coeffs=True)
 
             # A, B, or C,D can be used to make v1,v2 for core, but if mode
-            # is transverse one of thes pairs is zero, here we account for this
+            # is transverse one of the pairs is zero, here we account for this
             Vs = np.array([A, B, C, D])
             Vn = ((Vs*Vs.conj()).real) ** .5
 
@@ -485,7 +577,9 @@ as a lambda function: lambda x: n.")
                 vscale = v[np.argmax((v*v.conj()).real)]
                 return 1/vscale * M
         else:
-            A, B, C, D = self.determinant(beta, nu, outer, return_coeffs=True)
+            A, B, C, D = self.determinant(beta, nu, outer, pml=pml,
+                                          zero_radial=zero_radial,
+                                          return_coeffs=True)
 
             # A, B, or C,D can be used to make v1,v2 for core, but if mode
             # is transverse one of thes pairs is zero, here we account for this
@@ -530,9 +624,17 @@ as a lambda function: lambda x: n.")
                 vscale = v[np.argmax((v*v.conj()).real)]
                 return 1/vscale * M
 
-    def regional_fields(self, beta, coeffs, index, nu=1, outer='h2',
+    def regional_fields(self, beta, coeffs, index, nu=1, outer='h2', pml=None,
                         zfunc='bessel'):
         """Create fields on one region of the fiber."""
+
+        if pml is not None:
+            alpha, R0 = pml['alpha'], pml['R0']
+            R0 /= self.scale
+            rf = (r - R0) * (1 - alpha * 1j) + R0
+        else:
+            alpha = 0
+            rf = r
 
         A, B, C, D = coeffs[:]
 
@@ -554,22 +656,27 @@ as a lambda function: lambda x: n.")
 
         einu = exp(1j * nu * theta)
 
-        Ez = (A * Z1(K*r, nu) + B * Z2(K*r, nu)) * einu
-        dEzdr = K * (A * Z1p(K*r, nu) + B * Z2p(K*r, nu)) * einu
+        Ez = (A * Z1(K*rf, nu) + B * Z2(K*rf, nu)) * einu
+
+        # If using PML, we would get a factor of 1-alpha j, but it
+        # would later be canceled by it's inverse so both are omitted
+        dEzdr = K * (A * Z1p(K*rf, nu) + B * Z2p(K*rf, nu)) * einu
         dEzdt = 1j * nu * Ez
 
-        Hz = (C * Z1(K*r, nu) + D * Z2(K*r, nu)) * einu
-        dHzdr = K * (C * Z1p(K*r, nu) + D * Z2p(K*r, nu)) * einu
+        Hz = (C * Z1(K*rf, nu) + D * Z2(K*rf, nu)) * einu
+
+        # Same comment as above, factor of 1 - alpha j is omitted
+        dHzdr = K * (C * Z1p(K*rf, nu) + D * Z2p(K*rf, nu)) * einu
         dHzdt = 1j * nu * Hz
 
-        Er = F * (dEzdr + k0 / (beta * r) * dHzdt)
-        Ephi = F * (1 / r * dEzdt - k0 / beta * dHzdr)
+        Er = F * (dEzdr + k0 / (beta * rf) * dHzdt)
+        Ephi = F * (1 / rf * dEzdt - k0 / beta * dHzdr)
 
-        Hr = F * (dHzdr - k0 * n**2 / (beta * r) * dEzdt)
-        Hphi = F * (1 / r * dHzdt + k0 * n**2 / beta * dEzdr)
+        Hr = F * (dHzdr - k0 * n**2 / (beta * rf) * dEzdt)
+        Hphi = F * (1 / rf * dHzdt + k0 * n**2 / beta * dEzdr)
 
-        Ex = (x * Er - y * Ephi) / r
-        Ey = (y * Er + x * Ephi) / r
+        Ex = (x * Er - y * Ephi) / r  # Note this doesn't work in pml region
+        Ey = (y * Er + x * Ephi) / r  # Need to implement that still
 
         Hx = (x * Hr - y * Hphi) / r
         Hy = (y * Hr + x * Hphi) / r
@@ -577,9 +684,10 @@ as a lambda function: lambda x: n.")
         return {'Ez': Ez, 'Hz': Hz, 'Er': Er, 'Hr': Hr, 'Ephi': Ephi,
                 'Hphi': Hphi,  'Ex': Ex, 'Ey': Ey, 'Hx': Hx, 'Hy': Hy}
 
-    def all_fields(self, beta, nu=1, outer='h2'):
+    def all_fields(self, beta, nu=1, outer='h2', pml=None, zero_radial=False):
         """Create total fields for fiber from regional fields."""
-        M = self.coefficients(beta, nu, outer)
+        M = self.coefficients(beta, nu, outer, pml=pml,
+                              zero_radial=zero_radial)
 
         Ez, Hz = [], []
         Er, Hr = [], []
@@ -592,7 +700,12 @@ as a lambda function: lambda x: n.")
                 zfunc = 'hankel'
             else:
                 zfunc = 'bessel'
-            F = self.regional_fields(beta, coeffs, i, nu, outer, zfunc=zfunc)
+            if i == len(self.ns)-1:
+                F = self.regional_fields(beta, coeffs, i, nu, outer, pml=pml,
+                                         zfunc=zfunc)
+            else:
+                F = self.regional_fields(beta, coeffs, i, nu, outer, pml=None,
+                                         zfunc=zfunc)
             Ez.append(F['Ez']), Er.append(F['Er'])
             Ex.append(F['Ex']), Ey.append(F['Ey'])
             Ephi.append(F['Ephi'])

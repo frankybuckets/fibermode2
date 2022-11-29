@@ -11,6 +11,7 @@ import netgen.geom2d as geom2d
 import ngsolve as ng
 import pickle
 
+from warnings import warn
 from pyeigfeast.spectralproj.ngs import NGvecs
 from fiberamp.fiber import ModeSolver
 from opticalmaterialspy import Air, SiO2
@@ -29,7 +30,7 @@ class Bragg(ModeSolver):
                  mats=['air', 'glass', 'air', 'Outer'],
                  ns=[Air().n, SiO2().n, Air().n, Air().n],
                  maxhs=[.4, .1, .1, .1], fan=False,
-                 wl=1.8e-6, ref=0, curve=8):
+                 wl=1.8e-6, ref=0, curve=8, beta_sq_plane=False):
 
         # Check inputs for errors
         self.check_parameters(ts, ns, mats, maxhs)
@@ -49,7 +50,7 @@ class Bragg(ModeSolver):
         # Create geometry
         self.create_geometry(fan=fan)
         self.create_mesh(ref=ref, curve=curve)
-        self.set_material_properties()
+        self.set_material_properties(beta_sq_plane)
 
         super(Bragg, self).__init__(self.mesh, self.L, self.n0)
 
@@ -204,10 +205,13 @@ as a lambda function: lambda x: n.")
         self.geo.Append(["line", seg_pts[4], seg_pts[5]], bc='OuterCircle',
                         leftdomain=dom_indx[-1])
 
-    def set_material_properties(self):
+    def set_material_properties(self, beta_sq_plane=False):
         """
         Set k0, refractive indices, and V function.
         """
+        if beta_sq_plane:
+            warn('Using square beta plane: search centers should be at\
+ -(beta*L)**2 where L is scale attribute of fiber.')
         self.k = 2 * np.pi / self.wavelength
         self.refractive_indices = [self.ns[i](
             self.wavelength) for i in range(len(self.ns))]
@@ -215,7 +219,8 @@ as a lambda function: lambda x: n.")
         self.n0 = self.refractive_indices[-1]
 
         n0sq = ng.CF([self.n0**2 for i in range(len(self.ns))])
-        self.V = (self.L * self.k)**2 * (n0sq - self.index ** 2)
+        self.V = (self.L * self.k)**2 * (n0sq * (not beta_sq_plane)
+                                         - self.index ** 2)
 
     def E_modes_from_array(self, array, p=1, mesh=None):
         """Create NGvec object containing modes and set data given by array."""
