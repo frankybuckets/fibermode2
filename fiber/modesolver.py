@@ -1,6 +1,7 @@
 import ngsolve as ng
-from ngsolve import curl, grad, dx
+from ngsolve import curl, grad, dx, Conj
 import numpy as np
+from numpy import conj
 import sympy as sm
 from pyeigfeast import NGvecs, SpectralProjNGGeneral, SpectralProjNG
 from pyeigfeast import SpectralProjNGR, SpectralProjNGPoly
@@ -81,8 +82,6 @@ class ModeSolver:
         self.n0 = n0
         self.ngspmlset = False
 
-        self.eta0 = np.sqrt(1.25663706e-6 / 8.85418782e-12)
-
         print('ModeSolver: Checking if mesh has required regions')
         print('Mesh has ', mesh.ne, ' elements, ', mesh.nv, ' points, '
               ' and ', mesh.nedge, ' edges.')
@@ -132,7 +131,7 @@ class ModeSolver:
               % max(bdrnrm0))
         return bdrnrm0
 
-    def power(self, E, H):
+    def power(self, Etv, phi, beta):
         """
         Find power of mode with transverse electric and magnetic fields E, H.
         If E and H are from different modes, this method finds 'inner product'
@@ -150,34 +149,98 @@ class ModeSolver:
         Returns
         -------
         p : float or complex
+            Power through transverse plane (at z = 0).
+
+        """
+        Sz = self.S(Etv, phi, beta)[1]
+        p = ng.Integrate(Sz, self.mesh)
+        return p
+
+    def maxwell_product(self, E1, H2):
+        """
+        Find maxwell type product of two modes with transverse electric and
+        magnetic fields E1, H2 respectively.
+
+        This method finds 'inner product' of the two modes according to the
+        orthogonality type relationship found in Marcuse, Light Transmission
+        Optics 2nd edition, eq 8.5.12 (and also in Snyder's Optical Waveguide
+        Theory equation 11-13).
+
+        Parameters
+        ----------
+        E : ngsolve coefficient function
+            Transverse electric field E = (Ex, Ey) (or (Er, Ey) for bent modes)
+        H : same type as E
+            Magnetic field of second mode (organized in same way).
+
+        Returns
+        -------
+        p : float or complex
             Returns power if E and H belong to same mode.  Returns 'dot
             product type' value if E and H belong to distinct modes.
 
         """
-        S = E[0] * ng.Conj(H[1]) - E[1] * ng.Conj(H[0])
-        p = 1/2 * ng.Integrate(S, self.mesh)
+        Sz = E1[0] * Conj(H2[1]) - E1[1] * Conj(H2[0])
+        p = 1/2 * ng.Integrate(Sz, self.mesh)
         return p
 
-    def HfromE(self, Etv, phi, beta):
+    def H_field_from_E(self, Etv, phi, beta):
         """Return the H field (Htv, Hz) from transverse E field and
-        phi = i beta Ez.
+        phi = i beta Ez (found using vector modesolver).
 
         We assume the beta is provided unscaled, and we then non-dimensionalize
         to get beta_s = beta * self.L and k_s = self.k * self.L.  This is then
         used to form the H field.  These give the appropriate values for the
         non-dimensionalized mesh we are using.
 
+        In order to avoid numeric difficulties, we scale the H field by the
+        negative imaginary unit times the vacuum impedence 𝜂0 defined by
+        𝜂0 := (𝜇0/𝜀0)^(1/2).
+
+        This transforms Maxwell's equations to give
+
+                    curl E = k0 H
+                    curl H = k0 e_r E
+
+        where e_r is the relative permittivity.
         """
         beta_s = beta * self.L
         k_s = self.k * self.L
-        dEz_dx, dEz_dy = -1j / beta_s * ng.grad(phi)
-        rotEz = ng.CoefficientFunction((dEz_dy, dEz_dx))
-        Etv_perp = ng.CoefficientFunction((Etv[1], -Etv[0]))
+        dphi_dx, dphi_dy = grad(phi)
 
-        Htv = 1j/k_s * (rotEz + 1j * beta_s * Etv_perp)/self.eta0
-        Hz = 1j/k_s * ng.curl(Etv)/self.eta0
+        J_Etv = ng.CF((Etv[1], -Etv[0]))
+        rot_phi = ng.CF((dphi_dy, -dphi_dx))
+
+        Htv = -1j / (k_s * beta_s) * (rot_phi + beta_s**2 * J_Etv)
+        Hz = 1 / k_s * curl(Etv)
 
         return Htv, Hz
+
+    def S(self, Etv, phi, beta):
+        """Return time averaged Poynting vector S = 1/2 E x H*.
+
+        Here we again scale the H field by -1j * 𝜂0 with 𝜂0 defined by
+        𝜂0 := (𝜇0/𝜀0)^(1/2).
+
+        This transforms Maxwell's equations to give
+
+                    curl E = k0 H
+                    curl H = k0 e_r E
+
+        where e_r is the relative permittivity.
+        """
+        beta_s = beta * self.L
+        k_s = self.k * self.L
+
+        J_Etv = ng.CF((Etv[1], -Etv[0]))
+
+        Stv = J_Etv * Conj(curl(Etv)) + phi / (k_s * beta_s * conj(beta_s)) * \
+            (Conj(grad(phi)) + conj(beta_s)**2 * Conj(Etv))
+
+        Sz = 1 / (k_s * 1j * conj(beta_s)) * \
+            (Etv * grad(phi) + conj(beta_s)**2 * Etv.Norm()**2)
+
+        return 1/2 * Stv, 1/2 * Sz
 
     # ###################################################################
     # FREQ-DEPENDENT PML BY POLYNOMIAL EIGENPROBLEM #####################

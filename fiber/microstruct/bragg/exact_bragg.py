@@ -9,6 +9,8 @@ Created on Sun Jan 16 18:48:03 2022
 import numpy as np
 import netgen.geom2d as geom2d
 import ngsolve as ng
+# import matplotlib.pyplot as plt
+
 from warnings import warn
 
 from ngsolve import x, y, exp, CF
@@ -75,7 +77,7 @@ class BraggExact():
 
     @ts.setter
     def ts(self, ts):
-        """ Set wavelength and associated material parameters."""
+        """ Set radii and maxhs."""
         ts = np.array(ts)
         self._ts = ts
         self.rhos = np.array([sum(ts[:i]) for i in range(1, len(ts)+1)])
@@ -231,7 +233,7 @@ as a lambda function: lambda x: n.")
         return np.pi / 2 * Ymat * M
 
     def state_matrix(self, beta, nu, rho, n, zfunc='bessel', pml=None,
-                     zero_radial=False):
+                     marcuse_k=False):
         """Return matching matrix from Yeh et al Theory of Bragg Fiber.
 
         This matrix appears as equation 34 in that paper. Again we have scaled
@@ -255,7 +257,10 @@ as a lambda function: lambda x: n.")
 
         k0 = self.k0 * self.scale
         k = k0 * n
-        K = np.sqrt(k ** 2 - beta ** 2, dtype=complex)
+        if marcuse_k:
+            K = 1j * np.sqrt(beta ** 2 - k ** 2, dtype=complex)
+        else:
+            K = np.sqrt(k ** 2 - beta ** 2, dtype=complex)
 
         L = np.zeros(beta.shape + (4, 4), dtype=complex)
         Z = np.zeros_like(beta).T
@@ -296,19 +301,6 @@ as a lambda function: lambda x: n.")
             (-k0 / (beta * K) * z1p(nu, K * rho)).T,
             (-k0 / (beta * K) * z2p(nu, K * rho)).T
         ]).T
-
-        if zero_radial:
-            N = np.zeros(beta.shape + (1, 4), dtype=complex)
-
-            N[..., 0, :] = np.array([
-                (1 / K * z1p(nu, K * rho)).T,
-                (1 / K * z2p(nu, K * rho)).T,
-                ((1j * nu * k0) / (K**2 * beta * rho) * z1(nu, K * rho)).T,
-                ((1j * nu * k0) / (K**2 * beta * rho) * z2(nu, K * rho)).T
-            ]).T
-            ns = np.array(N.shape)
-            axis = np.where(ns == 1)[0][0]
-            L = np.concatenate((L, N), axis=axis)
 
         return L
 
@@ -368,7 +360,7 @@ as a lambda function: lambda x: n.")
 
         return L
 
-    def determinant(self, beta, nu=1, outer='h2', pml=None, zero_radial=False,
+    def determinant(self, beta, nu=1, outer='h2', pml=None,
                     return_coeffs=False, return_matrix=False):
         """Return determinant of matching matrix.
 
@@ -389,9 +381,6 @@ as a lambda function: lambda x: n.")
             raise ValueError("Last two regions should have same index of \
 refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
                                                             self.ns[-1]))
-        if zero_radial and outer != 'pcb':
-            raise ValueError("Can only zero out radial electric component \
-when also using perfectly conducting bcs.")
 
         beta = np.array(beta, dtype=np.complex128)
 
@@ -414,14 +403,17 @@ when also using perfectly conducting bcs.")
             # Now need to match coeffs at second to last layer with last layer
             if outer == 'h2':
                 inds = [1, 3]
+                marcuse_k = False
             elif outer == 'h1':
                 inds = [0, 2]
+                marcuse_k = True
             else:
                 raise TypeError("Outer function must be 'h1' (guided) or 'h2'\
      (leaky).")
 
             R = self.state_matrix(beta, nu, rhos[-2],
-                                  ns[-1], zfunc='hankel')[..., inds]
+                                  ns[-1], zfunc='hankel',
+                                  marcuse_k=marcuse_k)[..., inds]
 
             a, b, e, f = L[..., 0, 0], L[..., 0, 1], L[..., 1, 0], L[..., 1, 1]
             c, d, g, h = L[..., 2, 0], L[..., 2, 1], L[..., 3, 0], L[..., 3, 1]
@@ -455,48 +447,25 @@ when also using perfectly conducting bcs.")
 
             # At last rho, Ez and Ephi = 0
             # These equations correspond to rows 0 and 3 in the state matrix
-            L = self.state_matrix(beta, nu, rhos[-1], ns[-1],
-                                  pml=pml, zero_radial=zero_radial) @ L
+            L = self.state_matrix(beta, nu, rhos[-1], ns[-1], pml=pml) @ L
 
-            if not zero_radial:
-                R = np.zeros(beta.shape + (2, 4), dtype=complex)
-                R[..., :, :] = np.eye(4)[[0, 3], :]
-                L = R @ L
-                # Since L was 4x2 before last operation, it's now 2x2 so we can
-                # easily take the determinant.
-                A, B, C, D = L[..., 0, 0], L[..., 0,
-                                             1], L[..., 1, 0], L[..., 1, 1]
+            R = np.zeros(beta.shape + (2, 4), dtype=complex)
+            R[..., :, :] = np.eye(4)[[0, 3], :]
+            L = R @ L
+            # Since L was 4x2 before last operation, it's now 2x2 so we can
+            # easily take the determinant.
+            A, B, C, D = L[..., 0, 0], L[..., 0,
+                                         1], L[..., 1, 0], L[..., 1, 1]
 
-                if return_coeffs:
-                    return A, B, C, D
-                else:
-                    if return_matrix:
-                        return L, R
-                    else:
-                        return A * D - B * C
+            if return_coeffs:
+                return A, B, C, D
             else:
-                R = np.zeros(beta.shape + (3, 5), dtype=complex)
-                sm = np.zeros((3, 5), dtype=complex)
-                sm[0, 0], sm[1, 3], sm[2, 4] = 1, 1, 1
-                R[..., :, :] = sm
-
-                L = R @ L
-
-                A, B = L[..., 0, 0], L[..., 0, 1]
-                C, D = L[..., 1, 0], L[..., 1, 1]
-                E, F = L[..., 2, 0], L[..., 2, 1]
-
-                if return_coeffs:
-                    return A, B, C, D
+                if return_matrix:
+                    return L, R
                 else:
-                    if return_matrix:
-                        return L, R
-                    else:
-                        return np.abs(A * D - B * C)**2 + \
-                            np.abs(A * F - B * E)**2
+                    return A * D - B * C
 
-    def coefficients(self, beta, nu=1, outer='h2', pml=None,
-                     zero_radial=False):
+    def coefficients(self, beta, nu=1, outer='h2', pml=None):
         """Return coefficients for fields of bragg fiber.
 
         Returns an array where each row gives the coeffiencts of the fields
@@ -512,9 +481,6 @@ when also using perfectly conducting bcs.")
             raise ValueError("Last two regions should have same index of \
 refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
                                                             self.ns[-1]))
-        if zero_radial and outer != 'pcb':
-            raise ValueError("Can only zero out radial electric component \
-when also using perfectly conducting bcs.")
 
         if outer != 'pcb':
 
@@ -578,7 +544,6 @@ when also using perfectly conducting bcs.")
                 return 1/vscale * M
         else:
             A, B, C, D = self.determinant(beta, nu, outer, pml=pml,
-                                          zero_radial=zero_radial,
                                           return_coeffs=True)
 
             # A, B, or C,D can be used to make v1,v2 for core, but if mode
@@ -624,8 +589,293 @@ when also using perfectly conducting bcs.")
                 vscale = v[np.argmax((v*v.conj()).real)]
                 return 1/vscale * M
 
-    def regional_fields(self, beta, coeffs, index, nu=1, outer='h2', pml=None,
-                        zfunc='bessel'):
+    # ------------- Matplotlib Field Visualizations --------------
+
+    def fields_matplot(self, beta, nu=1, outer='h2', pml=None,
+                       marcuse_k=False):
+
+        M = self.coefficients(beta, nu=nu, outer=outer, pml=pml)
+
+        # if pml is not None:
+        #     alpha, R0 = pml['alpha'], pml['R0']
+        #     R0 /= self.scale
+        #     rf = (r - R0) * (1 - alpha * 1j) + R0
+        # else:
+        #     alpha = 0
+        #     rf = r
+
+        rhos = np.concatenate([[0], self.rhos/self.scale])
+
+        k0 = self.k0 * self.scale
+        ks = self.ks * self.scale
+        ns = self.ns
+
+        Ks = np.sqrt(ks ** 2 - beta ** 2, dtype=complex)
+        if marcuse_k:
+            Ks[-1] = 1j * np.sqrt(beta**2 - ks[-1]**2, dtype=complex)
+        Fs = 1j * beta / (ks ** 2 - beta ** 2)
+
+        def Ez_rad(rs):
+
+            conds = [(rhos[i] <= rs)*(rs <= rhos[i+1])
+                     for i in range(len(rhos)-1)]
+            ys = np.zeros_like(rs, dtype=complex)
+
+            for i in range(len(conds)):
+
+                y_idx, r_idx = np.nonzero(conds[i]), np.where(conds[i])
+                A, B, C, D = M[i, :]
+
+                if i == 0:
+                    ys[y_idx] = A * jv(nu, Ks[i] * rs[r_idx])
+                elif i != len(conds)-1:
+                    ys[y_idx] = A * jv(nu, Ks[i] * rs[r_idx]) + \
+                        B * yv(nu, Ks[i] * rs[r_idx])
+                else:
+                    ys[y_idx] = A * h1(nu, Ks[i] * rs[r_idx]) + \
+                        B * h2(nu, Ks[i] * rs[r_idx])
+            return ys
+
+        def Ez(x, y):
+            '''Return Ez function.
+
+            x and y should be result of np.meshgrid.'''
+            r = (x*x + y*y)**.5
+            t = np.arctan2(y, x)
+            return Ez_rad(r) * np.e**(1j * nu * t)
+
+        def Hz_rad(rs):
+
+            conds = [(rhos[i] <= rs)*(rs <= rhos[i+1])
+                     for i in range(len(rhos)-1)]
+            ys = np.zeros_like(rs, dtype=complex)
+
+            for i in range(len(conds)):
+
+                y_idx, r_idx = np.nonzero(conds[i]), np.where(conds[i])
+                A, B, C, D = M[i, :]
+
+                if i == 0:
+                    ys[y_idx] = C * jv(nu, Ks[i] * rs[r_idx])
+                elif i != len(conds)-1:
+                    ys[y_idx] = C * jv(nu, Ks[i]*rs[r_idx]) + \
+                        D * yv(nu, Ks[i] * rs[r_idx])
+                else:
+                    ys[y_idx] = C * h1(nu, Ks[i] * rs[r_idx]) + \
+                        D * h2(nu, Ks[i] * rs[r_idx])
+            return ys
+
+        def Hz(x, y):
+            r = (x*x + y*y)**.5
+            t = np.arctan2(y, x)
+            return Hz_rad(r) * np.e**(1j * nu * t)
+
+        def Er_rad(rs):
+            conds = [(rhos[i] <= rs)*(rs <= rhos[i+1])
+                     for i in range(len(rhos)-1)]
+            ys = np.zeros_like(rs, dtype=complex)
+
+            for i in range(len(conds)):
+
+                y_idx, r_idx = np.nonzero(conds[i]), np.where(conds[i])
+                A, B, C, D = M[i, :]
+
+                if i == 0:
+                    ys[y_idx] = Fs[i] * (Ks[i] * A * jvp(nu, Ks[i]*rs[r_idx]) +
+                                         k0 / (beta * rs[r_idx]) *
+                                         1j * nu * C *
+                                         jv(nu, Ks[i] * rs[r_idx]))
+                elif i != len(conds)-1:
+                    ys[y_idx] = Fs[i] * (Ks[i] * (A*jvp(nu, Ks[i]*rs[r_idx]) +
+                                         B * yvp(nu, Ks[i] * rs[r_idx])) +
+                                         k0/(beta * rs[r_idx]) * 1j * nu *
+                                         (C * jv(nu, Ks[i]*rs[r_idx]) +
+                                          D * yv(nu, Ks[i] * rs[r_idx])))
+                else:
+                    ys[y_idx] = Fs[i] * (Ks[i] * (A*h1vp(nu, Ks[i]*rs[r_idx]) +
+                                         B * h2vp(nu, Ks[i] * rs[r_idx])) +
+                                         k0/(beta * rs[r_idx]) * 1j * nu *
+                                         (C * h1(nu, Ks[i]*rs[r_idx]) +
+                                          D * h2(nu, Ks[i] * rs[r_idx])))
+            return ys
+
+        def Er(x, y):
+            '''Return Er function.
+
+            Rs and Thetas should be result of np.meshgrid.'''
+            r = (x*x + y*y)**.5
+            t = np.arctan2(y, x)
+            return Er_rad(r) * np.e**(1j * nu * t)
+
+        def Ephi_rad(rs):
+            conds = [(rhos[i] <= rs)*(rs <= rhos[i+1])
+                     for i in range(len(rhos)-1)]
+            ys = np.zeros_like(rs, dtype=complex)
+
+            for i in range(len(conds)):
+
+                y_idx, r_idx = np.nonzero(conds[i]), np.where(conds[i])
+                A, B, C, D = M[i, :]
+
+                if i == 0:
+                    ys[y_idx] = Fs[i] * (1j * nu / rs[r_idx] *
+                                         A * jv(nu, Ks[i] * rs[r_idx]) -
+                                         k0 / beta * Ks[i] * C *
+                                         jvp(nu, Ks[i] * rs[r_idx]))
+                elif i != len(conds)-1:
+                    ys[y_idx] = Fs[i] * (1j*nu/rs[r_idx] *
+                                         (A * jv(nu, Ks[i] * rs[r_idx]) +
+                                         B * yv(nu, Ks[i] * rs[r_idx])) -
+                                         k0 / beta * Ks[i] *
+                                         (C * jvp(nu, Ks[i]*rs[r_idx]) +
+                                         D * yvp(nu, Ks[i] * rs[r_idx])))
+                else:
+                    ys[y_idx] = Fs[i] * (1j*nu/rs[r_idx] *
+                                         (A * h1(nu, Ks[i] * rs[r_idx]) +
+                                         B * h2(nu, Ks[i] * rs[r_idx])) -
+                                         k0 / beta * Ks[i] *
+                                         (C * h1vp(nu, Ks[i]*rs[r_idx]) +
+                                         D * h2vp(nu, Ks[i] * rs[r_idx])))
+            return ys
+
+        def Ephi(x, y):
+            '''Return Er function.
+
+            Rs and Thetas should be result of np.meshgrid.'''
+            r = (x*x + y*y)**.5
+            t = np.arctan2(y, x)
+            return Ephi_rad(r) * np.e**(1j * nu * t)
+
+        def Hr_rad(rs):
+            conds = [(rhos[i] <= rs)*(rs <= rhos[i+1])
+                     for i in range(len(rhos)-1)]
+            ys = np.zeros_like(rs, dtype=complex)
+
+            for i in range(len(conds)):
+
+                y_idx, r_idx = np.nonzero(conds[i]), np.where(conds[i])
+                A, B, C, D = M[i, :]
+
+                if i == 0:
+                    ys[y_idx] = Fs[i] * (Ks[i] * C * jvp(nu, Ks[i]*rs[r_idx]) -
+                                         k0 * ns[i]**2 / (beta * rs[r_idx]) *
+                                         1j * nu * A *
+                                         jv(nu, Ks[i] * rs[r_idx]))
+                elif i != len(conds)-1:
+                    ys[y_idx] = Fs[i] * (Ks[i] * (C*jvp(nu, Ks[i]*rs[r_idx]) +
+                                         D * yvp(nu, Ks[i] * rs[r_idx])) -
+                                         k0*ns[i]**2/(beta*rs[r_idx])*1j * nu *
+                                         (A * jv(nu, Ks[i]*rs[r_idx]) +
+                                          B * yv(nu, Ks[i] * rs[r_idx])))
+                else:
+                    ys[y_idx] = Fs[i] * (Ks[i] * (C*h1vp(nu, Ks[i]*rs[r_idx]) +
+                                         D * h2vp(nu, Ks[i] * rs[r_idx])) -
+                                         k0*ns[i]**2/(beta*rs[r_idx])*1j * nu *
+                                         (A * h1(nu, Ks[i]*rs[r_idx]) +
+                                          B * h2(nu, Ks[i] * rs[r_idx])))
+            return ys
+
+        def Hr(x, y):
+            '''Return Er function.
+
+            Rs and Thetas should be result of np.meshgrid.'''
+            r = (x*x + y*y)**.5
+            t = np.arctan2(y, x)
+            return Hr_rad(r) * np.e**(1j * nu * t)
+
+        def Hphi_rad(rs):
+            conds = [(rhos[i] <= rs)*(rs <= rhos[i+1])
+                     for i in range(len(rhos)-1)]
+            ys = np.zeros_like(rs, dtype=complex)
+
+            for i in range(len(conds)):
+
+                y_idx, r_idx = np.nonzero(conds[i]), np.where(conds[i])
+                A, B, C, D = M[i, :]
+
+                if i == 0:
+                    ys[y_idx] = Fs[i] * (1j * nu / rs[r_idx] *
+                                         C * jv(nu, Ks[i] * rs[r_idx]) +
+                                         k0 * ns[i]**2 / beta * Ks[i] * A *
+                                         jvp(nu, Ks[i] * rs[r_idx]))
+                elif i != len(conds)-1:
+                    ys[y_idx] = Fs[i] * (1j*nu/rs[r_idx] *
+                                         (C * jv(nu, Ks[i] * rs[r_idx]) +
+                                         D * yv(nu, Ks[i] * rs[r_idx])) +
+                                         k0 * ns[i]**2 / beta * Ks[i] *
+                                         (A * jvp(nu, Ks[i]*rs[r_idx]) +
+                                         B * yvp(nu, Ks[i] * rs[r_idx])))
+                else:
+                    ys[y_idx] = Fs[i] * (1j*nu/rs[r_idx] *
+                                         (C * h1(nu, Ks[i] * rs[r_idx]) +
+                                         D * h2(nu, Ks[i] * rs[r_idx])) +
+                                         k0 * ns[i]**2 / beta * Ks[i] *
+                                         (A * h1vp(nu, Ks[i]*rs[r_idx]) +
+                                         B * h2vp(nu, Ks[i] * rs[r_idx])))
+            return ys
+
+        def Hphi(x, y):
+            '''Return Er function.
+
+            Rs and Thetas should be result of np.meshgrid.'''
+            r = (x*x + y*y)**.5
+            t = np.arctan2(y, x)
+            return Hphi_rad(r) * np.e**(1j * nu * t)
+
+        def Ex(x, y):
+            r = (x*x + y*y)**.5
+            return (x * Er(x, y) - y * Ephi(x, y)) / r
+
+        def Ey(x, y):
+            r = (x*x + y*y)**.5
+            return (y * Er(x, y) + x * Ephi(x, y)) / r
+
+        def Hx(x, y):
+            r = (x*x + y*y)**.5
+            return (x * Hr(x, y) - y * Hphi(x, y)) / r
+
+        def Hy(x, y):
+            r = (x*x + y*y)**.5
+            return (y * Hr(x, y) + x * Hphi(x, y)) / r
+
+        def Sz_rad(rs):
+            return Er_rad(rs) * np.conj(Hphi_rad(rs)) - \
+                Ephi_rad(rs) * np.conj(Hr_rad(rs))
+
+        def Sz(x, y):
+            return Ex(x, y) * np.conj(Hy(x, y)) - Ey(x, y) * np.conj(Hx(x, y))
+
+        return {'Ez': Ez, 'Ez_rad': Ez_rad,
+                'Hz': Hz, 'Hz_rad': Hz_rad,
+                'Er': Er, 'Er_rad': Er_rad,
+                'Ephi': Ephi, 'Ephi_rad': Ephi_rad,
+                'Hr': Hr, 'Hr_rad': Hr_rad,
+                'Hphi': Hphi, 'Hphi_rad': Hphi_rad,
+                'Ex': Ex, 'Ey': Ey, 'Hx': Hx, 'Hy': Hy,
+                'Sz': Sz, 'Sz_rad': Sz_rad
+                }
+
+    # def plot_matplot(self, axes=(1,), **pltargs):
+    #     fig, axs = plt.subplots(*axes, **pltargs)
+
+    #     return fig, axs
+
+    # def add_radial_matplot(self, ax, F, nr=4*[501], **lineargs):
+    #     rhos = np.concatenate([[0], self.rhos])
+    #     rs = np.concatenate([np.linspace(rhos[i], rhos[i+1], nr[i])
+    #                         for i in range(len(rhos)-1)])
+    #     ax.plot(rs, F(rs), **lineargs)
+    #     ax.
+
+    # def plot2D_matplot(self, F, nr=4*[501], n_theta=500):
+    #     rhos = np.concatenate([[0], self.rhos])
+    #     rs = np.concatenate([np.linspace(rhos[i], rhos[i+1], nr[i])
+    #                         for i in range(len(rhos)-1)])
+    #     return None
+    # ------------- NGSolve Field Visualizations ------------------
+
+    def regional_fields(self, beta, coeffs, index, nu=1, pml=None,
+                        zfunc='bessel', marcuse_k=False):
         """Create fields on one region of the fiber."""
 
         if pml is not None:
@@ -642,7 +892,11 @@ when also using perfectly conducting bcs.")
         n = self.ns[index]
         k = k0 * n
 
-        K = np.sqrt(k ** 2 - beta ** 2, dtype=complex)
+        if marcuse_k:
+            K = 1j * np.sqrt(beta ** 2 - k ** 2, dtype=complex)
+        else:
+            K = np.sqrt(k ** 2 - beta ** 2, dtype=complex)
+
         F = 1j * beta / (k ** 2 - beta ** 2)
 
         if zfunc == 'hankel':
@@ -681,47 +935,70 @@ when also using perfectly conducting bcs.")
         Hx = (x * Hr - y * Hphi) / r
         Hy = (y * Hr + x * Hphi) / r
 
-        return {'Ez': Ez, 'Hz': Hz, 'Er': Er, 'Hr': Hr, 'Ephi': Ephi,
-                'Hphi': Hphi,  'Ex': Ex, 'Ey': Ey, 'Hx': Hx, 'Hy': Hy}
+        Sx = Ey * ng.Conj(Hz) - Ez * ng.Conj(Hy)  # Poynting Vector (time avg)
+        Sy = Ez * ng.Conj(Hx) - Ex * ng.Conj(Hz)
+        Sz = Ex * ng.Conj(Hy) - Ey * ng.Conj(Hx)
 
-    def all_fields(self, beta, nu=1, outer='h2', pml=None, zero_radial=False):
+        Sr = Ephi * ng.Conj(Hz) - Ez * ng.Conj(Hphi)
+        Sphi = Ez * ng.Conj(Hr) - Er * ng.Conj(Hz)
+
+        return {'Ez': Ez, 'Hz': Hz, 'Er': Er, 'Hr': Hr, 'Ephi': Ephi,
+                'Hphi': Hphi,  'Ex': Ex, 'Ey': Ey, 'Hx': Hx, 'Hy': Hy,
+                'Sx': Sx, 'Sy': Sy, 'Sz': Sz, 'Sr': Sr, 'Sphi': Sphi}
+
+    def all_fields(self, beta, nu=1, outer='h2', pml=None):
         """Create total fields for fiber from regional fields."""
-        M = self.coefficients(beta, nu, outer, pml=pml,
-                              zero_radial=zero_radial)
+        M = self.coefficients(beta, nu, outer, pml=pml)
 
         Ez, Hz = [], []
         Er, Hr = [], []
         Ephi, Hphi = [], []
         Ex, Ey, Hx, Hy = [], [], [], []
+        Sx, Sy, Sz = [], [], []
+        Sr, Sphi = [], []
 
         for i in range(len(self.ns)):
             coeffs = M[i]
             if i == len(self.ns) - 1 and outer != 'pcb':
                 zfunc = 'hankel'
+                if outer == 'h1':
+                    marcuse_k = True
+                else:
+                    marcuse_k = False
             else:
                 zfunc = 'bessel'
+                marcuse_k = False
+
             if i == len(self.ns)-1:
-                F = self.regional_fields(beta, coeffs, i, nu, outer, pml=pml,
-                                         zfunc=zfunc)
+                F = self.regional_fields(beta, coeffs, i, nu, pml=pml,
+                                         zfunc=zfunc, marcuse_k=marcuse_k)
             else:
-                F = self.regional_fields(beta, coeffs, i, nu, outer, pml=None,
-                                         zfunc=zfunc)
+                F = self.regional_fields(beta, coeffs, i, nu, pml=None,
+                                         zfunc=zfunc, marcuse_k=marcuse_k)
+
             Ez.append(F['Ez']), Er.append(F['Er'])
             Ex.append(F['Ex']), Ey.append(F['Ey'])
             Ephi.append(F['Ephi'])
             Hz.append(F['Hz']), Hr.append(F['Hr'])
             Hx.append(F['Hx']), Hy.append(F['Hy'])
             Hphi.append(F['Hphi'])
+            Sx.append(F['Sx']), Sy.append(F['Sy'])
+            Sz.append(F['Sz'])
+            Sr.append(F['Sr']), Sphi.append(F['Sphi'])
 
         Ez, Er, Ephi, Ex, Ey = CF(Ez), CF(Er), CF(Ephi), CF(Ex), CF(Ey)
         Hz, Hr, Hphi, Hx, Hy = CF(Hz), CF(Hr), CF(Hphi), CF(Hx), CF(Hy)
+        Sx, Sy, Sz = CF(Sx), CF(Sy), CF(Sz)
+        Sr, Sphi = CF(Sr), CF(Sphi)
 
         # Transverse Fields
 
         Etv = CF((Ex, Ey))
         Htv = CF((Hx, Hy))
+        Stv = CF((Sx, Sy))
 
         return {'Ez': Ez, 'Hz': Hz, 'Er': Er, 'Hr': Hr,
                 'Ephi': Ephi, 'Hphi': Hphi, 'Etv': Etv, 'Htv': Htv,
                 'Ex': Ex, 'Ey': Ey, 'Hx': Hx, 'Hy': Hy,
+                'Stv': Stv, 'Sz': Sz, 'Sr': Sr, 'Sphi': Sphi
                 }
