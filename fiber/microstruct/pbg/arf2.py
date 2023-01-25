@@ -23,12 +23,13 @@ class ARF2(ModeSolver):
     def __init__(self, name=None, refine=0, curve=3, e=None,
                  poly_core=False, shift_capillaries=False,
                  outer_materials=None, fill=None, T_cladding=10,
-                 wl=1.8e-6):
+                 glass_maxh=None, wl=1.8e-6):
 
         # Set and check the fiber parameters.
         self.set_parameters(name=name, shift_capillaries=shift_capillaries,
                             e=e, outer_materials=outer_materials,
-                            T_cladding=T_cladding, wl=wl)
+                            T_cladding=T_cladding, glass_maxh=glass_maxh,
+                            wl=wl)
         self.check_parameters()
 
         if self.name == 'original':  # Override for original fiber
@@ -44,7 +45,8 @@ class ARF2(ModeSolver):
         super().__init__(self.mesh, self.scale, self.n0)
 
     def set_parameters(self, name=None, e=None, shift_capillaries=False,
-                       outer_materials=None, T_cladding=10, wl=1.8e-6):
+                       outer_materials=None, T_cladding=10, glass_maxh=None,
+                       wl=1.8e-6):
         """
         Set fiber parameters.
         """
@@ -112,7 +114,10 @@ class ARF2(ModeSolver):
             self.fill_edge_maxh = .11
 
             self.core_maxh = .25
-            self.glass_maxh = 0
+            if glass_maxh is not None:
+                self.glass_maxh = glass_maxh
+            else:
+                self.glass_maxh = 0
 
             if outer_materials is not None:
                 self.outer_materials = outer_materials
@@ -386,12 +391,12 @@ class ARF2(ModeSolver):
                     {'material': 'buffer',
                      'n': self.n_buffer,
                      'T': self.T_buffer,
-                     'maxh': .1},
+                     'maxh': .5},
 
                     {'material': 'Outer',
                      'n': self.n0,
                      'T': self.T_outer,
-                     'maxh': 2}
+                     'maxh': 4}
                 ]
 
             self.inner_air_maxh = .2
@@ -406,7 +411,10 @@ class ARF2(ModeSolver):
             self.fill_edge_maxh = .11
 
             self.core_maxh = .25
-            self.glass_maxh = 0.05
+            if glass_maxh is not None:
+                self.glass_maxh = glass_maxh
+            else:
+                self.glass_maxh = 0.05
 
             self.wavelength = wl
 
@@ -424,6 +432,35 @@ class ARF2(ModeSolver):
             if self.R_tube_center * np.sin(np.pi / self.n_tubes) \
                     <= self.R_tube + self.T_tube:
                 raise ValueError('Capillary tubes overlap each other.')
+
+    def mesh_maxh(self, material=None):
+
+        def maxlength(pts):
+            L = np.linalg.norm(
+                [pts[1]-pts[0], pts[2] - pts[1], pts[0] - pts[2]], axis=1)
+            return np.max(L)
+
+        if material is not None:
+            elts = [v for v in self.mesh.Elements() if v.mat == material]
+        else:
+            elts = [v for v in self.mesh.Elements()]
+
+        diams = [maxlength([np.array(self.mesh[el.vertices[i]].point)
+                           for i in range(3)]) for el in elts]
+
+        return max(diams)
+
+    def number_of_elts(self, material=None):
+        if material is not None:
+            elts = [v for v in self.mesh.Elements() if v.mat == material]
+        else:
+            elts = [v for v in self.mesh.Elements()]
+        return len(elts)
+
+    def elements_per_wavelength(self, material=None):
+        lambda_s = self.wavelength / self.scale
+        mat_maxh = self.mesh_maxh(material=material)
+        return lambda_s / mat_maxh
 
     def set_material_properties(self):
         """

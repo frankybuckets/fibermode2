@@ -9,7 +9,8 @@ Created on Sun Jan 16 18:48:03 2022
 import numpy as np
 import netgen.geom2d as geom2d
 import ngsolve as ng
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
+import cmasher as cmr
 
 from warnings import warn
 
@@ -232,8 +233,8 @@ as a lambda function: lambda x: n.")
 
         return np.pi / 2 * Ymat * M
 
-    def state_matrix(self, beta, nu, rho, n, zfunc='bessel', pml=None,
-                     marcuse_k=False):
+    def state_matrix(self, beta, nu, rho, n, zfunc='bessel', Ktype='kappa',
+                     pml=None):
         """Return matching matrix from Yeh et al Theory of Bragg Fiber.
 
         This matrix appears as equation 34 in that paper. Again we have scaled
@@ -257,10 +258,12 @@ as a lambda function: lambda x: n.")
 
         k0 = self.k0 * self.scale
         k = k0 * n
-        if marcuse_k:
+        if Ktype == 'i_gamma':
             K = 1j * np.sqrt(beta ** 2 - k ** 2, dtype=complex)
-        else:
+        elif Ktype == 'kappa':
             K = np.sqrt(k ** 2 - beta ** 2, dtype=complex)
+        else:
+            raise TypeError('Ktype must be kappa or i_gamma.')
 
         L = np.zeros(beta.shape + (4, 4), dtype=complex)
         Z = np.zeros_like(beta).T
@@ -360,7 +363,7 @@ as a lambda function: lambda x: n.")
 
         return L
 
-    def determinant(self, beta, nu=1, outer='h2', pml=None,
+    def determinant(self, beta, nu=1, outer='h2', Ktype='kappa', pml=None,
                     return_coeffs=False, return_matrix=False):
         """Return determinant of matching matrix.
 
@@ -403,17 +406,17 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
             # Now need to match coeffs at second to last layer with last layer
             if outer == 'h2':
                 inds = [1, 3]
-                marcuse_k = False
+                # marcuse_k = True
             elif outer == 'h1':
                 inds = [0, 2]
-                marcuse_k = True
+                # marcuse_k = True
             else:
                 raise TypeError("Outer function must be 'h1' (guided) or 'h2'\
      (leaky).")
 
             R = self.state_matrix(beta, nu, rhos[-2],
                                   ns[-1], zfunc='hankel',
-                                  marcuse_k=marcuse_k)[..., inds]
+                                  Ktype=Ktype)[..., inds]
 
             a, b, e, f = L[..., 0, 0], L[..., 0, 1], L[..., 1, 0], L[..., 1, 1]
             c, d, g, h = L[..., 2, 0], L[..., 2, 1], L[..., 3, 0], L[..., 3, 1]
@@ -465,7 +468,7 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
                 else:
                     return A * D - B * C
 
-    def coefficients(self, beta, nu=1, outer='h2', pml=None):
+    def coefficients(self, beta, nu=1, outer='h2', Ktype='kappa', pml=None):
         """Return coefficients for fields of bragg fiber.
 
         Returns an array where each row gives the coeffiencts of the fields
@@ -485,7 +488,8 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
         if outer != 'pcb':
 
             A, B, C, D, a, b, c, d, \
-                alpha, Beta = self.determinant(beta, nu, outer,
+                alpha, Beta = self.determinant(beta, nu=nu, outer=outer,
+                                               Ktype=Ktype, pml=None,
                                                return_coeffs=True)
 
             # A, B, or C,D can be used to make v1,v2 for core, but if mode
@@ -591,10 +595,12 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
 
     # ------------- Matplotlib Field Visualizations --------------
 
-    def fields_matplot(self, beta, nu=1, outer='h2', pml=None,
-                       marcuse_k=False):
+    def fields_matplot(self, beta, nu=1, outer='h2', Ktype='kappa',
+                       pml=None):
+        if Ktype not in ['i_gamma', 'kappa']:
+            raise TypeError('Ktype must be kappa or i_gamma.')
 
-        M = self.coefficients(beta, nu=nu, outer=outer, pml=pml)
+        M = self.coefficients(beta, nu=nu, outer=outer, pml=pml, Ktype=Ktype)
 
         # if pml is not None:
         #     alpha, R0 = pml['alpha'], pml['R0']
@@ -611,7 +617,7 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
         ns = self.ns
 
         Ks = np.sqrt(ks ** 2 - beta ** 2, dtype=complex)
-        if marcuse_k:
+        if Ktype == 'i_gamma':
             Ks[-1] = 1j * np.sqrt(beta**2 - ks[-1]**2, dtype=complex)
         Fs = 1j * beta / (ks ** 2 - beta ** 2)
 
@@ -855,27 +861,181 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
                 'Sz': Sz, 'Sz_rad': Sz_rad
                 }
 
-    # def plot_matplot(self, axes=(1,), **pltargs):
-    #     fig, axs = plt.subplots(*axes, **pltargs)
+    def graphpoints(self, rlist=None, ntheta=101):
+        """Create points for 1D and 2D plotting."""
+        rhos = np.concatenate([[1e-9], self.rhos/self.scale])
+        if rlist is not None:
+            if len(rlist) != len(self.rhos):
+                raise ValueError('Provided point list has wrong number of\
+entries.  Please give a list with same number of entries as regions of fiber.')
+            self.rs = np.concatenate(
+                [np.linspace(rhos[i], rhos[i+1], rlist[i])
+                 for i in range(len(rhos)-1)])
+        else:
+            self.rs = np.concatenate(
+                [np.linspace(rhos[i], rhos[i+1], 101)
+                 for i in range(len(rhos)-1)])
 
-    #     return fig, axs
+        self.thetas = np.linspace(0, 2*np.pi, ntheta)
+        self.Rs, self.Thetas = np.meshgrid(self.rs, self.thetas)
+        self.Xs, self.Ys = self.Rs * \
+            np.cos(self.Thetas), self.Rs * np.sin(self.Thetas)
 
-    # def add_radial_matplot(self, ax, F, nr=4*[501], **lineargs):
-    #     rhos = np.concatenate([[0], self.rhos])
-    #     rs = np.concatenate([np.linspace(rhos[i], rhos[i+1], nr[i])
-    #                         for i in range(len(rhos)-1)])
-    #     ax.plot(rs, F(rs), **lineargs)
-    #     ax.
+    def plot1D(self, F, rlist=None, figsize=(8, 6), part='real',
+               **lineargs):
+        """Plot 1D function F using matplotlib."""
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+        self.graphpoints(rlist=rlist)
+        ys = F(self.rs)
+        if part == 'real':
+            ax.plot(self.rs, ys.real, **lineargs)
+        elif part == 'imag':
+            ax.plot(self.rs, ys.imag, **lineargs)
+        elif part == 'norm':
+            ax.plot(self.rs, np.abs(ys), **lineargs)
+        else:
+            raise ValueError('Part must be "real", "imag" or "norm".')
 
-    # def plot2D_matplot(self, F, nr=4*[501], n_theta=500):
-    #     rhos = np.concatenate([[0], self.rhos])
-    #     rs = np.concatenate([np.linspace(rhos[i], rhos[i+1], nr[i])
-    #                         for i in range(len(rhos)-1)])
-    #     return None
+        plt.show()
+        return fig, ax
+
+    def add1D_plot(self, ax, F, part='real', **lineargs):
+        ys = F(self.rs)
+        if part == 'real':
+            ax.plot(self.rs, ys.real, **lineargs)
+        elif part == 'imag':
+            ax.plot(self.rs, ys.imag, **lineargs)
+        elif part == 'norm':
+            ax.plot(self.rs, np.abs(ys), **lineargs)
+        else:
+            raise ValueError('Part must be "real", "imag" or "norm".')
+        plt.show()
+
+    def plot2D_contour(self, F, rlist=None, ntheta=101, figsize=(16, 16),
+                       part='real', levels=40, plot_rhos=True, edgecolor='k',
+                       cmap='jet', colorbar_scale=.8, colorbar_fontsize=14,
+                       linewidth=1.1, **lineargs):
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+        self.graphpoints(rlist=rlist, ntheta=ntheta)
+        X, Y = self.Xs, self.Ys
+        Z = F(X, Y)
+        if part == 'real':
+            zs = Z.real
+        elif part == 'imag':
+            zs = Z.imag
+        elif part == 'norm':
+            zs = np.abs(Z)
+        else:
+            raise ValueError('Part must be "real", "imag" or "norm".')
+
+        contour = ax.contourf(X, Y, zs, levels=levels, cmap=cmap)
+
+        if plot_rhos:
+            for rho in self.rhos/self.scale:
+                plt.plot(rho*np.cos(self.thetas), rho *
+                         np.sin(self.thetas), color=edgecolor,
+                         linewidth=linewidth, **lineargs)
+        ax.set_aspect('equal')
+        ax.set_frame_on(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        cbar = plt.colorbar(contour, shrink=colorbar_scale)
+        cbar.ax.tick_params(labelsize=colorbar_fontsize)
+        return fig, ax
+
+    def plot2D_streamlines(self, Fx, Fy, rlist=None, ntheta=101, Nstrm=101,
+                           figsize=(16, 16), part='real', levels=40,
+                           contourfunc=None, contourpart='norm',
+                           colorbar_scale=.8, colorbar_fontsize=14,
+                           streamline_color='k', maxd_scaling=1,
+                           streamline_width=1.5, arrowsize=3.5,
+                           arrowstyle='->',
+                           broken_streamlines=True, density=2.2,
+                           plot_rhos=True, rho_linewidth=1.1,
+                           rho_linestyle='-', plot_seed=False,
+                           rho_linecolor='k', seed_nr=None, seed_ntheta=65,
+                           **streamplotkwargs):
+
+        if contourfunc is not None:
+            jet = cmr.get_sub_cmap('jet', 0.3, 0.75)
+
+            fig, ax = self.plot2D_contour(contourfunc, rlist=rlist,
+                                          ntheta=ntheta, figsize=figsize,
+                                          levels=levels, part=contourpart,
+                                          plot_rhos=plot_rhos, cmap=jet,
+                                          linewidth=rho_linewidth,
+                                          linestyle=rho_linestyle,
+                                          edgecolor=rho_linecolor,
+                                          colorbar_fontsize=colorbar_fontsize,
+                                          colorbar_scale=colorbar_scale)
+        else:
+            fig, ax = plt.subplots(1, 1, figsize=figsize)
+
+        # Build grid for streamplot (must be cartesian and uniform)
+        R = self.rhos[-1]/self.scale   # get outer radius
+        stream_pts = np.linspace(-R, R, Nstrm, dtype=float)  # base array
+
+        if 0 in stream_pts:  # avoid zero (not implemented/not defined)
+            stream_pts = np.linspace(-R, R, Nstrm+1, dtype=float)
+
+        X2, Y2 = np.meshgrid(stream_pts, stream_pts)
+        U, V = Fx(X2, Y2), Fy(X2, Y2)
+
+        if part == 'real':
+            ex, ey = U.real, V.real
+        elif part == 'imag':
+            ex, ey = U.imag, V.imag
+        else:
+            raise ValueError('Part must be real or imag.')
+
+        seed_points = self.seed_points(rlist=seed_nr, ntheta=seed_ntheta)
+
+        try:
+            ax.streamplot(X2, Y2, ex, ey, density=density,
+                          linewidth=streamline_width, color=streamline_color,
+                          broken_streamlines=broken_streamlines,
+                          arrowsize=arrowsize, arrowstyle=arrowstyle,
+                          start_points=seed_points, maxd_scaling=maxd_scaling,
+                          **streamplotkwargs)
+        except TypeError:
+            ax.streamplot(X2, Y2, ex, ey, density=density,
+                          linewidth=streamline_width, color=streamline_color,
+                          broken_streamlines=broken_streamlines,
+                          arrowsize=arrowsize, arrowstyle=arrowstyle,
+                          start_points=seed_points,
+                          **streamplotkwargs)
+        if plot_seed:
+            ax.scatter(seed_points[..., 0], seed_points[..., 1])
+
+        ax.set_aspect('equal')
+        ax.set_frame_on(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        return fig, ax
+
+    def seed_points(self, rlist=None, ntheta=4):
+        rhos = np.concatenate([[0], self.rhos/self.scale])
+        if rlist is not None:
+            if len(rlist) != len(self.rhos):
+                raise ValueError('Provided point list has wrong number of\
+entries.  Please give a list with same number of entries as regions of fiber.')
+            rs = np.concatenate(
+                [np.linspace(rhos[i], rhos[i+1], rlist[i]+2)[1:-1]
+                 for i in range(len(rhos)-1)])
+        else:
+            rs = np.concatenate(
+                [np.linspace(rhos[i], rhos[i+1], 3+2)[1:-1]
+                 for i in range(len(rhos)-1)])
+
+        thetas = np.linspace(0, 2*np.pi, ntheta+1)[:-1]
+        Rs, Thetas = np.meshgrid(rs, thetas)
+        Xs, Ys = Rs * np.cos(Thetas), Rs * np.sin(Thetas)
+        return np.array([Xs.flatten(), Ys.flatten()]).T
+
     # ------------- NGSolve Field Visualizations ------------------
 
-    def regional_fields(self, beta, coeffs, index, nu=1, pml=None,
-                        zfunc='bessel', marcuse_k=False):
+    def regional_fields(self, beta, coeffs, index, nu=1, Ktype='kappa',
+                        zfunc='bessel', pml=None):
         """Create fields on one region of the fiber."""
 
         if pml is not None:
@@ -892,10 +1052,12 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
         n = self.ns[index]
         k = k0 * n
 
-        if marcuse_k:
+        if Ktype == 'i_gamma':
             K = 1j * np.sqrt(beta ** 2 - k ** 2, dtype=complex)
-        else:
+        elif Ktype == 'kappa':
             K = np.sqrt(k ** 2 - beta ** 2, dtype=complex)
+        else:
+            raise TypeError('Bad Ktype.')
 
         F = 1j * beta / (k ** 2 - beta ** 2)
 
@@ -946,9 +1108,9 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
                 'Hphi': Hphi,  'Ex': Ex, 'Ey': Ey, 'Hx': Hx, 'Hy': Hy,
                 'Sx': Sx, 'Sy': Sy, 'Sz': Sz, 'Sr': Sr, 'Sphi': Sphi}
 
-    def all_fields(self, beta, nu=1, outer='h2', pml=None):
+    def all_fields(self, beta, nu=1, outer='h2', Ktype='kappa', pml=None):
         """Create total fields for fiber from regional fields."""
-        M = self.coefficients(beta, nu, outer, pml=pml)
+        M = self.coefficients(beta, nu=nu, outer=outer, Ktype=Ktype, pml=pml)
 
         Ez, Hz = [], []
         Er, Hr = [], []
@@ -961,20 +1123,15 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
             coeffs = M[i]
             if i == len(self.ns) - 1 and outer != 'pcb':
                 zfunc = 'hankel'
-                if outer == 'h1':
-                    marcuse_k = True
-                else:
-                    marcuse_k = False
             else:
                 zfunc = 'bessel'
-                marcuse_k = False
 
             if i == len(self.ns)-1:
-                F = self.regional_fields(beta, coeffs, i, nu, pml=pml,
-                                         zfunc=zfunc, marcuse_k=marcuse_k)
+                F = self.regional_fields(beta, coeffs, i, nu=nu, pml=pml,
+                                         zfunc=zfunc, Ktype=Ktype)
             else:
-                F = self.regional_fields(beta, coeffs, i, nu, pml=None,
-                                         zfunc=zfunc, marcuse_k=marcuse_k)
+                F = self.regional_fields(beta, coeffs, i, nu=nu, pml=None,
+                                         zfunc=zfunc, Ktype='kappa')
 
             Ez.append(F['Ez']), Er.append(F['Er'])
             Ex.append(F['Ex']), Ey.append(F['Ey'])
