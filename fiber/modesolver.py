@@ -739,9 +739,7 @@ class ModeSolver:
         """
 
         if alpha is not None:
-
             self.ngspmlset = True
-
             radial = ng.pml.Radial(rad=self.R,
                                    alpha=alpha*1j, origin=(0, 0))
             self.mesh.SetPML(radial, 'Outer')
@@ -827,7 +825,6 @@ class ModeSolver:
                 selfr.ZH += (np.conjugate(z) * E * v - curl(E) * curl(v)
                              - V * E * v - grad(psi) * E
                              - n2 * phi * psi + n2 * v * grad(phi)) * dx
-
                 with ng.TaskManager():
                     try:
                         selfr.Z.Assemble()
