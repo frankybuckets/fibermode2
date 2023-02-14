@@ -738,7 +738,7 @@ class ModeSolver:
            mesh-based PML.
         """
 
-        if alpha is not None:  # want pml
+        if alpha is not None:
 
             self.ngspmlset = True
 
@@ -747,13 +747,14 @@ class ModeSolver:
             self.mesh.SetPML(radial, 'Outer')
             print('Set NGSolve automatic PML with alpha=', alpha,
                   'and thickness=%.3f' % (self.Rout-self.R))
+        elif self.ngspmlset:
+            raise RuntimeError('Unexpected NGSolve pml mesh trafo here.')
 
         n = self.index
         n2 = n*n
         X = ng.HCurl(self.mesh, order=p+1-max(1-p, 0), type1=True,
                      dirichlet='OuterCircle', complex=True)
-        Y = ng.H1(self.mesh, order=p+1, dirichlet='OuterCircle',
-                  complex=True)
+        Y = ng.H1(self.mesh, order=p+1, dirichlet='OuterCircle', complex=True)
         E, v = X.TnT()
         phi, psi = Y.TnT()
 
@@ -970,17 +971,15 @@ class ModeSolver:
 
     def leakyvecmodes(self, rad, ctr, alpha=1, p=3,  seed=1, npts=8, nspan=20,
                       within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
-                      verbose=True, inverse='umfpack', handpml=False,
-                      d=None, **feastkwargs):
+                      verbose=True, inverse='umfpack', **feastkwargs):
         """
         Capture leaky vector modes whose non-dimensional resonance value Z²
         is contained  within the circular contour centered at "ctr"
         of radius "rad" in the Z² complex plane (not the Z-plane!).
         """
 
-        R, M, A, B, C, D, Dinv = self.vecmodesystem(p, alpha=alpha, d=d,
-                                                    inverse=inverse,
-                                                    handpml=handpml)
+        R, M, A, B, C, D, Dinv = self.vecmodesystem(p, alpha=alpha,
+                                                    inverse=inverse)
         X, Y = R.XY.components
         E = NGvecs(X, nspan, M=M)
         El = E.create()
