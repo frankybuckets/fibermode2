@@ -577,7 +577,7 @@ class PBG(ModeSolver):
                 pickle.dump(self, f)
         else:
             raise OSError("The given folder is not a directory.\
-                          Please check and make directory as needed.")
+ Please check and make directory as needed.")
 
     def savemodes(self, name, folder, Y, p, betas, Zs, solverparams=None,
                   longY=None, longYl=None, pbgpickle=False):

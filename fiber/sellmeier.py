@@ -19,7 +19,7 @@ def index(lam, material='FusedSilica'):
         # properties for room temperature (20 C)
 
         B = np.array([0.6961663, 0.4079426, 0.8974794])
-        L = np.array([0.0684043, 0.1162414, 9.0896161])
+        L = np.array([0.0684043, 0.1162414, 9.896161])
 
     else:
         raise NotImplementedError('Implement Sellmeier for %s' % material)
