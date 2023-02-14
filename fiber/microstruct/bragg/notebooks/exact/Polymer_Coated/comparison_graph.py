@@ -47,9 +47,11 @@ materials = [
     'N0'
 ]
 
+ks = [0, 0.001, 0.005, .01, np.infty]
+
 # Plot the data
 for s, d in zip(materials, styles):
-    CL = np.load(relpath(main + s + '_betas.npy'))
+    CL = np.load(relpath(main + s + '_CL.npy'))
     ax1.plot(wls[~np.isnan(CL)], CL[~np.isnan(CL)], ls=d['ls'],
              label=d['label'], linewidth=d['lw'], markersize=d['msz'],
              marker=d['m'], color=d['c'])
@@ -93,7 +95,21 @@ plt.subplots_adjust(top=0.905,
                     hspace=0.2,
                     wspace=0.2)
 
-ax1.set_ylim(1e-6, 4e-2)
+# ax1.set_ylim(1e-6, 4e-2)
 ax1.legend(fontsize=25)
 # Show figure (needed for running from command line)
 plt.show()
+
+# %%
+# Save to .dat file for pgfplots
+
+paper_path = relpath(expanduser('~/papers/outer_materials/\
+figures/data/bragg/poly'))
+
+msk = ~np.isnan(CL)
+
+# Plot the data
+for s, k in zip(materials, ks):
+    CL = np.load(relpath(main + s + '_CL.npy'))
+    both = np.column_stack((wls[msk]*1e6, CL[msk]))
+    np.savetxt(paper_path + '/k_'+str(k) + '.dat', both, fmt='%.8f')

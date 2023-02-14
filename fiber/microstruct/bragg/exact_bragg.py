@@ -185,9 +185,12 @@ as a lambda function: lambda x: n.")
         if zfunc == 'hankel':
             z1, z1p = h1, h1vp
             z2, z2p = h2, h2vp
+            f = 1j * np.pi / 4
         elif zfunc == 'bessel':
             z1, z1p = jv, jvp
             z2, z2p = yv, yvp
+            f = np.pi / 2
+
         else:
             raise TypeError("zfunc must be 'bessel' or 'hankel'.")
 
@@ -231,7 +234,7 @@ as a lambda function: lambda x: n.")
                                  (F4 * z2p(nu, X) * z1(nu, Y) -
                                  z2(nu, X) * z1p(nu, Y)).T]).T
 
-        return np.pi / 2 * Ymat * M
+        return f * Ymat * M
 
     def state_matrix(self, beta, nu, rho, n, zfunc='bessel', Ktype='kappa',
                      pml=None):
@@ -881,32 +884,52 @@ entries.  Please give a list with same number of entries as regions of fiber.')
         self.Xs, self.Ys = self.Rs * \
             np.cos(self.Thetas), self.Rs * np.sin(self.Thetas)
 
-    def plot1D(self, F, rlist=None, figsize=(8, 6), part='real',
-               **lineargs):
+    def plot1D(self, F, rlist=None, figsize=(8, 6), part='real', nu=1,
+               double_r=False, return_vals=False, maxscale=False, **lineargs):
         """Plot 1D function F using matplotlib."""
         fig, ax = plt.subplots(1, 1, figsize=figsize)
         self.graphpoints(rlist=rlist)
-        ys = F(self.rs)
+        if double_r:
+            rs = np.concatenate([-np.flip(self.rs), self.rs])
+            ys = np.concatenate([np.exp(1j*nu*np.pi)*F(np.flip(self.rs)),
+                                 F(self.rs)])
+        else:
+            rs = self.rs
+            ys = F(rs)
+        if maxscale:
+            ys /= np.max(np.abs(ys))
         if part == 'real':
-            ax.plot(self.rs, ys.real, **lineargs)
+            ax.plot(rs, ys.real, **lineargs)
         elif part == 'imag':
-            ax.plot(self.rs, ys.imag, **lineargs)
+            ax.plot(rs, ys.imag, **lineargs)
         elif part == 'norm':
-            ax.plot(self.rs, np.abs(ys), **lineargs)
+            ax.plot(rs, np.abs(ys), **lineargs)
         else:
             raise ValueError('Part must be "real", "imag" or "norm".')
 
         plt.show()
-        return fig, ax
+        if return_vals:
+            return rs, ys
+        else:
+            return fig, ax
 
-    def add1D_plot(self, ax, F, part='real', **lineargs):
-        ys = F(self.rs)
+    def add1D_plot(self, ax, F, part='real', double_r=False, nu=1,
+                   maxscale=False, **lineargs):
+        if double_r:
+            rs = np.concatenate([-np.flip(self.rs), self.rs])
+            ys = np.concatenate([np.exp(1j*nu*np.pi)*F(np.flip(self.rs)),
+                                 F(self.rs)])
+        else:
+            rs = self.rs
+            ys = F(rs)
+        if maxscale:
+            ys /= np.max(np.abs(ys))
         if part == 'real':
-            ax.plot(self.rs, ys.real, **lineargs)
+            ax.plot(rs, ys.real, **lineargs)
         elif part == 'imag':
-            ax.plot(self.rs, ys.imag, **lineargs)
+            ax.plot(rs, ys.imag, **lineargs)
         elif part == 'norm':
-            ax.plot(self.rs, np.abs(ys), **lineargs)
+            ax.plot(rs, np.abs(ys), **lineargs)
         else:
             raise ValueError('Part must be "real", "imag" or "norm".')
         plt.show()
