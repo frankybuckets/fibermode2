@@ -723,8 +723,7 @@ class ModeSolver:
     # ###################################################################
     # VECTOR MODES
 
-    def vecmodesystem(self, p, alpha=None, d=None, inverse=None,
-                      handpml=False):
+    def vecmodesystem(self, p, alpha=None, inverse=None):
         """
         Prepare eigensystem and resolvents for solving for vector modes.
 
@@ -739,55 +738,15 @@ class ModeSolver:
            mesh-based PML.
         """
 
-        if not handpml:  # Either no pml or ngsolve pml
+        if alpha is not None:  # want pml
 
-            if alpha is not None:  # want pml
+            self.ngspmlset = True
 
-                self.ngspmlset = True
-
-                if d is not None:  # d given means ngsolve custom smooth pml
-
-                    self.set_smooth_ngpml(alpha, d)
-
-                else:   # d not given means standard ngsolve pml
-
-                    radial = ng.pml.Radial(rad=self.R,
-                                           alpha=alpha*1j, origin=(0, 0))
-                    self.mesh.SetPML(radial, 'Outer')
-                    print('Set NGSolve automatic PML with alpha=', alpha,
-                          'and thickness=%.3f' % (self.Rout-self.R))
-                dx = ng.dx
-            else:
-                print('No PML')
-                dx = ng.dx
-
-        else:  # hand implemented PML
-
-            if self.ngspmlset:  # avoid conflicts with ngsolve pml
-
-                raise RuntimeError('Unexpected NGSolve pml mesh trafo here.')
-
-            elif alpha is None or d is None:  # required for pml
-
-                raise ValueError('Hand Implemented PMl requires values for\
- alpha and d.')
-
-            else:
-                det, JinvT, _ = self.set_smooth_pml(alpha, d)
-                dx_pml = ng.dx(definedon=self.mesh.Materials('Outer'))
-                dx = ng.dx(definedon=~self.mesh.Materials('Outer'))
-
-                def curlpml(F):
-                    A, C, B, D = ng.grad(F)
-                    gFx, gFy = ng.CF((A, B)), ng.CF((C, D))
-
-                    gFx_h = JinvT * gFx
-                    gFy_h = JinvT * gFy
-
-                    return gFy_h[0] - gFx_h[1]
-
-                def gradpml(f):
-                    return JinvT * ng.grad(f)
+            radial = ng.pml.Radial(rad=self.R,
+                                   alpha=alpha*1j, origin=(0, 0))
+            self.mesh.SetPML(radial, 'Outer')
+            print('Set NGSolve automatic PML with alpha=', alpha,
+                  'and thickness=%.3f' % (self.Rout-self.R))
 
         n = self.index
         n2 = n*n
@@ -808,17 +767,6 @@ class ModeSolver:
         B += -n2 * E * grad(psi) * dx
         D = ng.BilinearForm(Y, condense=True)
         D += n2 * phi * psi * dx
-
-        if handpml:
-            A += (curlpml(E) * curlpml(v) + self.V * E * v) * det * dx_pml
-
-            M += E * v * det * dx_pml
-
-            C += gradpml(phi) * v * det * dx_pml
-
-            B += -n2 * E * gradpml(psi) * det * dx_pml
-
-            D += n2 * phi * psi * det * dx_pml
 
         with ng.TaskManager():
             try:
@@ -878,20 +826,6 @@ class ModeSolver:
                 selfr.ZH += (np.conjugate(z) * E * v - curl(E) * curl(v)
                              - V * E * v - grad(psi) * E
                              - n2 * phi * psi + n2 * v * grad(phi)) * dx
-
-                if handpml:
-
-                    selfr.Z += (z * E * v -
-                                curlpml(E) * curlpml(v)
-                                - V * E * v - gradpml(phi) * v
-                                - n2 * phi * psi +
-                                n2 * E * gradpml(psi)) * det * dx_pml
-
-                    selfr.ZH += (np.conjugate(z) * E * v -
-                                 curlpml(E) * curlpml(v)
-                                 - V * E * v - gradpml(psi) * E
-                                 - n2 * phi * psi +
-                                 n2 * v * gradpml(phi)) * det * dx_pml
 
                 with ng.TaskManager():
                     try:
@@ -1351,117 +1285,3 @@ class ModeSolver:
         print(' CL dB/m:', CLs)
 
         return Nu_sqrs, E, phi, R, CLs
-
-    def set_smooth_ngpml(self, alpha, d=0):
-        """NGSolve custom pml of form:
-
-            r = rh + 1j * α * φ(rh)
-
-        where
-
-            φ(rh) = c / (d + 1) * (rh - R) ^ (d + 1).
-
-        and c is chosen such that the integral of the imaginary part of
-        dr/drh equals alpha / W where W is the width of the PML; hence
-
-            c = (d + 1) / W.
-
-        Integer d determines the degee of smoothing.
-        """
-        if d < 0:
-            raise ValueError('PML degree must be integer >= 0')
-
-        W = self.Rout-self.R
-        C = (d + 1) / W
-        C = 1
-        # Set complex trafo
-        rh2 = ng.x*ng.x + ng.y*ng.y
-        rh = ng.sqrt(rh2)  # radial variable
-        r = rh + alpha * 1j * C / (d + 1) * (rh - self.R) ** (d + 1)
-        drdrh = 1 + alpha * 1j * C * (rh - self.R) ** d
-
-        x = r * ng.x / rh
-        y = r * ng.y / rh
-
-        trafo = ng.CF((x, y))
-
-        # derivatives
-        dxdxh = drdrh * (ng.x / rh) ** 2 + r * (ng.y ** 2 / rh ** 3)
-        dxdyh = drdrh * (ng.y * ng. x / rh ** 2) - \
-            r * (ng.y * ng.x / rh ** 3)
-
-        dydyh = drdrh * (ng.y / rh) ** 2 + r * (ng.x ** 2 / rh ** 3)
-        dydxh = dxdyh
-
-        # dxdxh = drdrh * ng.x*ng.x / rh2 + r * (ng.y*ng.y / rh*rh2)
-        # dxdyh = drdrh * (ng.y * ng. x / rh2) - \
-        #     r * (ng.y * ng.x / rh*rh2)
-
-        # dydyh = drdrh * (ng.y*ng.y / rh2) + r * (ng.x*ng.x / rh*rh2)
-        # dydxh = dxdyh
-
-        J = ng.CF((dxdxh, dxdyh, dydxh, dydyh), dims=(2, 2))
-
-        custom_pml = ng.pml.Custom(trafo, J)
-
-        self.mesh.SetPML(custom_pml, 'Outer')
-        print('Set NGSolve custom (smooth) PML with alpha =', alpha,
-              ', and smoothing factor =',  d)
-
-    def set_smooth_pml(self, alpha, d=0):
-        """Custom pml (hand implemented) of form:
-
-            r = rh + 1j * α * φ(rh - R))
-
-        where
-
-            φ(rh) = c / (d + 1) * (rh - R) ^ (d + 1).
-
-        and c is chosen such that the integral of the imaginary part of
-        dr/drh equals alpha / W where W is the width of the PML; hence
-
-            c = (d + 1) / W.
-
-        Integer d determines the degee of smoothing.
-        """
-        if d < 0:
-            raise ValueError('PML degree must be integer >= 0')
-
-        W = self.Rout-self.R
-        C = (d + 1) / W
-        # C = 1
-        # Set complex trafo
-        rh2 = ng.x*ng.x + ng.y*ng.y
-        rh = ng.sqrt(rh2)  # radial variable
-
-        r = rh + alpha * 1j * C / (d + 1) * (rh - self.R) ** (d + 1)
-
-        drdrh = 1 + alpha * 1j * C * (rh - self.R) ** d
-
-        x = r * ng.x / rh
-        y = r * ng.y / rh
-        trafo = ng.CoefficientFunction((x, y))
-
-        # derivatives and determinant
-        dxdxh = drdrh * (ng.x / rh) ** 2 + r * (ng.y ** 2 / rh ** 3)
-        dxdyh = drdrh * (ng.y * ng. x / rh ** 2) - \
-            r * (ng.y * ng.x / rh ** 3)
-
-        dydyh = drdrh * (ng.y / rh) ** 2 + r * (ng.x ** 2 / rh ** 3)
-        dydxh = dxdyh
-
-        # dxdxh = drdrh * ng.x*ng.x / rh2 + r * (ng.y*ng.y / rh*rh2)
-        # dxdyh = drdrh * (ng.y * ng. x / rh2) - \
-        #     r * (ng.y * ng.x / rh*rh2)
-
-        # dydyh = drdrh * (ng.y*ng.y / rh2) + r * (ng.x*ng.x / rh*rh2)
-        # dydxh = dxdyh
-
-        det = dxdxh * dydyh - dydxh * dxdyh
-
-        JinvT = 1/det * ng.CF((dydyh, -dydxh, -dxdyh, dxdxh), dims=(2, 2))
-
-        print('Set handmade custom (smooth) PML with alpha =' + str(alpha),
-              ', and smoothing factor =', d)
-
-        return det, JinvT, trafo
