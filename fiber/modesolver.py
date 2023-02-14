@@ -745,7 +745,7 @@ class ModeSolver:
             radial = ng.pml.Radial(rad=self.R,
                                    alpha=alpha*1j, origin=(0, 0))
             self.mesh.SetPML(radial, 'Outer')
-            print('Set NGSolve automatic PML with alpha=', alpha,
+            print('Set NGSolve automatic PML with p=', p, ' alpha=', alpha,
                   'and thickness=%.3f' % (self.Rout-self.R))
         elif self.ngspmlset:
             raise RuntimeError('Unexpected NGSolve pml mesh trafo here.')
