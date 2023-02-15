@@ -14,7 +14,7 @@ import pickle
 from warnings import warn
 from pyeigfeast.spectralproj.ngs import NGvecs
 from fiberamp.fiber import ModeSolver
-from opticalmaterialspy import Air, SiO2
+# from opticalmaterialspy import Air, SiO2
 
 
 class Bragg(ModeSolver):
@@ -26,19 +26,21 @@ class Bragg(ModeSolver):
 
     """
 
-    def __init__(self, scale=1e-6, ts=[1e-6, .5e-6, .5e-6, .5e-6],
+    def __init__(self, scale=5e-5, ts=[5e-5, 1e-5, 2e-5, 2e-5],
                  mats=['air', 'glass', 'air', 'Outer'],
-                 ns=[Air().n, SiO2().n, Air().n, Air().n],
-                 maxhs=[.4, .1, .1, .1], fan=False,
-                 wl=1.8e-6, ref=0, curve=8, beta_sq_plane=False):
+                 ns=[1, 1.44, 1, 1],
+                 bcs=['r0', 'r1', 'R', 'OuterCircle'],
+                 maxhs=[.2, .015, .08, .1], fan=False,
+                 wl=1.2e-6, ref=0, curve=8, beta_sq_plane=False):
 
         # Check inputs for errors
-        self.check_parameters(ts, ns, mats, maxhs)
+        self.check_parameters(ts, ns, mats, maxhs, bcs)
 
         self.L = scale
         self.scale = scale
         self.ts = ts
         self.mats = mats
+        self.bcs = bcs
         self.Ts = np.array(ts) / scale
         self.Rs = [sum(self.Ts[:i]) for i in range(1, len(self.Ts)+1)]
         self.maxhs = np.array(maxhs) * self.Rs
@@ -54,12 +56,12 @@ class Bragg(ModeSolver):
 
         super(Bragg, self).__init__(self.mesh, self.L, self.n0)
 
-    def check_parameters(self, ts, ns, mats, maxhs):
+    def check_parameters(self, ts, ns, mats, maxhs, bcs):
 
         # Check that all relevant inputs have same length
-        lengths = [len(ts), len(ns), len(mats), len(maxhs)]
+        lengths = [len(ts), len(ns), len(mats), len(maxhs), len(bcs)]
         lengths = np.array(lengths)
-        names = ['ts', 'ns', 'mats', 'maxhs']
+        names = ['ts', 'ns', 'mats', 'maxhs', 'bcs']
 
         same = all(x == lengths[0] for x in lengths)
 
@@ -70,13 +72,14 @@ class Bragg(ModeSolver):
             raise ValueError(string + "\nModify above inputs as necessary and \
 try again.")
 
-        all_callable = all(callable(ns[i]) for i in range(len(ns)))
+#         all_callable = all(callable(ns[i]) for i in range(len(ns)))
 
-        if not all_callable:
-            raise ValueError("One of the provided ns is not callable.  \
-Refractive indices in this class should be provided as callables to allow for \
-dependence on wavelength.  If not desiring this dependence, provide fixed n \
-as a lambda function: lambda x: n.")
+#         if not all_callable:
+#             raise ValueError("One of the provided ns is not callable.  \
+# Refractive indices in this class should be provided as callables to allow \
+# for \
+# dependence on wavelength.  If not desiring this dependence, provide fixed n \
+# as a lambda function: lambda x: n.")
 
     def create_mesh(self, ref=0, curve=8):
         """
@@ -100,11 +103,11 @@ as a lambda function: lambda x: n.")
         if not fan:
             for i, R in enumerate(self.Rs[:-1]):
                 self.geo.AddCircle(c=(0, 0), r=R, leftdomain=i+1,
-                                   rightdomain=i+2)
+                                   rightdomain=i+2, bc=self.bcs[i])
 
             self.geo.AddCircle(c=(0, 0), r=self.Rs[-1],
                                leftdomain=len(self.Rs),
-                               bc='OuterCircle')
+                               bc=self.bcs[-1])
 
             for i, (mat, maxh) in enumerate(zip(self.mats, self.maxhs)):
                 self.geo.SetMaterial(i+1, mat)
@@ -112,13 +115,102 @@ as a lambda function: lambda x: n.")
         else:
             for i, R in enumerate(self.Rs[:-3]):
                 self.geo.AddCircle(c=(0, 0), r=R, leftdomain=i+1,
-                                   rightdomain=i+2)
+                                   rightdomain=i+2, bc=self.bcs[i])
 
             self.add_fan()
 
             for i, (mat, maxh) in enumerate(zip(self.mats, self.maxhs)):
                 self.geo.SetMaterial(i+1, mat)
                 self.geo.SetDomainMaxH(i+1, maxh)
+
+    def set_material_properties(self, beta_sq_plane=False):
+        """
+        Set k0, refractive indices, and V function.
+        """
+        if beta_sq_plane:
+            warn('Using square beta plane: search centers should be at\
+ -(beta*L)**2 where L is scale attribute of fiber.')
+        self.k = 2 * np.pi / self.wavelength
+        self.refractive_indices = [self.ns[i](self.wavelength)
+                                   if callable(self.ns[i])
+                                   else self.ns[i]
+                                   for i in range(len(self.ns))]
+        self.index = ng.CF(self.refractive_indices)
+        self.n0 = self.refractive_indices[-1]
+
+        n0sq = ng.CF([self.n0**2 for i in range(len(self.ns))])
+        self.V = (self.L * self.k)**2 * (n0sq * (not beta_sq_plane)
+                                         - self.index ** 2)
+
+    def E_modes_from_array(self, array, p=1, mesh=None):
+        """Create NGvec object containing modes and set data given by array."""
+        if mesh is None:
+            mesh = self.mesh
+        X = ng.HCurl(mesh, order=p+1-max(1-p, 0), type1=True,
+                     dirichlet='OuterCircle', complex=True)
+        m = array.shape[1]
+        E = NGvecs(X, m)
+        try:
+            E.fromnumpy(array)
+        except ValueError:
+            raise ValueError("Array is wrong length: make sure your mesh is\
+ constructed the same as for input array and that polynomial degree correspond\
+ing to array has been passed as keyword p.")
+        return E
+
+    def phi_modes_from_array(self, array, p=1, mesh=None):
+        """Create NGvec object containing modes and set data given by array."""
+        if mesh is None:
+            mesh = self.mesh
+        Y = ng.H1(mesh, order=p+1, dirichlet='OuterCircle', complex=True)
+        m = array.shape[1]
+        phi = NGvecs(Y, m)
+        try:
+            phi.fromnumpy(array)
+        except ValueError:
+            raise ValueError("Array is wrong length: make sure your mesh is\
+ constructed the same as for input array and that polynomial degree correspond\
+ing to array has been passed as keyword p.")
+        return phi
+
+    # SAVE & LOAD #####################################################
+
+    def save_mesh(self, name):
+        """ Save mesh using pickle (allows for mesh curvature). """
+        if name[-4:] != '.pkl':
+            name += '.pkl'
+        with open(name, 'wb') as f:
+            pickle.dump(self.mesh, f)
+
+    def save_modes(self, modes, name):
+        """Save modes as numpy arrays."""
+        if name[-4:] == '.npy':
+            name -= '.npy'
+        np.save(name, modes.tonumpy())
+
+    def load_mesh(self, name):
+        """ Load a saved ARF mesh."""
+        if name[-4:] != '.pkl':
+            name += '.pkl'
+        with open(name, 'rb') as f:
+            pmesh = pickle.load(f)
+        return pmesh
+
+    def load_E_modes(self, mesh_name, mode_name, p=8):
+        """Load transverse vectore E modes and associated mesh"""
+        mesh = self.load_mesh(mesh_name)
+        if mode_name[-4:] == '.npy':
+            mode_name -= '.npy'
+        array = np.load(mode_name+'.npy')
+        return self.E_modes_from_array(array, mesh=mesh, p=p)
+
+    def load_phi_modes(self, mesh_name, mode_name, p=8):
+        """Load transverse vectore E modes and associated mesh"""
+        mesh = self.load_mesh(mesh_name)
+        array = np.load(mode_name+'.npy')
+        return self.phi_modes_from_array(array, mesh=mesh, p=p)
+
+    # Add fan to outer geometry #####################################
 
     def add_fan(self):
         r1, r2, r3 = self.Rs[-3:]
@@ -204,88 +296,3 @@ as a lambda function: lambda x: n.")
 
         self.geo.Append(["line", seg_pts[4], seg_pts[5]], bc='OuterCircle',
                         leftdomain=dom_indx[-1])
-
-    def set_material_properties(self, beta_sq_plane=False):
-        """
-        Set k0, refractive indices, and V function.
-        """
-        if beta_sq_plane:
-            warn('Using square beta plane: search centers should be at\
- -(beta*L)**2 where L is scale attribute of fiber.')
-        self.k = 2 * np.pi / self.wavelength
-        self.refractive_indices = [self.ns[i](
-            self.wavelength) for i in range(len(self.ns))]
-        self.index = ng.CF(self.refractive_indices)
-        self.n0 = self.refractive_indices[-1]
-
-        n0sq = ng.CF([self.n0**2 for i in range(len(self.ns))])
-        self.V = (self.L * self.k)**2 * (n0sq * (not beta_sq_plane)
-                                         - self.index ** 2)
-
-    def E_modes_from_array(self, array, p=1, mesh=None):
-        """Create NGvec object containing modes and set data given by array."""
-        if mesh is None:
-            mesh = self.mesh
-        X = ng.HCurl(mesh, order=p+1-max(1-p, 0), type1=True,
-                     dirichlet='OuterCircle', complex=True)
-        m = array.shape[1]
-        E = NGvecs(X, m)
-        try:
-            E.fromnumpy(array)
-        except ValueError:
-            raise ValueError("Array is wrong length: make sure your mesh is\
- constructed the same as for input array and that polynomial degree correspond\
-ing to array has been passed as keyword p.")
-        return E
-
-    def phi_modes_from_array(self, array, p=1, mesh=None):
-        """Create NGvec object containing modes and set data given by array."""
-        if mesh is None:
-            mesh = self.mesh
-        Y = ng.H1(mesh, order=p+1, dirichlet='OuterCircle', complex=True)
-        m = array.shape[1]
-        phi = NGvecs(Y, m)
-        try:
-            phi.fromnumpy(array)
-        except ValueError:
-            raise ValueError("Array is wrong length: make sure your mesh is\
- constructed the same as for input array and that polynomial degree correspond\
-ing to array has been passed as keyword p.")
-        return phi
-
-    # SAVE & LOAD #####################################################
-
-    def save_mesh(self, name):
-        """ Save mesh using pickle (allows for mesh curvature). """
-        if name[-4:] != '.pkl':
-            name += '.pkl'
-        with open(name, 'wb') as f:
-            pickle.dump(self.mesh, f)
-
-    def save_modes(self, modes, name):
-        """Save modes as numpy arrays."""
-        if name[-4:] == '.npy':
-            name -= '.npy'
-        np.save(name, modes.tonumpy())
-
-    def load_mesh(self, name):
-        """ Load a saved ARF mesh."""
-        if name[-4:] != '.pkl':
-            name += '.pkl'
-        with open(name, 'rb') as f:
-            pmesh = pickle.load(f)
-        return pmesh
-
-    def load_E_modes(self, mesh_name, mode_name, p=8):
-        """Load transverse vectore E modes and associated mesh"""
-        mesh = self.load_mesh(mesh_name)
-        if mode_name[-4:] == '.npy':
-            mode_name -= '.npy'
-        array = np.load(mode_name+'.npy')
-        return self.E_modes_from_array(array, mesh=mesh, p=p)
-
-    def load_phi_modes(self, mesh_name, mode_name, p=8):
-        """Load transverse vectore E modes and associated mesh"""
-        mesh = self.load_mesh(mesh_name)
-        array = np.load(mode_name+'.npy')
-        return self.phi_modes_from_array(array, mesh=mesh, p=p)
