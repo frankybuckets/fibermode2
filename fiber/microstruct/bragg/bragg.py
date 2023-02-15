@@ -14,7 +14,6 @@ import pickle
 from warnings import warn
 from pyeigfeast.spectralproj.ngs import NGvecs
 from fiberamp.fiber import ModeSolver
-# from opticalmaterialspy import Air, SiO2
 
 
 class Bragg(ModeSolver):
@@ -27,11 +26,9 @@ class Bragg(ModeSolver):
     """
 
     def __init__(self, scale=5e-5, ts=[5e-5, 1e-5, 2e-5, 2e-5],
-                 mats=['air', 'glass', 'air', 'Outer'],
-                 ns=[1, 1.44, 1, 1],
-                 bcs=['r0', 'r1', 'R', 'OuterCircle'],
-                 maxhs=[.2, .015, .08, .1], fan=False,
-                 wl=1.2e-6, ref=0, curve=8, beta_sq_plane=False):
+                 mats=['air', 'glass', 'air', 'Outer'], ns=[1, 1.44, 1, 1],
+                 maxhs=[.2, .025, .08, .1], bcs=None, wl=1.2e-6, ref=0,
+                 curve=8, fan=False, beta_sq_plane=False):
 
         # Check inputs for errors
         self.check_parameters(ts, ns, mats, maxhs, bcs)
@@ -40,7 +37,14 @@ class Bragg(ModeSolver):
         self.scale = scale
         self.ts = ts
         self.mats = mats
-        self.bcs = bcs
+
+        if bcs is not None:
+            self.bcs = bcs
+        else:
+            self.bcs = ['r'+str(i+1) for i in range(len(ts))]
+            self.bcs[-1] = 'OuterCircle'
+            self.bcs[-2] = 'R'
+
         self.Ts = np.array(ts) / scale
         self.Rs = [sum(self.Ts[:i]) for i in range(1, len(self.Ts)+1)]
         self.maxhs = np.array(maxhs) * self.Rs
@@ -59,9 +63,16 @@ class Bragg(ModeSolver):
     def check_parameters(self, ts, ns, mats, maxhs, bcs):
 
         # Check that all relevant inputs have same length
-        lengths = [len(ts), len(ns), len(mats), len(maxhs), len(bcs)]
+        lengths = [len(ts), len(ns), len(mats), len(maxhs)]
+        names = ['ts', 'ns', 'mats', 'maxhs']
+        if bcs is not None:
+            if bcs[-1] != 'OuterCircle':
+                raise ValueError('Final boundary must be "OuterCircle".')
+            lengths.append(len(bcs))
+            names.append('bcs')
+        else:
+            warn('Boundary names not provided, using default names.')
         lengths = np.array(lengths)
-        names = ['ts', 'ns', 'mats', 'maxhs', 'bcs']
 
         same = all(x == lengths[0] for x in lengths)
 
@@ -72,14 +83,9 @@ class Bragg(ModeSolver):
             raise ValueError(string + "\nModify above inputs as necessary and \
 try again.")
 
-#         all_callable = all(callable(ns[i]) for i in range(len(ns)))
-
-#         if not all_callable:
-#             raise ValueError("One of the provided ns is not callable.  \
-# Refractive indices in this class should be provided as callables to allow \
-# for \
-# dependence on wavelength.  If not desiring this dependence, provide fixed n \
-# as a lambda function: lambda x: n.")
+        if mats[-1] != 'Outer':
+            raise ValueError('Final material for PML region must be called\
+"Outer".')
 
     def create_mesh(self, ref=0, curve=8):
         """

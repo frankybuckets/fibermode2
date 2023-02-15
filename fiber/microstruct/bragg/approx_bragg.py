@@ -12,14 +12,16 @@ import ngsolve as ng
 import matplotlib.pyplot as plt
 
 from ngsolve import exp, CF
-from opticalmaterialspy import Air, SiO2
+from copy import deepcopy
+from warnings import warn
+
 
 from scipy.special import jv, jvp, h1vp, h2vp, yv, yvp
 from scipy.special import hankel1 as h1
 from scipy.special import hankel2 as h2
 
-from step_exact.step_exact_utility_functions import r, theta, \
-    Jv, Yv, Hankel1, Hankel2
+from fiberamp.fiber.microstruct.bragg.utilities import r, theta, Jv, Yv, \
+    Hankel1, Hankel2
 
 
 class BraggScalar():
@@ -31,14 +33,13 @@ class BraggScalar():
 
     """
 
-    def __init__(self, scale=15e-6, ts=[15e-6, 15*.5e-6, 15e-6, 15*.5e-6],
-                 mats=['air', 'glass', 'air', 'Outer'],
-                 ns=[Air().n, SiO2().n, Air().n, SiO2().n],
-                 maxhs=[.4, .1, .1, .1], no_mesh=False,
-                 wl=1.8e-6, ref=0, curve=8):
+    def __init__(self, scale=5e-5, ts=[5e-5, 1e-5, 2e-5],
+                 mats=['air', 'glass', 'air'], ns=[1, 1.44, 1],
+                 maxhs=[.2, .025, .08], bcs=None, no_mesh=False,
+                 wl=1.2e-6, ref=0, curve=8):
 
         # Check inputs for errors
-        self.check_parameters(ts, ns, mats, maxhs)
+        self.check_parameters(ts, ns, mats, maxhs, bcs)
 
         self.scale = scale
         self.no_mesh = no_mesh
@@ -48,9 +49,14 @@ class BraggScalar():
         self.mats = mats
         self.maxhs_in = maxhs
 
+        if bcs is not None:
+            self.bcs = bcs
+        else:
+            self.bcs = ['r'+str(i+1) for i in range(len(ts))]
+
         self.ts = ts
 
-        self.n_funcs = ns
+        self.ns_in = deepcopy(ns)
 
         self.wavelength = wl
 
@@ -64,8 +70,10 @@ class BraggScalar():
         """ Set wavelength and associated material parameters."""
         self._wavelength = wl
         self.k0 = 2 * np.pi / wl
-        N = len(self.n_funcs)
-        self.ns = np.array([self.n_funcs[i](wl) for i in range(N)])
+        N = len(self.ns_in)
+        self.ns = np.array([self.ns_in[i](wl)
+                            if callable(self.ns_in[i])
+                            else self.ns_in[i] for i in range(N)])
         self.ks = self.k0 * self.ns
 
     @property
@@ -86,12 +94,18 @@ class BraggScalar():
             self.create_geometry()
             self.create_mesh(ref=self.ref, curve=self.curve)
 
-    def check_parameters(self, ts, ns, mats, maxhs):
+    def check_parameters(self, ts, ns, mats, maxhs, bcs):
 
         # Check that all relevant inputs have same length
         lengths = [len(ts), len(ns), len(mats), len(maxhs)]
-        lengths = np.array(lengths)
         names = ['ts', 'ns', 'mats', 'maxhs']
+        if bcs is not None:
+            lengths.append(len(bcs))
+            names.append('bcs')
+        else:
+            warn('Boundary names not provided, using default names.')
+
+        lengths = np.array(lengths)
 
         same = all(x == lengths[0] for x in lengths)
 
@@ -101,14 +115,6 @@ class BraggScalar():
                 string += name + ': ' + str(length) + '\n'
             raise ValueError(string + "\nModify above inputs as necessary and \
 try again.")
-
-        all_callable = all(callable(ns[i]) for i in range(len(ns)))
-
-        if not all_callable:
-            raise ValueError("One of the provided ns is not callable.  \
-Refractive indices in this class should be provided as callables to allow for \
-dependence on wavelength.  If not desiring this dependence, provide fixed n \
-as a lambda function: lambda x: n.")
 
     def create_mesh(self, ref=0, curve=8):
         """
@@ -132,10 +138,10 @@ as a lambda function: lambda x: n.")
         Rs = self.rhos / self.scale
         for i, R in enumerate(Rs[:-1]):
             self.geo.AddCircle(c=(0, 0), r=R, leftdomain=i+1,
-                               rightdomain=i+2)
+                               rightdomain=i+2, bc=self.bcs[i])
 
         self.geo.AddCircle(c=(0, 0), r=Rs[-1], leftdomain=len(Rs),
-                           bc='OuterCircle')
+                           bc=self.bcs[-1])
 
         for i, (mat, maxh) in enumerate(zip(self.mats, self.maxhs)):
             self.geo.SetMaterial(i+1, mat)
