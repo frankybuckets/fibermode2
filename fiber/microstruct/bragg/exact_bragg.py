@@ -14,7 +14,6 @@ import cmasher as cmr
 
 from warnings import warn
 from copy import deepcopy
-
 from ngsolve import x, y, exp, CF
 
 from scipy.special import jv, jvp, h1vp, h2vp, yv, yvp
@@ -106,7 +105,7 @@ class BraggExact():
             lengths.append(len(bcs))
             names.append('bcs')
         else:
-            warn('Boundary names not provided, using default names.')
+            print('Boundary names not provided, using default names.')
 
         lengths = np.array(lengths)
 

@@ -71,7 +71,7 @@ class Bragg(ModeSolver):
             lengths.append(len(bcs))
             names.append('bcs')
         else:
-            warn('Boundary names not provided, using default names.')
+            print('Boundary names not provided, using default names.')
         lengths = np.array(lengths)
 
         same = all(x == lengths[0] for x in lengths)

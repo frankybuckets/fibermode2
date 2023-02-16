@@ -13,8 +13,6 @@ import matplotlib.pyplot as plt
 
 from ngsolve import exp, CF
 from copy import deepcopy
-from warnings import warn
-
 
 from scipy.special import jv, jvp, h1vp, h2vp, yv, yvp
 from scipy.special import hankel1 as h1
@@ -103,7 +101,7 @@ class BraggScalar():
             lengths.append(len(bcs))
             names.append('bcs')
         else:
-            warn('Boundary names not provided, using default names.')
+            print('Boundary names not provided, using default names.')
 
         lengths = np.array(lengths)
 
