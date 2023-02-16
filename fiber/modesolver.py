@@ -8,7 +8,6 @@ from pyeigfeast import SpectralProjNGR, SpectralProjNGPoly
 
 
 class ModeSolver:
-
     """This class contains algorithms to compute modes of various fibers,
     including MICROSTRUCTURED fibers with or without radial symmetry.
     The key inputs are cross section mesh, a characteristic length L,
@@ -96,12 +95,12 @@ class ModeSolver:
         Returns physical propagation constants (β), given
         nondimensional Z² values, input in Z2, per the formula
         β = sqrt(L²k²n₀² - Z²) / L . """
-        return np.sqrt((self.L*self.k*self.n0)**2 - Z2) / self.L
+        return np.sqrt((self.L * self.k * self.n0)**2 - Z2) / self.L
 
     def sqrZfrom(self, betas):
         """ Return values of nondimensional Z squared, given physical
         propagation constants betas, ie, return Z² = L² (k²n₀² - β²). """
-        return (self.L*self.k*self.n0)**2 - (self.L*betas)**2
+        return (self.L * self.k * self.n0)**2 - (self.L * betas)**2
 
     def boundarynorm(self, y):
         """
@@ -111,8 +110,9 @@ class ModeSolver:
 
         def outint(u):
             out = self.mesh.Boundaries('OuterCircle')
-            s = ng.Integrate(u*ng.Conj(u), out, ng.BND).real
+            s = ng.Integrate(u * ng.Conj(u), out, ng.BND).real
             return ng.sqrt(s)
+
         bdrnrms = y.applyfnl(outint)
         print('Mode boundary L² norm = %.1e' % np.max(bdrnrms))
         return bdrnrms
@@ -125,10 +125,9 @@ class ModeSolver:
 
         decayrate = alpha * (self.Rout - self.R) + \
             self.R * Z.imag
-        bdryval = np.exp(-decayrate) / np.sqrt(np.abs(Z)*np.pi/2)
-        bdrnrm0 = bdryval*2*np.pi*self.Rout
-        print('PML decay estimates boundary norm ~ %.1e'
-              % max(bdrnrm0))
+        bdryval = np.exp(-decayrate) / np.sqrt(np.abs(Z) * np.pi / 2)
+        bdrnrm0 = bdryval * 2 * np.pi * self.Rout
+        print('PML decay estimates boundary norm ~ %.1e' % max(bdrnrm0))
         return bdrnrm0
 
     def power(self, Etv, phi, beta):
@@ -181,7 +180,7 @@ class ModeSolver:
 
         """
         Sz = E1[0] * Conj(H2[1]) - E1[1] * Conj(H2[0])
-        p = 1/2 * ng.Integrate(Sz, self.mesh)
+        p = 1 / 2 * ng.Integrate(Sz, self.mesh)
         return p
 
     def H_field_from_E(self, Etv, phi, beta):
@@ -240,7 +239,7 @@ class ModeSolver:
         Sz = 1 / (k_s * 1j * conj(beta_s)) * \
             (Etv * grad(phi) + conj(beta_s)**2 * Etv.Norm()**2)
 
-        return 1/2 * Stv, 1/2 * Sz
+        return 1 / 2 * Stv, 1 / 2 * Sz
 
     # ###################################################################
     # FREQ-DEPENDENT PML BY POLYNOMIAL EIGENPROBLEM #####################
@@ -261,28 +260,30 @@ class ModeSolver:
         s = 1 + 1j * alpha
         x = ng.x
         y = ng.y
-        r = ng.sqrt(x*x+y*y) + 0j
+        r = ng.sqrt(x * x + y * y) + 0j
         X = ng.H1(self.mesh, order=p, complex=True)
         u, v = X.TnT()
         ux, uy = grad(u)
         vx, vy = grad(v)
 
         AA = [ng.BilinearForm(X, check_unused=False)]
-        AA[0] += (s*r/R) * grad(u) * grad(v) * dx_pml
-        AA[0] += s * (r-R)/(R*r*r) * (x*ux+y*uy) * v * dx_pml
-        AA[0] += s * (R-2*r)/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
-        AA[0] += -s**3 * (r-R)**2/(R*r) * u * v * dx_pml
+        AA[0] += (s * r / R) * grad(u) * grad(v) * dx_pml
+        AA[0] += s * (r - R) / (R * r * r) * (x * ux + y * uy) * v * dx_pml
+        AA[0] += s * (R - 2 * r) / r**3 * (x * ux + y * uy) * (x * vx +
+                                                               y * vy) * dx_pml
+        AA[0] += -s**3 * (r - R)**2 / (R * r) * u * v * dx_pml
 
         AA += [ng.BilinearForm(X)]
         AA[1] += grad(u) * grad(v) * dx_int
         AA[1] += self.V * u * v * dx_int
-        AA[1] += 2 * (r-R)/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
-        AA[1] += 1/r**2 * (x*ux+y*uy) * v * dx_pml
-        AA[1] += -2*s*s*(r-R)/r * u * v * dx_pml
+        AA[1] += 2 * (r - R) / r**3 * (x * ux + y * uy) * (x * vx +
+                                                           y * vy) * dx_pml
+        AA[1] += 1 / r**2 * (x * ux + y * uy) * v * dx_pml
+        AA[1] += -2 * s * s * (r - R) / r * u * v * dx_pml
 
         AA += [ng.BilinearForm(X, check_unused=False)]
-        AA[2] += R/s/r**3 * (x*ux+y*uy) * (x*vx+y*vy) * dx_pml
-        AA[2] += -R*s/r * u * v * dx_pml
+        AA[2] += R / s / r**3 * (x * ux + y * uy) * (x * vx + y * vy) * dx_pml
+        AA[2] += -R * s / r * u * v * dx_pml
 
         AA += [ng.BilinearForm(X, check_unused=False)]
         AA[3] += -u * v * dx_int
@@ -298,9 +299,19 @@ class ModeSolver:
 
         return AA, X
 
-    def leakymode(self, p, ctr=2, rad=0.1, alpha=1, npts=8,
-                  within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
-                  nspan=5, seed=1, inverse=None, **feastkwargs):
+    def leakymode(self,
+                  p,
+                  ctr=2,
+                  rad=0.1,
+                  alpha=1,
+                  npts=8,
+                  within=None,
+                  rhoinv=0.0,
+                  quadrule='circ_trapez_shift',
+                  nspan=5,
+                  seed=1,
+                  inverse=None,
+                  **feastkwargs):
         """
         Solve the polynomial PML eigenproblem to compute leaky modes with
         losses [Nannen+Wess]. A custom polynomial feast uses the given
@@ -335,19 +346,24 @@ class ModeSolver:
         AA, X = self.polypmlsystem(p=p, alpha=alpha)
         X3 = ng.FESpace([X, X, X])
         print('Set freq-dependent PML with p=', p, ' alpha=', alpha,
-              'and thickness=%.3f' % (self.Rout-self.R))
+              'and thickness=%.3f' % (self.Rout - self.R))
 
         Y = NGvecs(X3, nspan)
         Yl = Y.create()
         Y.setrandom(seed=seed)
         Yl.setrandom(seed=seed)
 
-        P = SpectralProjNGPoly(AA, X, radius=rad, center=ctr, npts=npts,
-                               within=within, rhoinv=rhoinv,
-                               quadrule=quadrule, inverse=inverse)
+        P = SpectralProjNGPoly(AA,
+                               X,
+                               radius=rad,
+                               center=ctr,
+                               npts=npts,
+                               within=within,
+                               rhoinv=rhoinv,
+                               quadrule=quadrule,
+                               inverse=inverse)
 
-        Z, Y, hist, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                 **feastkwargs)
+        Z, Y, hist, Yl = P.feast(Y, Yl=Yl, hermitian=False, **feastkwargs)
         ews, cgd = hist[-2], hist[-1]
         if not cgd:
             print('*** Iterations did not converge')
@@ -367,15 +383,29 @@ class ModeSolver:
             print('*** Mode boundary L2 norm > 1e-6!')
             self.estimatepolypmldecay(Z, alpha)
 
-        moreoutputs = {'longY': Y, 'longYl': Yl,
-                       'ewshistory': ews, 'bdrnorm': bdrnrm,
-                       'converged': cgd}
+        moreoutputs = {
+            'longY': Y,
+            'longYl': Yl,
+            'ewshistory': ews,
+            'bdrnorm': bdrnrm,
+            'converged': cgd
+        }
 
         return Z, y, yl, beta, P, moreoutputs
 
-    def leakymode_poly(self, p, ctr=2, rad=0.1, alpha=1, npts=8,
-                       within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
-                       nspan=5, seed=1, inverse=None, **feastkwargs):
+    def leakymode_poly(self,
+                       p,
+                       ctr=2,
+                       rad=0.1,
+                       alpha=1,
+                       npts=8,
+                       within=None,
+                       rhoinv=0.0,
+                       quadrule='circ_trapez_shift',
+                       nspan=5,
+                       seed=1,
+                       inverse=None,
+                       **feastkwargs):
         """
         This method is an alternate implementation of the polynomial
         eigensolver using NGSolve bilinear forms in a product finite
@@ -385,10 +415,9 @@ class ModeSolver:
         It's more expensive than leakymode(...).
         """
 
-        print('ModeSolver.leakymode_poly called on this object:\n',
-              self)
+        print('ModeSolver.leakymode_poly called on this object:\n', self)
         print('Set freq-dependent PML with p=', p, ' alpha=', alpha,
-              'and thickness=%.3f' % (self.Rout-self.R))
+              'and thickness=%.3f' % (self.Rout - self.R))
         if self.ngspmlset:
             raise RuntimeError('NGSolve pml set. Cannot combine with poly.')
 
@@ -414,7 +443,7 @@ class ModeSolver:
         s = 1 + 1j * alpha
         x = ng.x
         y = ng.y
-        r = ng.sqrt(x*x+y*y) + 0j
+        r = ng.sqrt(x * x + y * y) + 0j
 
         A = ng.BilinearForm(X3)
         B = ng.BilinearForm(X3)
@@ -422,19 +451,21 @@ class ModeSolver:
         A += u1 * v0 * dx
         A += u2 * v1 * dx
 
-        A += (s*r/R) * grad(u0) * grad(v2) * dx_pml
-        A += s * (r-R)/(R*r*r) * (x*u0x+y*u0y) * v2 * dx_pml
-        A += s * (R-2*r)/r**3 * (x*u0x+y*u0y) * (x*v2x+y*v2y) * dx_pml
-        A += -s**3 * (r-R)**2/(R*r) * u0 * v2 * dx_pml
+        A += (s * r / R) * grad(u0) * grad(v2) * dx_pml
+        A += s * (r - R) / (R * r * r) * (x * u0x + y * u0y) * v2 * dx_pml
+        A += s * (R - 2 * r) / r**3 * (x * u0x + y * u0y) * (x * v2x +
+                                                             y * v2y) * dx_pml
+        A += -s**3 * (r - R)**2 / (R * r) * u0 * v2 * dx_pml
 
         A += grad(u1) * grad(v2) * dx_int
         A += self.V * u1 * v2 * dx_int
-        A += 2 * (r-R)/r**3 * (x*u1x+y*u1y) * (x*v2x+y*v2y) * dx_pml
-        A += 1/r**2 * (x*u1x+y*u1y) * v2 * dx_pml
-        A += -2*s*s*(r-R)/r * u1 * v2 * dx_pml
+        A += 2 * (r - R) / r**3 * (x * u1x + y * u1y) * (x * v2x +
+                                                         y * v2y) * dx_pml
+        A += 1 / r**2 * (x * u1x + y * u1y) * v2 * dx_pml
+        A += -2 * s * s * (r - R) / r * u1 * v2 * dx_pml
 
-        A += R/s/r**3 * (x*u2x+y*u2y) * (x*v2x+y*v2y) * dx_pml
-        A += -R*s/r * u2 * v2 * dx_pml
+        A += R / s / r**3 * (x * u2x + y * u2y) * (x * v2x + y * v2y) * dx_pml
+        A += -R * s / r * u2 * v2 * dx_pml
 
         B += u0 * v0 * dx + u1 * v1 * dx
         B += u2 * v2 * dx_int
@@ -445,17 +476,22 @@ class ModeSolver:
 
         # Since B is selfadjoint, we do not use SpectralProjNGGeneral here:
 
-        P = SpectralProjNG(X3, A.mat, B.mat,
-                           radius=rad, center=ctr, npts=npts,
-                           within=within, rhoinv=rhoinv,
-                           quadrule=quadrule, inverse=inverse)
+        P = SpectralProjNG(X3,
+                           A.mat,
+                           B.mat,
+                           radius=rad,
+                           center=ctr,
+                           npts=npts,
+                           within=within,
+                           rhoinv=rhoinv,
+                           quadrule=quadrule,
+                           inverse=inverse)
         Y = NGvecs(X3, nspan, M=B.mat)
         Yl = Y.create()
         Y.setrandom()
         Yl.setrandom()
 
-        z, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
-                                    **feastkwargs)
+        z, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False, **feastkwargs)
 
         Yg = Y.gridfun()
         Ylg = Y.gridfun()
@@ -485,11 +521,10 @@ class ModeSolver:
             raise ValueError('Expecting PML strength alpha > 0')
         self.ngspmlset = True
 
-        radial = ng.pml.Radial(rad=self.R,
-                               alpha=alpha*1j, origin=(0, 0))
+        radial = ng.pml.Radial(rad=self.R, alpha=alpha * 1j, origin=(0, 0))
         self.mesh.SetPML(radial, 'Outer')
         print('Set NGSolve automatic PML with p=', p, ' alpha=', alpha,
-              'and thickness=%.3f' % (self.Rout-self.R))
+              'and thickness=%.3f' % (self.Rout - self.R))
         X = ng.H1(self.mesh, order=p, complex=True)
 
         u, v = X.TnT()
@@ -503,10 +538,19 @@ class ModeSolver:
 
         return a, b, X
 
-    def leakymode_auto(self, p, radiusZ2=0.1, centerZ2=4,
-                       alpha=1, npts=8, nspan=5, seed=1,
-                       within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
-                       inverse='umfpack', **feastkwargs):
+    def leakymode_auto(self,
+                       p,
+                       radiusZ2=0.1,
+                       centerZ2=4,
+                       alpha=1,
+                       npts=8,
+                       nspan=5,
+                       seed=1,
+                       within=None,
+                       rhoinv=0.0,
+                       quadrule='circ_trapez_shift',
+                       inverse='umfpack',
+                       **feastkwargs):
         """
         Compute leaky modes by solving a linear eigenproblem using
         the frequency-independent automatic PML mesh map of NGSolve
@@ -533,15 +577,23 @@ class ModeSolver:
 
         a, b, X = self.autopmlsystem(p, alpha=alpha)
 
-        P = SpectralProjNGGeneral(X, a.mat, b.mat,
-                                  radius=radiusZ2, center=centerZ2, npts=npts,
-                                  within=within, rhoinv=rhoinv,
-                                  quadrule=quadrule, inverse=inverse)
+        P = SpectralProjNGGeneral(X,
+                                  a.mat,
+                                  b.mat,
+                                  radius=radiusZ2,
+                                  center=centerZ2,
+                                  npts=npts,
+                                  within=within,
+                                  rhoinv=rhoinv,
+                                  quadrule=quadrule,
+                                  inverse=inverse)
         Y = NGvecs(X, nspan)
         Yl = Y.create()
         Y.setrandom(seed=seed)
         Yl.setrandom(seed=seed)
-        zsqr, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
+        zsqr, Y, history, Yl = P.feast(Y,
+                                       Yl=Yl,
+                                       hermitian=False,
                                        **feastkwargs)
         beta = self.betafrom(zsqr)
         print('Results:\n Z²:', zsqr)
@@ -551,16 +603,26 @@ class ModeSolver:
         if maxbdrnrm > 1e-6:
             print('*** Mode boundary L2 norm > 1e-6!')
 
-        return zsqr, Yl, Y, beta, P
+        return zsqr, Y, Yl, beta, P
 
     # ###################################################################
     # SMOOTHER HANDMADE PML #############################################
 
-    def leakymode_smooth(self, p, radiusZ2=0.1, centerZ2=4,
-                         pmlbegin=None, pmlend=None,
-                         alpha=1, npts=8, nspan=5, seed=1,
-                         within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
-                         inverse='umfpack', **feastkwargs):
+    def leakymode_smooth(self,
+                         p,
+                         radiusZ2=0.1,
+                         centerZ2=4,
+                         pmlbegin=None,
+                         pmlend=None,
+                         alpha=1,
+                         npts=8,
+                         nspan=5,
+                         seed=1,
+                         within=None,
+                         rhoinv=0.0,
+                         quadrule='circ_trapez_shift',
+                         inverse='umfpack',
+                         **feastkwargs):
         """
         Compute leaky modes by solving a linear eigenproblem using
         the frequency-independent C²  PML map
@@ -574,8 +636,7 @@ class ModeSolver:
         ending radius of PML by providing pmlbegin, pmlend.
         """
 
-        print('ModeSolver.leakymode_smooth called on:\n',
-              self)
+        print('ModeSolver.leakymode_smooth called on:\n', self)
         if self.ngspmlset:
             raise RuntimeError('NGSolve pml set. Cannot combine with poly.')
         if abs(alpha.imag) > 0 or alpha < 0:
@@ -587,42 +648,42 @@ class ModeSolver:
 
         # symbolically derive the radial PML functions
         s, t, R0, R1 = sm.symbols('s t R_0 R_1')
-        nr = sm.integrate((s-R0)**2 * (s-R1)**2, (s, R0, t)).factor()
+        nr = sm.integrate((s - R0)**2 * (s - R1)**2, (s, R0, t)).factor()
         dr = nr.subs(t, R1).factor()
-        sigmat = alpha * nr / dr    # called φ in the docstring
+        sigmat = alpha * nr / dr  # called φ in the docstring
         sigmat = sigmat.subs(R0, pmlbegin).subs(R1, pmlend)
         sigma = sm.diff(t * sigmat, t).factor()
         tau = 1 + 1j * sigma
         taut = 1 + 1j * sigmat
-        G = (tau/taut).factor()
+        G = (tau / taut).factor()
 
         # symbolic -> ngsolve coefficient
         x = ng.x
         y = ng.y
-        r = ng.sqrt(x*x+y*y) + 0j
+        r = ng.sqrt(x * x + y * y)
         gstr = str(G).replace('I', '1j').replace('t', 'r')
-        ttstr = str(tau*taut).replace('I', '1j').replace('t', 'r')
+        ttstr = str(tau * taut).replace('I', '1j').replace('t', 'r')
         g0 = eval(gstr)
         tt0 = eval(ttstr)
-        g = ng.IfPos(r-pmlbegin, g0, 1)
-        tt = ng.IfPos(r-pmlbegin, tt0, 1)
+        g = ng.IfPos(r - pmlbegin, g0, 1)
+        tt = ng.IfPos(r - pmlbegin, tt0, 1)
 
-        gi = 1.0/g
-        cs = x/r
-        sn = y/r
-        A00 = gi*cs*cs+g*sn*sn
-        A01 = (gi-g)*cs*sn
-        A11 = gi*sn*sn+g*cs*cs
+        gi = 1.0 / g
+        cs = x / r
+        sn = y / r
+        A00 = gi * cs * cs + g * sn * sn
+        A01 = (gi - g) * cs * sn
+        A11 = gi * sn * sn + g * cs * cs
         g.Compile()
         gi.Compile()
         tt.Compile()
         A00.Compile()
         A01.Compile()
         A11.Compile()
-        A = ng.CoefficientFunction((A00, A01,
-                                    A01, A11), dims=(2, 2))
+        A = ng.CoefficientFunction((A00, A01, A01, A11), dims=(2, 2))
         self.pml_A = A
         self.pml_tt = tt
+        self.ttstr = ttstr
 
         # Make linear eigensystem
         X = ng.H1(self.mesh, order=p, complex=True)
@@ -636,15 +697,23 @@ class ModeSolver:
             a.Assemble()
             b.Assemble()
 
-        P = SpectralProjNGGeneral(X, a.mat, b.mat,
-                                  radius=radiusZ2, center=centerZ2, npts=npts,
-                                  within=within, rhoinv=rhoinv,
-                                  quadrule=quadrule, inverse=inverse)
-        Y = NGvecs(X, 10)
-        Yl = NGvecs(X, 10)
+        P = SpectralProjNGGeneral(X,
+                                  a.mat,
+                                  b.mat,
+                                  radius=radiusZ2,
+                                  center=centerZ2,
+                                  npts=npts,
+                                  within=within,
+                                  rhoinv=rhoinv,
+                                  quadrule=quadrule,
+                                  inverse=inverse)
+        Y = NGvecs(X, nspan)
+        Yl = NGvecs(X, nspan)
         Y.setrandom(seed=seed)
         Yl.setrandom(seed=seed)
-        zsqr, Y, history, Yl = P.feast(Y, Yl=Yl, hermitian=False,
+        zsqr, Y, history, Yl = P.feast(Y,
+                                       Yl=Yl,
+                                       hermitian=False,
                                        **feastkwargs)
         beta = self.betafrom(zsqr)
         print('Results:\n Z²:', zsqr)
@@ -654,7 +723,7 @@ class ModeSolver:
         if maxbdrnrm > 1e-6:
             print('*** Mode boundary L2 norm > 1e-6!')
 
-        return zsqr, Yl, Y, beta, P
+        return zsqr, Y, Yl, beta, P
 
     # ###################################################################
     # GUIDED LP MODES FROM SELFADJOINT EIGENPROBLEM #####################
@@ -666,7 +735,7 @@ class ModeSolver:
         X = ng.H1(self.mesh, order=p, dirichlet='OuterCircle', complex=True)
         u, v = X.TnT()
         A = ng.BilinearForm(X)
-        A += grad(u)*grad(v) * dx + self.V*u*v * dx
+        A += grad(u) * grad(v) * dx + self.V * u * v * dx
         B = ng.BilinearForm(X)
         B += u * v * dx
         with ng.TaskManager():
@@ -675,9 +744,18 @@ class ModeSolver:
 
         return A, B, X
 
-    def selfadjmodes(self, interval=(-10, 0), p=3,  seed=1, npts=20, nspan=15,
-                     within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
-                     verbose=True, inverse='umfpack', **feastkwargs):
+    def selfadjmodes(self,
+                     interval=(-10, 0),
+                     p=3,
+                     seed=1,
+                     npts=20,
+                     nspan=15,
+                     within=None,
+                     rhoinv=0.0,
+                     quadrule='circ_trapez_shift',
+                     verbose=True,
+                     inverse='umfpack',
+                     **feastkwargs):
         """
         Search for guided modes in a given "interval", which is to be
         input as a tuple: interval=(left, right). These modes solve
@@ -707,12 +785,20 @@ class ModeSolver:
         print('Running selfadjoint FEAST to capture guided modes in ' +
               '({},{})'.format(left, right))
         print('assuming not more than %d modes in this interval' % nspan)
-        ctr = (right+left)/2
-        rad = (right-left)/2
-        P = SpectralProjNG(X, a.mat, b.mat,
-                           radius=rad, center=ctr, npts=npts,
-                           reduce_sym=True, within=within, rhoinv=rhoinv,
-                           quadrule=quadrule, inverse=inverse, verbose=verbose)
+        ctr = (right + left) / 2
+        rad = (right - left) / 2
+        P = SpectralProjNG(X,
+                           a.mat,
+                           b.mat,
+                           radius=rad,
+                           center=ctr,
+                           npts=npts,
+                           reduce_sym=True,
+                           within=within,
+                           rhoinv=rhoinv,
+                           quadrule=quadrule,
+                           inverse=inverse,
+                           verbose=verbose)
         Y = NGvecs(X, nspan, M=b.mat)
         Y.setrandom(seed=seed)
         Zsqrs, Y, history, _ = P.feast(Y, hermitian=True, **feastkwargs)
@@ -740,19 +826,24 @@ class ModeSolver:
 
         if alpha is not None:
             self.ngspmlset = True
-            radial = ng.pml.Radial(rad=self.R,
-                                   alpha=alpha*1j, origin=(0, 0))
+            radial = ng.pml.Radial(rad=self.R, alpha=alpha * 1j, origin=(0, 0))
             self.mesh.SetPML(radial, 'Outer')
             print('Set NGSolve automatic PML with p=', p, ' alpha=', alpha,
-                  'and thickness=%.3f' % (self.Rout-self.R))
+                  'and thickness=%.3f' % (self.Rout - self.R))
         elif self.ngspmlset:
             raise RuntimeError('Unexpected NGSolve pml mesh trafo here.')
 
         n = self.index
-        n2 = n*n
-        X = ng.HCurl(self.mesh, order=p+1-max(1-p, 0), type1=True,
-                     dirichlet='OuterCircle', complex=True)
-        Y = ng.H1(self.mesh, order=p+1, dirichlet='OuterCircle', complex=True)
+        n2 = n * n
+        X = ng.HCurl(self.mesh,
+                     order=p + 1 - max(1 - p, 0),
+                     type1=True,
+                     dirichlet='OuterCircle',
+                     complex=True)
+        Y = ng.H1(self.mesh,
+                  order=p + 1,
+                  dirichlet='OuterCircle',
+                  complex=True)
         E, v = X.TnT()
         phi, psi = Y.TnT()
 
@@ -798,7 +889,7 @@ class ModeSolver:
             tmpX1 = ng.GridFunction(X)
 
             def __init__(selfr, z, V, n, inverse=None):
-                n2 = n*n
+                n2 = n * n
                 XY = ng.FESpace([X, Y])
                 (E, phi), (v, psi) = XY.TnT()
 
@@ -818,13 +909,13 @@ class ModeSolver:
                 #                                          inverse=inverse)
 
                 selfr.Z = ng.BilinearForm(XY, condense=True)
-                selfr.Z += (z * E * v - curl(E) * curl(v)
-                            - V * E * v - grad(phi) * v
-                            - n2 * phi * psi + n2 * E * grad(psi)) * dx
+                selfr.Z += (z * E * v - curl(E) * curl(v) - V * E * v -
+                            grad(phi) * v - n2 * phi * psi +
+                            n2 * E * grad(psi)) * dx
                 selfr.ZH = ng.BilinearForm(XY, condense=True)
-                selfr.ZH += (np.conjugate(z) * E * v - curl(E) * curl(v)
-                             - V * E * v - grad(psi) * E
-                             - n2 * phi * psi + n2 * v * grad(phi)) * dx
+                selfr.ZH += (np.conjugate(z) * E * v - curl(E) * curl(v) -
+                             V * E * v - grad(psi) * E - n2 * phi * psi +
+                             n2 * v * grad(phi)) * dx
                 with ng.TaskManager():
                     try:
                         selfr.Z.Assemble()
@@ -885,7 +976,11 @@ class ModeSolver:
 
                         RHv._mv[i][:] = selfr.wrk2.components[0].vec
 
-            def rayleigh_nsa(selfr, ql, qr, qAq=not None, qBq=not None,
+            def rayleigh_nsa(selfr,
+                             ql,
+                             qr,
+                             qAq=not None,
+                             qBq=not None,
                              workspace=None):
                 """
                 Return qAq[i, j] = (𝒜 qr[j], ql[i]) with 𝒜 =  (A - C D⁻¹ B) E
@@ -929,9 +1024,19 @@ class ModeSolver:
 
         return ResolventVectorMode, M.mat, A.mat, B.mat, C.mat, D, Dinv
 
-    def guidedvecmodes(self, rad, ctr, p=3,  seed=None, npts=8, nspan=20,
-                       within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
-                       verbose=True, inverse='umfpack', **feastkwargs):
+    def guidedvecmodes(self,
+                       rad,
+                       ctr,
+                       p=3,
+                       seed=None,
+                       npts=8,
+                       nspan=20,
+                       within=None,
+                       rhoinv=0.0,
+                       quadrule='circ_trapez_shift',
+                       verbose=True,
+                       inverse='umfpack',
+                       **feastkwargs):
         """
         Capture guided vector modes whose non-dimensional resonance value Z²
         is such that Z*Z is within the interval (ctr-rad, ctr+rad).
@@ -947,11 +1052,15 @@ class ModeSolver:
         print('assuming not more than %d modes in this interval.' % nspan)
         print('System size:', E.n, ' x ', E.n, '  Inverse type:', inverse)
 
-        P = SpectralProjNGR(lambda z: R(z, self.V, self.index,
-                                        inverse=inverse),
-                            radius=rad, center=ctr, npts=npts,
-                            within=within, rhoinv=rhoinv, quadrule=quadrule,
-                            verbose=verbose)
+        P = SpectralProjNGR(
+            lambda z: R(z, self.V, self.index, inverse=inverse),
+            radius=rad,
+            center=ctr,
+            npts=npts,
+            within=within,
+            rhoinv=rhoinv,
+            quadrule=quadrule,
+            verbose=verbose)
         Zsqrs, E, history, _ = P.feast(E, **feastkwargs)
         betas = self.betafrom(Zsqrs)
 
@@ -966,16 +1075,28 @@ class ModeSolver:
 
         return betas, Zsqrs, E, phi, R
 
-    def leakyvecmodes(self, rad, ctr, alpha=1, p=3,  seed=1, npts=8, nspan=20,
-                      within=None, rhoinv=0.0, quadrule='circ_trapez_shift',
-                      verbose=True, inverse='umfpack', **feastkwargs):
+    def leakyvecmodes(self,
+                      rad,
+                      ctr,
+                      alpha=1,
+                      p=3,
+                      seed=1,
+                      npts=8,
+                      nspan=20,
+                      within=None,
+                      rhoinv=0.0,
+                      quadrule='circ_trapez_shift',
+                      verbose=True,
+                      inverse='umfpack',
+                      **feastkwargs):
         """
         Capture leaky vector modes whose non-dimensional resonance value Z²
         is contained  within the circular contour centered at "ctr"
         of radius "rad" in the Z² complex plane (not the Z-plane!).
         """
 
-        R, M, A, B, C, D, Dinv = self.vecmodesystem(p, alpha=alpha,
+        R, M, A, B, C, D, Dinv = self.vecmodesystem(p,
+                                                    alpha=alpha,
                                                     inverse=inverse)
         X, Y = R.XY.components
         E = NGvecs(X, nspan, M=M)
@@ -988,13 +1109,19 @@ class ModeSolver:
         print('assuming not more than %d modes in this interval' % nspan)
         print('System size:', E.n, ' x ', E.n, '  Inverse type:', inverse)
 
-        P = SpectralProjNGR(lambda z: R(z, self.V, self.index,
-                                        inverse=inverse),
-                            radius=rad, center=ctr, npts=npts,
-                            within=within, rhoinv=rhoinv, quadrule=quadrule,
-                            verbose=verbose)
+        P = SpectralProjNGR(
+            lambda z: R(z, self.V, self.index, inverse=inverse),
+            radius=rad,
+            center=ctr,
+            npts=npts,
+            within=within,
+            rhoinv=rhoinv,
+            quadrule=quadrule,
+            verbose=verbose)
 
-        Zsqrs, E, history, El = P.feast(E, Yl=El, hermitian=False,
+        Zsqrs, E, history, El = P.feast(E,
+                                        Yl=El,
+                                        hermitian=False,
                                         **feastkwargs)
         phi = NGvecs(Y, E.m)
         BE = phi.zeroclone()
@@ -1015,10 +1142,22 @@ class ModeSolver:
     # ###################################################################
     # BENT MODES
 
-    def bentscalarmodes(self, rad, ctr, R_bend, p=2, alpha=None, npts=6,
-                        nspan=10, within=None, rhoinv=0.0, niterations=10,
-                        quadrule='circ_trapez_shift', verbose=True,
-                        inverse='umfpack', nrestarts=0, **feastkwargs):
+    def bentscalarmodes(self,
+                        rad,
+                        ctr,
+                        R_bend,
+                        p=2,
+                        alpha=None,
+                        npts=6,
+                        nspan=10,
+                        within=None,
+                        rhoinv=0.0,
+                        niterations=10,
+                        quadrule='circ_trapez_shift',
+                        verbose=True,
+                        inverse='umfpack',
+                        nrestarts=0,
+                        **feastkwargs):
         """Find bent modes using scalar method.
 
         Bending radius R_bend should be non-dimensional. If alpha is provided,
@@ -1026,10 +1165,10 @@ class ModeSolver:
 
         if alpha is not None:
             self.ngspmlset = True
-            radial = ng.pml.Radial(rad=self.R, alpha=alpha*1j, origin=(0, 0))
+            radial = ng.pml.Radial(rad=self.R, alpha=alpha * 1j, origin=(0, 0))
             self.mesh.SetPML(radial, 'Outer')
             print('Set NGSolve automatic PML with p=', p, ' alpha=', alpha,
-                  'and thickness=%.3f' % (self.Rout-self.R))
+                  'and thickness=%.3f' % (self.Rout - self.R))
 
         r = ng.x + R_bend
         k = self.k * self.index * self.L
@@ -1039,11 +1178,11 @@ class ModeSolver:
         u, v = X.TnT()
 
         A0 = ng.BilinearForm(X, check_unused=False)
-        A0 += - r * ng.grad(u) * ng.grad(v) * ng.dx
-        A0 += k ** 2 * r * u * v * ng.dx
+        A0 += -r * ng.grad(u) * ng.grad(v) * ng.dx
+        A0 += k**2 * r * u * v * ng.dx
 
         A1 = ng.BilinearForm(X, check_unused=False)
-        A1 += R_bend ** 2 / r * u * v * ng.dx
+        A1 += R_bend**2 / r * u * v * ng.dx
 
         AA = [A0, A1]
 
@@ -1056,8 +1195,14 @@ class ModeSolver:
                     ng.SetHeapSize(int(1e9))
                     AA[i].Assemble()
 
-        P = SpectralProjNGGeneral(X, A0.mat, A1.mat, radius=rad, center=ctr,
-                                  npts=npts, rhoinv=rhoinv, quadrule=quadrule)
+        P = SpectralProjNGGeneral(X,
+                                  A0.mat,
+                                  A1.mat,
+                                  radius=rad,
+                                  center=ctr,
+                                  npts=npts,
+                                  rhoinv=rhoinv,
+                                  quadrule=quadrule)
 
         Y = NGvecs(X, nspan)
         Yl = Y.create()
@@ -1070,11 +1215,14 @@ class ModeSolver:
         print('System size:', X.ndof, ' x ', X.ndof)
         print('  Inverse type:', inverse)
 
-        Nu_sqrs, Y, hist, _ = P.feast(Y, Yl, hermitian=False,
+        Nu_sqrs, Y, hist, _ = P.feast(Y,
+                                      Yl,
+                                      hermitian=False,
                                       nrestarts=nrestarts,
-                                      niterations=niterations, **feastkwargs)
+                                      niterations=niterations,
+                                      **feastkwargs)
 
-        nus = (Nu_sqrs ** .5) * R_bend
+        nus = (Nu_sqrs**.5) * R_bend
         CLs = 20 * nus.imag / np.log(10)
         print('Results:\n Nu²:', Nu_sqrs)
         print(' Nus:', nus)
@@ -1102,24 +1250,30 @@ class ModeSolver:
 
         if alpha is not None:
             self.ngspmlset = True
-            radial = ng.pml.Radial(rad=self.R, alpha=alpha*1j, origin=(0, 0))
+            radial = ng.pml.Radial(rad=self.R, alpha=alpha * 1j, origin=(0, 0))
             self.mesh.SetPML(radial, 'Outer')
             print('Set NGSolve automatic PML with p=', p, ' alpha=', alpha,
-                  'and thickness=%.3f' % (self.Rout-self.R))
+                  'and thickness=%.3f' % (self.Rout - self.R))
 
         n = self.index
-        n2 = n*n
+        n2 = n * n
         r = ng.x + R_bend  # r is NOT sqrt(x^2 + y^2)
-        X = ng.HCurl(self.mesh, order=p+1-max(1-p, 0), type1=True,
-                     dirichlet='OuterCircle', complex=True)
-        Y = ng.H1(self.mesh, order=p+1, dirichlet='OuterCircle', complex=True)
+        X = ng.HCurl(self.mesh,
+                     order=p + 1 - max(1 - p, 0),
+                     type1=True,
+                     dirichlet='OuterCircle',
+                     complex=True)
+        Y = ng.H1(self.mesh,
+                  order=p + 1,
+                  dirichlet='OuterCircle',
+                  complex=True)
         E, v = X.TnT()
         phi, psi = Y.TnT()
 
         A = ng.BilinearForm(X)
-        A += r * (curl(E) * curl(v) - (self.L*self.k)**2 * n2 * E * v) * dx
+        A += r * (curl(E) * curl(v) - (self.L * self.k)**2 * n2 * E * v) * dx
         M = ng.BilinearForm(X)
-        M += -R_bend ** 2 / r * E * v * dx
+        M += -R_bend**2 / r * E * v * dx
         C = ng.BilinearForm(trialspace=Y, testspace=X)
         C += R_bend * grad(phi) * v * dx
         C += R_bend / r * phi * v[0] * dx
@@ -1159,16 +1313,15 @@ class ModeSolver:
             tmpX1 = ng.GridFunction(X)
 
             def __init__(selfr, z, n, inverse=None):
-                n2 = n*n
+                n2 = n * n
                 XY = ng.FESpace([X, Y])
                 (E, phi), (v, psi) = XY.TnT()
                 selfr.zminusOp = ng.BilinearForm(XY)
-                selfr.zminusOp += (-z * R_bend**2 / r * E * v
-                                   - r * curl(E) * curl(v)
-                                   + (self.L*self.k)**2 * n2 * r * E * v
-                                   - R_bend * (grad(phi) * v + 1/r * phi*v[0])
-                                   - R_bend * n2 * phi * psi
-                                   + n2 * r * E * grad(psi)) * dx
+                selfr.zminusOp += (
+                    -z * R_bend**2 / r * E * v - r * curl(E) * curl(v) +
+                    (self.L * self.k)**2 * n2 * r * E * v - R_bend *
+                    (grad(phi) * v + 1 / r * phi * v[0]) -
+                    R_bend * n2 * phi * psi + n2 * r * E * grad(psi)) * dx
                 with ng.TaskManager():
                     try:
                         selfr.zminusOp.Assemble()
@@ -1206,7 +1359,11 @@ class ModeSolver:
                         selfr.wrk2.vec.data = selfr.R.H * selfr.wrk1.vec
                         RHv._mv[i][:] = selfr.wrk2.components[0].vec
 
-            def rayleigh_nsa(selfr, ql, qr, qAq=not None, qBq=not None,
+            def rayleigh_nsa(selfr,
+                             ql,
+                             qr,
+                             qAq=not None,
+                             qBq=not None,
                              workspace=None):
                 """
                 Return qAq[i, j] = (𝒜 qr[j], ql[i]) with 𝒜 =  (A - C D⁻¹ B) E
@@ -1241,16 +1398,29 @@ class ModeSolver:
 
         return ResolventVectorMode, M.mat, A.mat, B.mat, C.mat, D.mat, Dinv
 
-    def bentvecmodes(self, rad, ctr, R_bend, p=2, alpha=None, seed=1, npts=6,
-                     nspan=10, rhoinv=0.0, niterations=15, nrestarts=0,
-                     quadrule='circ_trapez_shift', inverse='umfpack',
+    def bentvecmodes(self,
+                     rad,
+                     ctr,
+                     R_bend,
+                     p=2,
+                     alpha=None,
+                     seed=1,
+                     npts=6,
+                     nspan=10,
+                     rhoinv=0.0,
+                     niterations=15,
+                     nrestarts=0,
+                     quadrule='circ_trapez_shift',
+                     inverse='umfpack',
                      **feastkwargs):
         """
         Capture bent vector modes whose scaled propagation constants have real
         part near or in the interval L^2k_0^2 [n_clad^2, n_core^2].
         """
 
-        R, M, A, B, C, D, Dinv = self.bentmodesystem(p, R_bend, alpha=alpha,
+        R, M, A, B, C, D, Dinv = self.bentmodesystem(p,
+                                                     R_bend,
+                                                     alpha=alpha,
                                                      inverse=inverse)
         X, Y = R.XY.components
         E = NGvecs(X, nspan, M=M)
@@ -1262,19 +1432,24 @@ class ModeSolver:
         print('System size:', E.n, ' x ', E.n, '  Inverse type:', inverse)
 
         P = SpectralProjNGR(lambda z: R(z, self.index, inverse=inverse),
-                            radius=rad, center=ctr, npts=npts,
-                            rhoinv=rhoinv, quadrule=quadrule)
+                            radius=rad,
+                            center=ctr,
+                            npts=npts,
+                            rhoinv=rhoinv,
+                            quadrule=quadrule)
 
-        Nu_sqrs, E, history, _ = P.feast(E, hermitian=False,
+        Nu_sqrs, E, history, _ = P.feast(E,
+                                         hermitian=False,
                                          niterations=niterations,
-                                         nrestarts=nrestarts, **feastkwargs)
+                                         nrestarts=nrestarts,
+                                         **feastkwargs)
 
         phi = NGvecs(Y, E.m)
         BE = phi.zeroclone()
         BE._mv[:] = -B * E._mv
         phi._mv[:] = Dinv * BE._mv
 
-        nus = (Nu_sqrs ** .5) * R_bend
+        nus = (Nu_sqrs**.5) * R_bend
         CLs = 20 * nus.imag / np.log(10)
         print('Results:\n Nu²:', Nu_sqrs)
         print(' Nus:', nus)
