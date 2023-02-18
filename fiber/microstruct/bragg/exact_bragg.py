@@ -10,7 +10,6 @@ import numpy as np
 import netgen.geom2d as geom2d
 import ngsolve as ng
 import matplotlib.pyplot as plt
-import cmasher as cmr
 
 from warnings import warn
 from copy import deepcopy
@@ -985,12 +984,11 @@ entries.  Please give a list with same number of entries as regions of fiber.')
                            **streamplotkwargs):
 
         if contourfunc is not None:
-            jet = cmr.get_sub_cmap('jet', 0.3, 0.75)
 
             fig, ax = self.plot2D_contour(contourfunc, rlist=rlist,
                                           ntheta=ntheta, figsize=figsize,
                                           levels=levels, part=contourpart,
-                                          plot_rhos=plot_rhos, cmap=jet,
+                                          plot_rhos=plot_rhos, cmap='jet',
                                           linewidth=rho_linewidth,
                                           linestyle=rho_linestyle,
                                           edgecolor=rho_linecolor,
