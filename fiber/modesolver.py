@@ -109,9 +109,9 @@ class ModeSolver:
         """
 
         def outint(u):
-            out = self.mesh.Boundaries('OuterCircle')
-            s = ng.Integrate(u * ng.Conj(u), out, ng.BND).real
-            return ng.sqrt(s)
+            dl = dx(definedon=self.mesh.Boundaries('OuterCircle'))
+            s = abs(ng.Integrate(u * ng.Conj(u) * dl, self.mesh))
+            return np.sqrt(s)
 
         bdrnrms = y.applyfnl(outint)
         print('Mode boundary L² norm = %.1e' % np.max(bdrnrms))
@@ -311,6 +311,7 @@ class ModeSolver:
                   nspan=5,
                   seed=1,
                   inverse=None,
+                  verbose=True,
                   **feastkwargs):
         """
         Solve the polynomial PML eigenproblem to compute leaky modes with
@@ -361,6 +362,7 @@ class ModeSolver:
                                within=within,
                                rhoinv=rhoinv,
                                quadrule=quadrule,
+                               verbose=verbose,
                                inverse=inverse)
 
         Z, Y, hist, Yl = P.feast(Y, Yl=Yl, hermitian=False, **feastkwargs)
@@ -622,6 +624,7 @@ class ModeSolver:
                          rhoinv=0.0,
                          quadrule='circ_trapez_shift',
                          inverse='umfpack',
+                         verbose=True,
                          **feastkwargs):
         """
         Compute leaky modes by solving a linear eigenproblem using
@@ -693,19 +696,24 @@ class ModeSolver:
         a += (self.pml_A * grad(u) * grad(v) +
               self.V * self.pml_tt * u * v) * dx
         b += self.pml_tt * u * v * dx
+        m = ng.BilinearForm(X)
+        m += u * v * dx
         with ng.TaskManager():
             a.Assemble()
             b.Assemble()
+            m.Assemble()
 
         P = SpectralProjNGGeneral(X,
                                   a.mat,
                                   b.mat,
+                                  M=m.mat,
                                   radius=radiusZ2,
                                   center=centerZ2,
                                   npts=npts,
                                   within=within,
                                   rhoinv=rhoinv,
                                   quadrule=quadrule,
+                                  verbose=verbose,
                                   inverse=inverse)
         Y = NGvecs(X, nspan)
         Yl = NGvecs(X, nspan)
@@ -715,15 +723,24 @@ class ModeSolver:
                                        Yl=Yl,
                                        hermitian=False,
                                        **feastkwargs)
+        ewhist, cgd = history[-2], history[-1]
+
         beta = self.betafrom(zsqr)
         print('Results:\n Z²:', zsqr)
         print(' beta:', beta)
         print(' CL dB/m:', 20 * beta.imag / np.log(10))
-        maxbdrnrm = np.max(self.boundarynorm(Y))
-        if maxbdrnrm > 1e-6:
+
+        bdrnrm = self.boundarynorm(Y)
+        if np.max(bdrnrm) > 1e-6:
             print('*** Mode boundary L2 norm > 1e-6!')
 
-        return zsqr, Y, Yl, beta, P
+        moreoutputs = {
+            'ewshistory': ewhist,
+            'bdrnorm': bdrnrm,
+            'converged': cgd
+        }
+
+        return zsqr, Y, Yl, beta, P, moreoutputs
 
     # ###################################################################
     # GUIDED LP MODES FROM SELFADJOINT EIGENPROBLEM #####################
