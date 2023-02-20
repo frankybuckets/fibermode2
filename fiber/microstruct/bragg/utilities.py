@@ -110,7 +110,7 @@ def Hankel2pp(z, nu):
 
 def plotlogf(f, rmin, rmax, imin, imax, *args, title='',
              levels=25, truncate=False, h=2, equal=False,
-             colorbar=True, rref=20, iref=20, figsize=(12, 8),
+             colorbar=True, rref=20, iref=20, figsize=(14, 7),
              log_off=False, loop=False, three_D=False,
              phase=False, R2plane=False):
     """Create contour plot of complex function f on given range."""

@@ -457,10 +457,11 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
 
             # At last rho, Ez and Ephi = 0
             # These equations correspond to rows 0 and 3 in the state matrix
-            L = self.state_matrix(beta, nu, rhos[-1], ns[-1], pml=pml) @ L
+            L = self.state_matrix(beta, nu, rhos[-1], ns[-1], pml=pml,
+                                  Ktype=Ktype) @ L
 
             R = np.zeros(beta.shape + (2, 4), dtype=complex)
-            R[..., :, :] = np.eye(4)[[0, 3], :]
+            R[..., :, :] = np.eye(4)[[0, 3], :]  # pick Ez and Ephi rows
             L = R @ L
             # Since L was 4x2 before last operation, it's now 2x2 so we can
             # easily take the determinant.
@@ -554,8 +555,8 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
                 vscale = v[np.argmax((v*v.conj()).real)]
                 return 1/vscale * M
         else:
-            A, B, C, D = self.determinant(beta, nu, outer, pml=pml,
-                                          return_coeffs=True)
+            A, B, C, D = self.determinant(beta, nu, outer, Ktype=Ktype,
+                                          pml=pml, return_coeffs=True)
 
             # A, B, or C,D can be used to make v1,v2 for core, but if mode
             # is transverse one of thes pairs is zero, here we account for this
