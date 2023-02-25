@@ -610,38 +610,16 @@ class ModeSolver:
     # ###################################################################
     # SMOOTHER HANDMADE PML #############################################
 
-    def leakymode_smooth(self,
-                         p,
-                         radiusZ2=0.1,
-                         centerZ2=4,
-                         pmlbegin=None,
-                         pmlend=None,
-                         alpha=1,
-                         npts=8,
-                         nspan=5,
-                         seed=1,
-                         within=None,
-                         rhoinv=0.0,
-                         quadrule='circ_trapez_shift',
-                         inverse='umfpack',
-                         verbose=True,
-                         **feastkwargs):
-        """
-        Compute leaky modes by solving a linear eigenproblem using
-        the frequency-independent C²  PML map
+    def smoothpmlsystem(self, p, alpha=1, pmlbegin=None, pmlend=None):
+        """ Make the matrices needed for formulating the leaky mode
+       eigensystem with frequency-independent C² PML map
            mapped_x = x * (1 + 1j * α * φ(r))
-        where φ is a C² function of the radius r. The coefficients of
-        the mapped eigenproblem are used to make the eigensystem.
-        Then a non-selfadjoint FEAST is run on the system.
-
-        Inputs and outputs are as documented in leakymode_auto(...). The
-        only difference is that here you may override the starting and
-        ending radius of PML by providing pmlbegin, pmlend.
+        where φ is a C² function of the radius r.
         """
 
         print('ModeSolver.leakymode_smooth called on:\n', self)
         if self.ngspmlset:
-            raise RuntimeError('NGSolve pml set. Cannot combine with poly.')
+            raise RuntimeError('NGSolve pml set. Cannot combine with smooth.')
         if abs(alpha.imag) > 0 or alpha < 0:
             raise ValueError('Expecting PML strength alpha > 0')
         if pmlbegin is None:
@@ -653,12 +631,12 @@ class ModeSolver:
         s, t, R0, R1 = sm.symbols('s t R_0 R_1')
         nr = sm.integrate((s - R0)**2 * (s - R1)**2, (s, R0, t)).factor()
         dr = nr.subs(t, R1).factor()
-        sigmat = alpha * nr / dr  # called φ in the docstring
-        sigmat = sigmat.subs(R0, pmlbegin).subs(R1, pmlend)
-        sigma = sm.diff(t * sigmat, t).factor()
+        phi = alpha * nr / dr  # called φ in the docstring
+        phi = phi.subs(R0, pmlbegin).subs(R1, pmlend)
+        sigma = sm.diff(t * phi, t).factor()
         tau = 1 + 1j * sigma
-        taut = 1 + 1j * sigmat
-        G = (tau / taut).factor()
+        taut = 1 + 1j * phi
+        G = (tau / taut).factor()  # this is what appears in the mapped system
 
         # symbolic -> ngsolve coefficient
         x = ng.x
@@ -703,6 +681,41 @@ class ModeSolver:
             b.Assemble()
             m.Assemble()
 
+        return a, b, m, X
+
+    def leakymode_smooth(self,
+                         p,
+                         radiusZ2=0.1,
+                         centerZ2=4,
+                         pmlbegin=None,
+                         pmlend=None,
+                         alpha=1,
+                         npts=8,
+                         nspan=5,
+                         seed=1,
+                         within=None,
+                         rhoinv=0.0,
+                         quadrule='circ_trapez_shift',
+                         inverse='umfpack',
+                         verbose=True,
+                         **feastkwargs):
+        """
+        Compute leaky modes by solving a linear eigenproblem using
+        the frequency-independent C²  PML map
+           mapped_x = x * (1 + 1j * α * φ(r))
+        where φ is a C² function of the radius r. The coefficients of
+        the mapped eigenproblem are used to make the eigensystem.
+        Then a non-selfadjoint FEAST is run on the system.
+
+        Inputs and outputs are as documented in leakymode_auto(...). The
+        only difference is that here you may override the starting and
+        ending radius of PML by providing pmlbegin, pmlend.
+        """
+
+        a, b, m, X = self.smoothpmlsystem(p,
+                                          alpha=alpha,
+                                          pmlbegin=pmlbegin,
+                                          pmlend=pmlend)
         P = SpectralProjNGGeneral(X,
                                   a.mat,
                                   b.mat,
