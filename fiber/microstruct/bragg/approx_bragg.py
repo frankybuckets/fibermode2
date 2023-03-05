@@ -19,7 +19,7 @@ from scipy.special import hankel1 as h1
 from scipy.special import hankel2 as h2
 
 from fiberamp.fiber.microstruct.bragg.utilities import r, theta, Jv, Yv, \
-    Hankel1, Hankel2
+    Hankel1, Hankel2, Jvp, Yvp, Hankel1p, Hankel2p
 
 
 class BraggScalar():
@@ -535,37 +535,50 @@ entries.  Please give a list with same number of entries as regions of fiber.')
             raise TypeError('Bad Ktype.')
 
         if zfunc == 'hankel':
-            Z1 = Hankel1
-            Z2 = Hankel2
+            Z1, Z2 = Hankel1, Hankel2
+            Z1p, Z2p = Hankel1p, Hankel2p
         elif zfunc == 'bessel':
-            Z1 = Jv
-            Z2 = Yv
+            Z1, Z2 = Jv, Yv
+            Z1p, Z2p = Jvp, Yvp
         else:
             raise TypeError("zfunc must be 'bessel' or 'hankel'.")
 
         einu = exp(1j * nu * theta)
 
         u = (A * Z1(K*r, nu) + B * Z2(K*r, nu)) * einu
+        du_dr = K * (A * Z1p(K*r, nu) + B * Z2p(K*r, nu)) * einu
 
-        return u
+        du_dx = du_dr * ng.x/r - ng.y/r**2 * (1j * nu * u)
+        du_dy = du_dr * ng.y/r + ng.x/r**2 * (1j * nu * u)
+
+        return {'u': u, 'du_dr': du_dr, 'du_dtheta': 1j * nu * u,
+                'du_dx': du_dx, 'du_dy': du_dy,
+                'grad_u': ng.CF((du_dx, du_dy))}
 
     def all_fields(self, beta, nu=1, outer='h2', Ktype='kappa'):
         """Create total fields for fiber from regional fields."""
         M = self.coefficients(beta, nu=nu, outer=outer, Ktype=Ktype)
 
-        U = []
+        U, grad_U = [], []
+        dU_dr, dU_dtheta = [], []
+        dU_dx, dU_dy = [], []
 
         for i in range(len(self.ns)):
             coeffs = M[i]
             if i == len(self.ns) - 1:
-                u = self.regional_fields(beta, coeffs, i, nu=nu,
-                                         zfunc='hankel', Ktype=Ktype)
+                Fs = self.regional_fields(beta, coeffs, i, nu=nu,
+                                          zfunc='hankel', Ktype=Ktype)
             else:
-                u = self.regional_fields(beta, coeffs, i, nu=nu,
-                                         zfunc='bessel', Ktype='kappa')
+                Fs = self.regional_fields(beta, coeffs, i, nu=nu,
+                                          zfunc='bessel', Ktype='kappa')
 
-            U.append(u)
+            U.append(Fs['u']), dU_dr.append(Fs['du_dr'])
+            dU_dx.append(Fs['du_dx']), dU_dy.append(Fs['du_dy'])
+            dU_dtheta.append(Fs['du_dtheta']), grad_U.append(Fs['grad_u'])
 
-        U = CF(U)
+        U, grad_U = CF(U), CF(grad_U)
+        dU_dr, dU_dtheta = CF(dU_dr), CF(dU_dtheta)
+        dU_dx, dU_dy = CF(dU_dx), CF(dU_dy)
 
-        return U
+        return {'U': U, 'dU_dr': dU_dr, 'dU_dtheta': dU_dtheta,
+                'dU_dx': dU_dx, 'dU_dy': dU_dy, 'grad_U': grad_U}

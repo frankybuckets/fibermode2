@@ -255,7 +255,8 @@ try again.")
         beta = np.array(beta, dtype=np.complex128)
         rho /= self.scale
 
-        # State matrix is only changed here by PML
+        # State matrix is only affected here by PML, (since 1 + alpha*i term
+        # cancels in all derivatives in matrix).
         if pml is not None:
             alpha, R0 = pml['alpha'], pml['R0']
             R0 /= self.scale
@@ -601,6 +602,134 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
                 vscale = v[np.argmax((v*v.conj()).real)]
                 return 1/vscale * M
 
+    # ------------- NGSolve Field Visualizations ------------------
+
+    def regional_fields(self, beta, coeffs, index, nu=1, Ktype='kappa',
+                        zfunc='bessel', pml=None):
+        """Create fields on one region of the fiber."""
+
+        if pml is not None:
+            alpha, R0 = pml['alpha'], pml['R0']
+            R0 /= self.scale
+            rf = (r - R0) * (1 - alpha * 1j) + R0
+        else:
+            alpha = 0
+            rf = r
+
+        A, B, C, D = coeffs[:]
+
+        k0 = self.k0 * self.scale
+        n = self.ns[index]
+        k = k0 * n
+
+        if Ktype == 'i_gamma':
+            K = 1j * np.sqrt(beta ** 2 - k ** 2, dtype=complex)
+        elif Ktype == 'kappa':
+            K = np.sqrt(k ** 2 - beta ** 2, dtype=complex)
+        else:
+            raise TypeError('Bad Ktype.')
+
+        F = 1j * beta / (k ** 2 - beta ** 2)
+
+        if zfunc == 'hankel':
+            Z1, Z1p = Hankel1, Hankel1p
+            Z2, Z2p = Hankel2, Hankel2p
+        elif zfunc == 'bessel':
+            Z1, Z1p = Jv, Jvp
+            Z2, Z2p = Yv, Yvp
+        else:
+            raise TypeError("zfunc must be 'bessel' or 'hankel'.")
+
+        einu = exp(1j * nu * theta)
+
+        Ez = (A * Z1(K*rf, nu) + B * Z2(K*rf, nu)) * einu
+
+        # If using PML, we would get a factor of 1-alpha j, but it
+        # would later be canceled by it's inverse so both are omitted
+        dEzdr = K * (A * Z1p(K*rf, nu) + B * Z2p(K*rf, nu)) * einu
+        dEzdt = 1j * nu * Ez
+
+        Hz = (C * Z1(K*rf, nu) + D * Z2(K*rf, nu)) * einu
+
+        # Same comment as above, factor of 1 - alpha j is omitted
+        dHzdr = K * (C * Z1p(K*rf, nu) + D * Z2p(K*rf, nu)) * einu
+        dHzdt = 1j * nu * Hz
+
+        Er = F * (dEzdr + k0 / (beta * rf) * dHzdt)
+        Ephi = F * (1 / rf * dEzdt - k0 / beta * dHzdr)
+
+        Hr = F * (dHzdr - k0 * n**2 / (beta * rf) * dEzdt)
+        Hphi = F * (1 / rf * dHzdt + k0 * n**2 / beta * dEzdr)
+
+        Ex = (x * Er - y * Ephi) / r  # Note this doesn't work in pml region
+        Ey = (y * Er + x * Ephi) / r  # Need to implement that still
+
+        Hx = (x * Hr - y * Hphi) / r
+        Hy = (y * Hr + x * Hphi) / r
+
+        Sx = Ey * ng.Conj(Hz) - Ez * ng.Conj(Hy)  # Poynting Vector (time avg)
+        Sy = Ez * ng.Conj(Hx) - Ex * ng.Conj(Hz)
+        Sz = Ex * ng.Conj(Hy) - Ey * ng.Conj(Hx)
+
+        Sr = Ephi * ng.Conj(Hz) - Ez * ng.Conj(Hphi)
+        Sphi = Ez * ng.Conj(Hr) - Er * ng.Conj(Hz)
+
+        return {'Ez': Ez, 'Hz': Hz, 'Er': Er, 'Hr': Hr, 'Ephi': Ephi,
+                'Hphi': Hphi,  'Ex': Ex, 'Ey': Ey, 'Hx': Hx, 'Hy': Hy,
+                'Sx': Sx, 'Sy': Sy, 'Sz': Sz, 'Sr': Sr, 'Sphi': Sphi}
+
+    def all_fields(self, beta, nu=1, outer='h2', Ktype='kappa', pml=None):
+        """Create total fields for fiber from regional fields."""
+        M = self.coefficients(beta, nu=nu, outer=outer, Ktype=Ktype, pml=pml)
+
+        Ez, Hz = [], []
+        Er, Hr = [], []
+        Ephi, Hphi = [], []
+        Ex, Ey, Hx, Hy = [], [], [], []
+        Sx, Sy, Sz = [], [], []
+        Sr, Sphi = [], []
+
+        for i in range(len(self.ns)):
+            coeffs = M[i]
+            if i == len(self.ns) - 1 and outer != 'pcb':
+                zfunc = 'hankel'
+            else:
+                zfunc = 'bessel'
+
+            if i == len(self.ns)-1:
+                F = self.regional_fields(beta, coeffs, i, nu=nu, pml=pml,
+                                         zfunc=zfunc, Ktype=Ktype)
+            else:
+                F = self.regional_fields(beta, coeffs, i, nu=nu, pml=None,
+                                         zfunc=zfunc, Ktype='kappa')
+
+            Ez.append(F['Ez']), Er.append(F['Er'])
+            Ex.append(F['Ex']), Ey.append(F['Ey'])
+            Ephi.append(F['Ephi'])
+            Hz.append(F['Hz']), Hr.append(F['Hr'])
+            Hx.append(F['Hx']), Hy.append(F['Hy'])
+            Hphi.append(F['Hphi'])
+            Sx.append(F['Sx']), Sy.append(F['Sy'])
+            Sz.append(F['Sz'])
+            Sr.append(F['Sr']), Sphi.append(F['Sphi'])
+
+        Ez, Er, Ephi, Ex, Ey = CF(Ez), CF(Er), CF(Ephi), CF(Ex), CF(Ey)
+        Hz, Hr, Hphi, Hx, Hy = CF(Hz), CF(Hr), CF(Hphi), CF(Hx), CF(Hy)
+        Sx, Sy, Sz = CF(Sx), CF(Sy), CF(Sz)
+        Sr, Sphi = CF(Sr), CF(Sphi)
+
+        # Transverse Fields
+
+        Etv = CF((Ex, Ey))
+        Htv = CF((Hx, Hy))
+        Stv = CF((Sx, Sy))
+
+        return {'Ez': Ez, 'Hz': Hz, 'Er': Er, 'Hr': Hr,
+                'Ephi': Ephi, 'Hphi': Hphi, 'Etv': Etv, 'Htv': Htv,
+                'Ex': Ex, 'Ey': Ey, 'Hx': Hx, 'Hy': Hy,
+                'Stv': Stv, 'Sz': Sz, 'Sr': Sr, 'Sphi': Sphi
+                }
+
     # ------------- Matplotlib Field Visualizations --------------
 
     def fields_matplot(self, beta, nu=1, outer='h2', Ktype='kappa',
@@ -608,15 +737,11 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
         if Ktype not in ['i_gamma', 'kappa']:
             raise TypeError('Ktype must be kappa or i_gamma.')
 
-        M = self.coefficients(beta, nu=nu, outer=outer, pml=pml, Ktype=Ktype)
+        if pml is not None:
+            raise NotImplementedError('PML not implemented for matplot\
+visualization.  Use self.all_fields (ngsolve based visualization).')
 
-        # if pml is not None:
-        #     alpha, R0 = pml['alpha'], pml['R0']
-        #     R0 /= self.scale
-        #     rf = (r - R0) * (1 - alpha * 1j) + R0
-        # else:
-        #     alpha = 0
-        #     rf = r
+        M = self.coefficients(beta, nu=nu, outer=outer, pml=pml, Ktype=Ktype)
 
         rhos = np.concatenate([[0], self.rhos/self.scale])
 
@@ -1058,131 +1183,3 @@ entries.  Please give a list with same number of entries as regions of fiber.')
         Rs, Thetas = np.meshgrid(rs, thetas)
         Xs, Ys = Rs * np.cos(Thetas), Rs * np.sin(Thetas)
         return np.array([Xs.flatten(), Ys.flatten()]).T
-
-    # ------------- NGSolve Field Visualizations ------------------
-
-    def regional_fields(self, beta, coeffs, index, nu=1, Ktype='kappa',
-                        zfunc='bessel', pml=None):
-        """Create fields on one region of the fiber."""
-
-        if pml is not None:
-            alpha, R0 = pml['alpha'], pml['R0']
-            R0 /= self.scale
-            rf = (r - R0) * (1 - alpha * 1j) + R0
-        else:
-            alpha = 0
-            rf = r
-
-        A, B, C, D = coeffs[:]
-
-        k0 = self.k0 * self.scale
-        n = self.ns[index]
-        k = k0 * n
-
-        if Ktype == 'i_gamma':
-            K = 1j * np.sqrt(beta ** 2 - k ** 2, dtype=complex)
-        elif Ktype == 'kappa':
-            K = np.sqrt(k ** 2 - beta ** 2, dtype=complex)
-        else:
-            raise TypeError('Bad Ktype.')
-
-        F = 1j * beta / (k ** 2 - beta ** 2)
-
-        if zfunc == 'hankel':
-            Z1, Z1p = Hankel1, Hankel1p
-            Z2, Z2p = Hankel2, Hankel2p
-        elif zfunc == 'bessel':
-            Z1, Z1p = Jv, Jvp
-            Z2, Z2p = Yv, Yvp
-        else:
-            raise TypeError("zfunc must be 'bessel' or 'hankel'.")
-
-        einu = exp(1j * nu * theta)
-
-        Ez = (A * Z1(K*rf, nu) + B * Z2(K*rf, nu)) * einu
-
-        # If using PML, we would get a factor of 1-alpha j, but it
-        # would later be canceled by it's inverse so both are omitted
-        dEzdr = K * (A * Z1p(K*rf, nu) + B * Z2p(K*rf, nu)) * einu
-        dEzdt = 1j * nu * Ez
-
-        Hz = (C * Z1(K*rf, nu) + D * Z2(K*rf, nu)) * einu
-
-        # Same comment as above, factor of 1 - alpha j is omitted
-        dHzdr = K * (C * Z1p(K*rf, nu) + D * Z2p(K*rf, nu)) * einu
-        dHzdt = 1j * nu * Hz
-
-        Er = F * (dEzdr + k0 / (beta * rf) * dHzdt)
-        Ephi = F * (1 / rf * dEzdt - k0 / beta * dHzdr)
-
-        Hr = F * (dHzdr - k0 * n**2 / (beta * rf) * dEzdt)
-        Hphi = F * (1 / rf * dHzdt + k0 * n**2 / beta * dEzdr)
-
-        Ex = (x * Er - y * Ephi) / r  # Note this doesn't work in pml region
-        Ey = (y * Er + x * Ephi) / r  # Need to implement that still
-
-        Hx = (x * Hr - y * Hphi) / r
-        Hy = (y * Hr + x * Hphi) / r
-
-        Sx = Ey * ng.Conj(Hz) - Ez * ng.Conj(Hy)  # Poynting Vector (time avg)
-        Sy = Ez * ng.Conj(Hx) - Ex * ng.Conj(Hz)
-        Sz = Ex * ng.Conj(Hy) - Ey * ng.Conj(Hx)
-
-        Sr = Ephi * ng.Conj(Hz) - Ez * ng.Conj(Hphi)
-        Sphi = Ez * ng.Conj(Hr) - Er * ng.Conj(Hz)
-
-        return {'Ez': Ez, 'Hz': Hz, 'Er': Er, 'Hr': Hr, 'Ephi': Ephi,
-                'Hphi': Hphi,  'Ex': Ex, 'Ey': Ey, 'Hx': Hx, 'Hy': Hy,
-                'Sx': Sx, 'Sy': Sy, 'Sz': Sz, 'Sr': Sr, 'Sphi': Sphi}
-
-    def all_fields(self, beta, nu=1, outer='h2', Ktype='kappa', pml=None):
-        """Create total fields for fiber from regional fields."""
-        M = self.coefficients(beta, nu=nu, outer=outer, Ktype=Ktype, pml=pml)
-
-        Ez, Hz = [], []
-        Er, Hr = [], []
-        Ephi, Hphi = [], []
-        Ex, Ey, Hx, Hy = [], [], [], []
-        Sx, Sy, Sz = [], [], []
-        Sr, Sphi = [], []
-
-        for i in range(len(self.ns)):
-            coeffs = M[i]
-            if i == len(self.ns) - 1 and outer != 'pcb':
-                zfunc = 'hankel'
-            else:
-                zfunc = 'bessel'
-
-            if i == len(self.ns)-1:
-                F = self.regional_fields(beta, coeffs, i, nu=nu, pml=pml,
-                                         zfunc=zfunc, Ktype=Ktype)
-            else:
-                F = self.regional_fields(beta, coeffs, i, nu=nu, pml=None,
-                                         zfunc=zfunc, Ktype='kappa')
-
-            Ez.append(F['Ez']), Er.append(F['Er'])
-            Ex.append(F['Ex']), Ey.append(F['Ey'])
-            Ephi.append(F['Ephi'])
-            Hz.append(F['Hz']), Hr.append(F['Hr'])
-            Hx.append(F['Hx']), Hy.append(F['Hy'])
-            Hphi.append(F['Hphi'])
-            Sx.append(F['Sx']), Sy.append(F['Sy'])
-            Sz.append(F['Sz'])
-            Sr.append(F['Sr']), Sphi.append(F['Sphi'])
-
-        Ez, Er, Ephi, Ex, Ey = CF(Ez), CF(Er), CF(Ephi), CF(Ex), CF(Ey)
-        Hz, Hr, Hphi, Hx, Hy = CF(Hz), CF(Hr), CF(Hphi), CF(Hx), CF(Hy)
-        Sx, Sy, Sz = CF(Sx), CF(Sy), CF(Sz)
-        Sr, Sphi = CF(Sr), CF(Sphi)
-
-        # Transverse Fields
-
-        Etv = CF((Ex, Ey))
-        Htv = CF((Hx, Hy))
-        Stv = CF((Sx, Sy))
-
-        return {'Ez': Ez, 'Hz': Hz, 'Er': Er, 'Hr': Hr,
-                'Ephi': Ephi, 'Hphi': Hphi, 'Etv': Etv, 'Htv': Htv,
-                'Ex': Ex, 'Ey': Ey, 'Hx': Hx, 'Hy': Hy,
-                'Stv': Stv, 'Sz': Sz, 'Sr': Sr, 'Sphi': Sphi
-                }
