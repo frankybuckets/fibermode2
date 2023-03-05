@@ -1,5 +1,5 @@
 import ngsolve as ng
-from ngsolve import curl, grad, dx, Conj
+from ngsolve import curl, grad, dx, Conj, Integrate, InnerProduct
 import numpy as np
 from numpy import conj
 import sympy as sm
@@ -567,10 +567,10 @@ class ModeSolver:
             plane.
         * Remaining inputs are as documented in leakymode(..).
 
-        OUTPUTS:   zsqr, Yl, Y, P
+        OUTPUTS:   zsqr, Yr, Yl, P
 
         * zsqr: computed resonance values Z²
-        * Yl, Y: left and right eigenspans
+        * Yl, Yr: left and right eigenspans
         * P: SpectralProjNGGeneral object that computed Y, Yl
         """
 
@@ -610,6 +610,93 @@ class ModeSolver:
     # ###################################################################
     # SMOOTHER HANDMADE PML #############################################
 
+    def smoothpmlsymb(self, alpha, pmlbegin, pmlend):
+        """ Symbolic pml functions useful for debugging/visualization of pml
+        """
+        # symbolically derive the radial PML functions
+        s, t, R0, R1 = sm.symbols('s t R_0 R_1')
+        nr = sm.integrate((s - R0)**2 * (s - R1)**2, (s, R0, t)).factor()
+        dr = nr.subs(t, R1).factor()
+        phi = alpha * nr / dr  # called α * φ in the docstring
+        phi = phi.subs(R0, pmlbegin).subs(R1, pmlend)
+        sigma = sm.diff(t * phi, t).factor()
+        tau = 1 + 1j * sigma
+        taut = 1 + 1j * phi
+        mappedt = t * taut
+        G = (tau / taut).factor()  # this is what appears in the mapped system
+        return G, mappedt, tau, taut
+
+    def smoothpmlsystem(self,
+                        p,
+                        alpha=1,
+                        pmlbegin=None,
+                        pmlend=None,
+                        autoupdate=False):
+        """ Make the matrices needed for formulating the leaky mode
+       eigensystem with frequency-independent C² PML map
+           mapped_x = x * (1 + 1j * α * φ(r))
+        where φ is a C² function of the radius r.
+        """
+
+        print('ModeSolver.leakymode_smooth called on:\n', self)
+        if self.ngspmlset:
+            raise RuntimeError('NGSolve pml set. Cannot combine with smooth.')
+        if abs(alpha.imag) > 0 or alpha < 0:
+            raise ValueError('Expecting PML strength alpha > 0')
+        if pmlbegin is None:
+            pmlbegin = self.R
+        if pmlend is None:
+            pmlend = self.Rout
+
+        G, mappedt, tau, taut = self.smoothpmlsymb(alpha, pmlbegin, pmlend)
+
+        # symbolic -> ngsolve coefficient
+        x = ng.x
+        y = ng.y
+        r = ng.sqrt(x * x + y * y)
+        gstr = str(G).replace('I', '1j').replace('t', 'r')
+        ttstr = str(tau * taut).replace('I', '1j').replace('t', 'r')
+        self.ttstr = ttstr
+        self.taut = str(taut).replace('I', '1j').replace('t', 'r')
+        self.mappedr = str(mappedt).replace('I', '1j').replace('t', 'r')
+        g0 = eval(gstr)
+        tt0 = eval(ttstr)
+        g = ng.IfPos(r - pmlbegin, g0, 1)
+        tt = ng.IfPos(r - pmlbegin, tt0, 1)
+
+        gi = 1.0 / g
+        cs = x / r
+        sn = y / r
+        A00 = gi * cs * cs + g * sn * sn
+        A01 = (gi - g) * cs * sn
+        A11 = gi * sn * sn + g * cs * cs
+        g.Compile()
+        gi.Compile()
+        tt.Compile()
+        A00.Compile()
+        A01.Compile()
+        A11.Compile()
+        A = ng.CoefficientFunction((A00, A01, A01, A11), dims=(2, 2))
+        self.pml_A = A
+        self.pml_B = tt
+
+        # Make linear eigensystem
+        X = ng.H1(self.mesh, order=p, complex=True, autoupdate=autoupdate)
+        u, v = X.TnT()
+        a = ng.BilinearForm(X)
+        b = ng.BilinearForm(X)
+        a += (self.pml_A * grad(u) * grad(v) +
+              self.V * self.pml_B * u * v) * dx
+        b += self.pml_B * u * v * dx
+        m = ng.BilinearForm(X)
+        m += u * v * dx
+        with ng.TaskManager():
+            a.Assemble()
+            b.Assemble()
+            m.Assemble()
+
+        return a, b, m, X
+
     def leakymode_smooth(self,
                          p,
                          radiusZ2=0.1,
@@ -639,70 +726,10 @@ class ModeSolver:
         ending radius of PML by providing pmlbegin, pmlend.
         """
 
-        print('ModeSolver.leakymode_smooth called on:\n', self)
-        if self.ngspmlset:
-            raise RuntimeError('NGSolve pml set. Cannot combine with poly.')
-        if abs(alpha.imag) > 0 or alpha < 0:
-            raise ValueError('Expecting PML strength alpha > 0')
-        if pmlbegin is None:
-            pmlbegin = self.R
-        if pmlend is None:
-            pmlend = self.Rout
-
-        # symbolically derive the radial PML functions
-        s, t, R0, R1 = sm.symbols('s t R_0 R_1')
-        nr = sm.integrate((s - R0)**2 * (s - R1)**2, (s, R0, t)).factor()
-        dr = nr.subs(t, R1).factor()
-        sigmat = alpha * nr / dr  # called φ in the docstring
-        sigmat = sigmat.subs(R0, pmlbegin).subs(R1, pmlend)
-        sigma = sm.diff(t * sigmat, t).factor()
-        tau = 1 + 1j * sigma
-        taut = 1 + 1j * sigmat
-        G = (tau / taut).factor()
-
-        # symbolic -> ngsolve coefficient
-        x = ng.x
-        y = ng.y
-        r = ng.sqrt(x * x + y * y)
-        gstr = str(G).replace('I', '1j').replace('t', 'r')
-        ttstr = str(tau * taut).replace('I', '1j').replace('t', 'r')
-        g0 = eval(gstr)
-        tt0 = eval(ttstr)
-        g = ng.IfPos(r - pmlbegin, g0, 1)
-        tt = ng.IfPos(r - pmlbegin, tt0, 1)
-
-        gi = 1.0 / g
-        cs = x / r
-        sn = y / r
-        A00 = gi * cs * cs + g * sn * sn
-        A01 = (gi - g) * cs * sn
-        A11 = gi * sn * sn + g * cs * cs
-        g.Compile()
-        gi.Compile()
-        tt.Compile()
-        A00.Compile()
-        A01.Compile()
-        A11.Compile()
-        A = ng.CoefficientFunction((A00, A01, A01, A11), dims=(2, 2))
-        self.pml_A = A
-        self.pml_tt = tt
-        self.ttstr = ttstr
-
-        # Make linear eigensystem
-        X = ng.H1(self.mesh, order=p, complex=True)
-        u, v = X.TnT()
-        a = ng.BilinearForm(X)
-        b = ng.BilinearForm(X)
-        a += (self.pml_A * grad(u) * grad(v) +
-              self.V * self.pml_tt * u * v) * dx
-        b += self.pml_tt * u * v * dx
-        m = ng.BilinearForm(X)
-        m += u * v * dx
-        with ng.TaskManager():
-            a.Assemble()
-            b.Assemble()
-            m.Assemble()
-
+        a, b, m, X = self.smoothpmlsystem(p,
+                                          alpha=alpha,
+                                          pmlbegin=pmlbegin,
+                                          pmlend=pmlend)
         P = SpectralProjNGGeneral(X,
                                   a.mat,
                                   b.mat,
@@ -741,6 +768,199 @@ class ModeSolver:
         }
 
         return zsqr, Y, Yl, beta, P, moreoutputs
+
+    def eestimator_helmholtz(self, rgt, lft, lam, A, B, V):
+        """DWR error estimator for eigenvalues
+
+        INPUT:
+        * lft: left eigenfunction as NGvecs object
+        * rgt: right eigenfunction as NGvecs object
+        * lam: eigenvalue
+        * A, B, V are such that the eigenproblem is
+          -div(A grad u) + V B u = lam B  u
+
+        OUTPUT:
+        * ee: element-wise error estimator
+        """
+
+        if rgt.m > 1 or lft.m > 1:
+            raise NotImplementedError(
+                'What to do with multiple eigenfunctions?')
+
+        R = rgt.gridfun('R', i=0)
+        L = lft.gridfun('L', i=0)
+        h = ng.specialcf.mesh_size
+        n = ng.specialcf.normal(self.mesh.dim)
+
+        AgradR = A * grad(R)
+        divAgradR = AgradR[0].Diff(ng.x) + AgradR[1].Diff(ng.y)
+        AgradL = A * grad(L)
+        divAgradL = AgradL[0].Diff(ng.x) + AgradL[1].Diff(ng.y)
+
+        r = h * (divAgradR - V * B * R + lam * R)
+        rhoR = Integrate(InnerProduct(r, r) * dx, self.mesh, element_wise=True)
+        r = h * (divAgradL - V * B * L + np.conj(lam) * L)
+        rhoL = Integrate(InnerProduct(r, r) * dx, self.mesh, element_wise=True)
+        jR = n * (AgradR - AgradR.Other())
+        jL = n * (AgradL - AgradL.Other())
+        rhoR += Integrate(0.5 * h * InnerProduct(jR, jR) *
+                          dx(element_boundary=True),
+                          self.mesh,
+                          element_wise=True)
+        rhoL += Integrate(0.5 * h * InnerProduct(jL, jL) *
+                          dx(element_boundary=True),
+                          self.mesh,
+                          element_wise=True)
+
+        def hess(gf):
+            return gf.Operator("hesse")
+
+        omegaR = Integrate(h * h * InnerProduct(hess(R), hess(R)),
+                           self.mesh,
+                           element_wise=True)
+        omegaL = Integrate(h * h * InnerProduct(hess(L), hess(L)),
+                           self.mesh,
+                           element_wise=True)
+        ee = np.sqrt(omegaR.real.NumPy() * rhoR.real.NumPy())
+        ee += np.sqrt(omegaL.real.NumPy() * rhoL.real.NumPy())
+
+        return ee
+
+    def leakymode_adapt(
+            self,
+            p,
+            radiusZ2=0.1,
+            centerZ2=4,
+            maxndofs=200000,  # Stop if ndofs become larger than this
+            visualize=True,  # Pause adaptive loop to see iterate
+            pmlbegin=None,
+            pmlend=None,
+            alpha=10,
+            npts=4,
+            nspan=5,
+            seed=1,
+            within=None,
+            rhoinv=0.0,
+            quadrule='circ_trapez_shift',
+            inverse='umfpack',
+            verbose=True,
+            **feastkwargs):
+        """Compute leaky modes by DWR adaptivity, solving in each iteration a
+        linear eigenproblem obtained using the (frequency-independent)
+        C² smooth PML in which mapped_x = x * (1 + 1j * α * φ(r))
+        where φ is a C² function of the radius r.  The eigenproblem is
+        solved by a non-selfadjoint FEAST algorithm.
+
+        INPUT:
+
+        * radiusZ2, centerZ2:
+            Capture modes whose non-dimensional resonance value Z²
+            is such that Z*Z is contained within the circular contour
+            centered at "centerZ2" of radius "radiusZ2" in the complex
+            plane.
+        * maxndofs: Stop adaptive loop is number of dofs exceed this.
+        * visualize: If true, then pause adaptivity loop to see each iterate.
+        * Remaining inputs are as documented in leakymode(..).
+
+        OUTPUT:   zsqr, Yr, Yl, P
+
+        * zsqr: Computed Z² at the finest mesh found by adaptivity.
+        * Yl, Y: Corresponding left and right eigenspans.
+        * P: SpectralProjNGGeneral object that conducted FEAST.
+        """
+
+        a, b, m, X = self.smoothpmlsystem(p,
+                                          alpha=alpha,
+                                          autoupdate=True,
+                                          pmlbegin=pmlbegin,
+                                          pmlend=pmlend)
+        ndofs = [0]
+        Zsqrs = []
+        checks = True
+        if visualize:
+            eevis = ng.GridFunction(ng.L2(self.mesh, order=0, autoupdate=True),
+                                    name='estimator',
+                                    autoupdate=True)
+            ng.Draw(eevis)
+
+        while ndofs[-1] < maxndofs:  # ADAPTIVITY LOOP ------------------
+
+            # 1. SOLVE
+
+            with ng.TaskManager():
+                a.Assemble()
+                b.Assemble()
+                m.Assemble()
+
+            P = SpectralProjNGGeneral(X,
+                                      a.mat,
+                                      b.mat,
+                                      M=m.mat,
+                                      radius=radiusZ2,
+                                      center=centerZ2,
+                                      npts=npts,
+                                      within=within,
+                                      rhoinv=rhoinv,
+                                      checks=checks,
+                                      quadrule=quadrule,
+                                      verbose=verbose,
+                                      inverse=inverse)
+            Yr = NGvecs(X, nspan)
+            Yl = NGvecs(X, nspan)
+            Yr.setrandom(seed=seed)
+            Yl.setrandom(seed=seed)
+            zsqr, Yr, history, Yl = P.feast(Yr,
+                                            Yl=Yl,
+                                            hermitian=False,
+                                            **feastkwargs)
+            _, cgd = history[-2], history[-1]
+            if not cgd:
+                raise NotImplementedError('What to do when FEAST fails?')
+            if Yr.m > 1:
+                raise NotImplementedError('How to handle multidim eigenspace?')
+
+            ndofs.append(Yr.fes.ndof)
+            Zsqrs.append(zsqr)
+            print('ADAPTIVITY at ndofs=', ndofs[-1], ' Zsqr=', Zsqrs[-1])
+
+            # 2. ESTIMATE
+
+            ee = self.eestimator_helmholtz(Yr, Yl, zsqr[0], self.pml_A,
+                                           self.pml_B, self.V)
+            if visualize:
+                eevis.vec.FV().NumPy()[:] = ee
+                ng.Draw(eevis)
+                Yl.draw(name='LftEig')
+                Yr.draw(name='RgtEig')
+                input('* Pausing for visualization. Enter any key to continue')
+            if ndofs[-1] > maxndofs:
+                break
+
+            # 3. MARK
+
+            avr = sum(ee) / self.mesh.ne
+            for elem in self.mesh.Elements():
+                self.mesh.SetRefinementFlag(elem, ee[elem.nr] > avr)
+
+            # 4. REFINE
+
+            self.mesh.Refine()
+            npts = 1
+            nspan = 1
+            checks = False
+            centerZ2 = zsqr
+
+        # Adaptivity loop done ------------------------------------------
+
+        beta = self.betafrom(zsqr)
+        print('Results:\n Z²:', zsqr)
+        print(' beta:', beta)
+        print(' CL dB/m:', 20 * beta.imag / np.log(10))
+        maxbdrnrm = np.max(self.boundarynorm(Yr))
+        if maxbdrnrm > 1e-6:
+            print('*** Mode boundary L2 norm > 1e-6!')
+
+        return zsqr, Yr, Yl, beta, P
 
     # ###################################################################
     # GUIDED LP MODES FROM SELFADJOINT EIGENPROBLEM #####################
