@@ -23,13 +23,13 @@ class ARF2(ModeSolver):
     def __init__(self, name=None, refine=0, curve=3, e=None,
                  poly_core=False, shift_capillaries=False,
                  outer_materials=None, fill=None, T_cladding=10,
-                 glass_maxh=None, wl=1.8e-6):
+                 T_buffer=10, glass_maxh=None, wl=1.8e-6):
 
         # Set and check the fiber parameters.
         self.set_parameters(name=name, shift_capillaries=shift_capillaries,
                             e=e, outer_materials=outer_materials,
                             T_cladding=T_cladding, glass_maxh=glass_maxh,
-                            wl=wl)
+                            T_buffer=T_buffer, wl=wl)
         self.check_parameters()
 
         if self.name == 'original':  # Override for original fiber
@@ -46,7 +46,7 @@ class ARF2(ModeSolver):
 
     def set_parameters(self, name=None, e=None, shift_capillaries=False,
                        outer_materials=None, T_cladding=10, glass_maxh=None,
-                       wl=1.8e-6):
+                       T_buffer=10, wl=1.8e-6):
         """
         Set fiber parameters.
         """
@@ -69,7 +69,7 @@ class ARF2(ModeSolver):
 
             self.T_cladding = T_cladding / scaling
             self.T_outer = 30 / scaling
-            self.T_buffer = 10 / scaling
+            self.T_buffer = T_buffer / scaling
 
             # self.T_soft_polymer = 30 / scaling
             # self.T_hard_polymer = 30 / scaling
@@ -254,7 +254,7 @@ class ARF2(ModeSolver):
 
             self.T_cladding = T_cladding / scaling
             self.T_outer = 30 / scaling
-            self.T_buffer = 10 / scaling
+            self.T_buffer = T_buffer / scaling
             self.T_soft_polymer = 30 / scaling
             self.T_hard_polymer = 30 / scaling
 
@@ -343,7 +343,7 @@ class ARF2(ModeSolver):
 
             self.T_cladding = T_cladding / scaling
             self.T_outer = 30 / scaling
-            self.T_buffer = 10 / scaling
+            self.T_buffer = T_buffer / scaling
             self.T_soft_polymer = 30 / scaling
             self.T_hard_polymer = 30 / scaling
 
