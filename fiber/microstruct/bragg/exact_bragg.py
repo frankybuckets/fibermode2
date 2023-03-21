@@ -664,6 +664,9 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
         Ex = (x * Er - y * Ephi) / r  # Note this doesn't work in pml region
         Ey = (y * Er + x * Ephi) / r  # Need to implement that still
 
+        dEzdx = dEzdr * x/r - y/r**2 * (1j * nu * Ez)
+        dEzdy = dEzdr * y/r + x/r**2 * (1j * nu * Ez)
+
         Hx = (x * Hr - y * Hphi) / r
         Hy = (y * Hr + x * Hphi) / r
 
@@ -676,13 +679,15 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
 
         return {'Ez': Ez, 'Hz': Hz, 'Er': Er, 'Hr': Hr, 'Ephi': Ephi,
                 'Hphi': Hphi,  'Ex': Ex, 'Ey': Ey, 'Hx': Hx, 'Hy': Hy,
-                'Sx': Sx, 'Sy': Sy, 'Sz': Sz, 'Sr': Sr, 'Sphi': Sphi}
+                'Sx': Sx, 'Sy': Sy, 'Sz': Sz, 'Sr': Sr, 'Sphi': Sphi,
+                'dEzdx': dEzdx, 'dEzdy': dEzdy}
 
     def all_fields(self, beta, nu=1, outer='h2', Ktype='kappa', pml=None):
         """Create total fields for fiber from regional fields."""
         M = self.coefficients(beta, nu=nu, outer=outer, Ktype=Ktype, pml=pml)
 
         Ez, Hz = [], []
+        dEzdx, dEzdy = [], []
         Er, Hr = [], []
         Ephi, Hphi = [], []
         Ex, Ey, Hx, Hy = [], [], [], []
@@ -712,6 +717,7 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
             Sx.append(F['Sx']), Sy.append(F['Sy'])
             Sz.append(F['Sz'])
             Sr.append(F['Sr']), Sphi.append(F['Sphi'])
+            dEzdx.append(F['dEzdx']), dEzdy.append(F['dEzdy'])
 
         Ez, Er, Ephi, Ex, Ey = CF(Ez), CF(Er), CF(Ephi), CF(Ex), CF(Ey)
         Hz, Hr, Hphi, Hx, Hy = CF(Hz), CF(Hr), CF(Hphi), CF(Hx), CF(Hy)
@@ -723,11 +729,12 @@ refraction when using pml, but have values %3f and %3f." % (self.ns[-2],
         Etv = CF((Ex, Ey))
         Htv = CF((Hx, Hy))
         Stv = CF((Sx, Sy))
-
+        gradEz = CF((dEzdx, dEzdy))
         return {'Ez': Ez, 'Hz': Hz, 'Er': Er, 'Hr': Hr,
                 'Ephi': Ephi, 'Hphi': Hphi, 'Etv': Etv, 'Htv': Htv,
                 'Ex': Ex, 'Ey': Ey, 'Hx': Hx, 'Hy': Hy,
-                'Stv': Stv, 'Sz': Sz, 'Sr': Sr, 'Sphi': Sphi
+                'Stv': Stv, 'Sz': Sz, 'Sr': Sr, 'Sphi': Sphi,
+                'gradEz': gradEz,
                 }
 
     # ------------- Matplotlib Field Visualizations --------------
