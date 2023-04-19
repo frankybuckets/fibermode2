@@ -2,36 +2,36 @@
 # Geometric Parameters.  Dimensional
 
 p = 6                      # number of sides of polygonal lattice
-layers = 1                 # number of layers of lattice
-skip = 2                   # number of layers to skip before beginning lattice
+layers = 1               # number of layers of lattice
+skip = 1                   # number of layers to skip before beginning lattice
 pattern = []               # pattern determining microstructure
 
-Λ = 7e-6                             # separation between layers
-r_tube = .5 * .4 * Λ                 # radius of inner tubes
-r_core = .7 * (Λ * skip - r_tube)    # radius of (computational) core region
-r_fiber = (skip + layers + 1.5) * Λ   # radius of fiber, end of cladding region
+r_tube = 1.65e-6                 # radius of inner tubes
+Λ = 2 * r_tube * 5/3                             # separation between layers
+r_core = .75 * (Λ * skip - r_tube)    # radius of (computational) core region
+r_fiber = (skip + layers) * Λ   # radius of fiber, end of cladding region
 
 t_poly = 0 * r_tube        # polymer jacket thickness
 t_buffer = 0 * r_tube      # thickness of buffer region
-t_outer = 3 * r_core       # thickness of PML region
+t_outer = 2 * r_core       # thickness of PML region
 
 r_poly = r_fiber + t_poly  # end of polymer region, start buffer region
 r_pml = r_poly + t_buffer  # end of buffer, start of PML region
 r_out = r_pml + t_outer    # end of domain
 
-scale = .5*r_core            # scaling factor
+scale = r_core            # scaling factor
 
 
 # Physical Parameters in Vacuum (Dimensional).
 
-wavelength = 1.55e-6
+wavelength = .825e-6
 
 
 # Refractive indices
 # Here we need to introduce materials and Sellmeier
 
-n_tube = 1.48                       # refractive index of tube material
-n_clad = 1.45                       # refractive index of cladding material
+n_tube = 1.8                        # refractive index of tube material
+n_clad = 1.44                       # refractive index of cladding material
 n_core = n_clad                     # refractive index of core
 n_poly = n_clad                        # refractive index of polymer
 n_buffer = n_clad                        # refractive index of buffer region
@@ -49,10 +49,10 @@ square_buffer = .25
 
 pml_maxh = .5 * r_fiber / scale
 buffer_maxh = .3 * r_fiber / scale
-tube_maxh = .07 * r_fiber / scale
-clad_maxh = .2 * r_fiber / scale
+tube_maxh = .01 * r_fiber / scale
+clad_maxh = .08 * r_fiber / scale
 poly_maxh = .8 * r_fiber / scale
-core_maxh = .05 * r_fiber / scale
+core_maxh = .025 * r_fiber / scale
 
 
 params = {
