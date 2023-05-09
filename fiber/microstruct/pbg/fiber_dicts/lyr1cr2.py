@@ -19,7 +19,7 @@ r_poly = r_fiber + t_poly  # end of polymer region, start buffer region
 r_pml = r_poly + t_buffer  # end of buffer, start of PML region
 r_out = r_pml + t_outer    # end of domain
 
-scale = .5*r_core            # scaling factor
+scale = r_core            # scaling factor
 
 
 # Physical Parameters in Vacuum (Dimensional).
