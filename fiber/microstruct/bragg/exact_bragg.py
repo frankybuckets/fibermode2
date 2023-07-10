@@ -386,7 +386,7 @@ try again.")
             raise ValueError("Outer must be either 'h1', 'h2' or 'pcb'.")
 
         if pml is not None and outer != 'pcb':
-            warn("Using PML without PCBCs won't change anything.")
+            warn("Using PML without PCBCs won't change eigenvalues.")
 
         if pml is not None and self.ns[-1] != self.ns[-2]:
             raise ValueError("Last two regions should have same index of \

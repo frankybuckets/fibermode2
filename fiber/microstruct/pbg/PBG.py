@@ -556,86 +556,73 @@ class PBG(ModeSolver):
                 geo.AddCircle(c=(x, y), r=r, leftdomain=3,
                               rightdomain=2, bc='microtube_cladding_interface')
 
+    def E_modes_from_array(self, array, p=1, mesh=None):
+        """Create NGvec object containing modes and set data given by array."""
+        if mesh is None:
+            mesh = self.mesh
+        X = ng.HCurl(mesh, order=p+1-max(1-p, 0), type1=True,
+                     dirichlet='OuterCircle', complex=True)
+        m = array.shape[1]
+        E = NGvecs(X, m)
+        try:
+            E.fromnumpy(array)
+        except ValueError:
+            raise ValueError("Array is wrong length: make sure your mesh is\
+ constructed the same as for input array and that polynomial degree correspond\
+ing to array has been passed as keyword p.")
+        return E
+
+    def phi_modes_from_array(self, array, p=1, mesh=None):
+        """Create NGvec object containing modes and set data given by array."""
+        if mesh is None:
+            mesh = self.mesh
+        Y = ng.H1(mesh, order=p+1, dirichlet='OuterCircle', complex=True)
+        m = array.shape[1]
+        phi = NGvecs(Y, m)
+        try:
+            phi.fromnumpy(array)
+        except ValueError:
+            raise ValueError("Array is wrong length: make sure your mesh is\
+ constructed the same as for input array and that polynomial degree correspond\
+ing to array has been passed as keyword p.")
+        return phi
+
     # SAVE & LOAD #####################################################
 
-    def save(self, name, folder):
-        """Save PBG object.
+    def save_mesh(self, name):
+        """ Save mesh using pickle (allows for mesh curvature). """
+        if name[-4:] != '.pkl':
+            name += '.pkl'
+        with open(name, 'wb') as f:
+            pickle.dump(self.mesh, f)
 
-        Parameters
-        ----------
-        name : str
-            Desired file name.  The suffix '_pbg.pkl' will be attached.
-        folder : str
-            Path to destination folder.  May be absolute or relative to current
-            directory.  Exception is raised if folder does not exist.
-        """
-        filename = os.path.relpath(folder + '/' + name + '_pbg.pkl')
-        if os.path.isdir(folder):
+    def save_modes(self, modes, name):
+        """Save modes as numpy arrays."""
+        if name[-4:] == '.npy':
+            name -= '.npy'
+        np.save(name, modes.tonumpy())
 
-            print('Pickling pbg object into ', filename)
-            with open(filename, 'wb') as f:
-                pickle.dump(self, f)
-        else:
-            raise OSError("The given folder is not a directory.\
- Please check and make directory as needed.")
+    def load_mesh(self, name):
+        """ Load a saved ARF mesh."""
+        if name[-4:] != '.pkl':
+            name += '.pkl'
+        with open(name, 'rb') as f:
+            pmesh = pickle.load(f)
+        return pmesh
 
-    def savemodes(self, name, folder, Y, p, betas, Zs, solverparams=None,
-                  longY=None, longYl=None, pbgpickle=False):
-        """
-        Save an NGVecs span object Y containing modes of FE degree p.
+    def load_E_modes(self, mesh_name, mode_name, p=8):
+        """Load transverse vectore E modes and associated mesh"""
+        mesh = self.load_mesh(mesh_name)
+        if mode_name[-4:] == '.npy':
+            mode_name -= '.npy'
+        array = np.load(mode_name+'.npy')
+        return self.E_modes_from_array(array, mesh=mesh, p=p)
 
-        Include any solver parameters to be saved together with the
-        modes in the input dictionary "solverparams". If "pbgpickle"
-        is True, then the pbg object is also saved under the same "name".
-
-
-        Parameters
-        ----------
-        name : str
-            Desired file name.  The suffix '_mode.npz' will be attached.
-        folder : str
-            Path to destination folder.  May be absolute or relative to current
-            directory.  Exception is raised if folder does not exist.
-        Y : NGvecs object
-            Object containing modes to be saved.
-        p : int
-            Finite element degree of associated modes.
-        betas : str
-            Propagation constants of associated modes.
-        Zs : ndarray
-            Eigenvalues of associated modes.
-        solverparams : dict
-            Extra solver parameters to save. The default is None.
-        longY : ndarray, optional
-            Long eigenvectors from linearized problem. The default is None.
-        longYl : ndarray, optional
-            Long left eigenvectors from linearized problem. The default is
-            None.
-        pbgpickle : boolean, optional
-            If set to True, this function will also save the associated PBG
-            object under the same name (with suffix '_npg.pkl' attached).
-            The default is False.
-
-        Returns
-        -------
-        None.
-
-        """
-        if pbgpickle:
-            self.save(name, folder)
-        y = Y.tonumpy()
-        if longY is not None:
-            longY = longY.tonumpy()
-        if longYl is not None:
-            longYl = longYl.tonumpy()
-        d = {'y': y, 'p': p, 'betas': betas, 'Zs': Zs,
-             'longy': longY, 'longyl': longYl}
-        if solverparams is not None:
-            d.update(**solverparams)
-
-        f = os.path.relpath(folder + '/' + name + '_mode.npz')
-        print('Writing mode file ', f)
-        np.savez(f, **d)
+    def load_phi_modes(self, mesh_name, mode_name, p=8):
+        """Load transverse vectore E modes and associated mesh"""
+        mesh = self.load_mesh(mesh_name)
+        array = np.load(mode_name+'.npy')
+        return self.phi_modes_from_array(array, mesh=mesh, p=p)
 
 # End of class PBG ###################################
 
