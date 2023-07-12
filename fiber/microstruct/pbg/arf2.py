@@ -28,8 +28,8 @@ class ARF2(ModeSolver):
                  shift_capillaries=False,
                  outer_materials=None,
                  fill=None,
-                 T_cladding=10,
-                 T_buffer=10,
+                 T_cladding=None,
+                 T_buffer=None,
                  T_outer=None,
                  glass_maxh=None,
                  inner_air_maxh=None,
@@ -103,9 +103,11 @@ class ARF2(ModeSolver):
             self.R_tube = 12.48 / scaling
             self.T_tube = .42 / scaling
 
-            self.T_cladding = T_cladding / scaling
+            self.T_cladding = T_cladding if T_cladding is not None else 10
+            self.T_cladding /= scaling
             self.T_outer = 30 / scaling
-            self.T_buffer = T_buffer / scaling
+            self.T_buffer = T_buffer if T_buffer is not None else 10
+            self.T_buffer /= scaling
 
             # self.T_soft_polymer = 30 / scaling
             # self.T_hard_polymer = 30 / scaling
@@ -286,95 +288,6 @@ class ARF2(ModeSolver):
                      'maxh': pml_maxh if pml_maxh else .4}
                 ]
 
-        elif self.name == 'basic':
-
-            self.n_tubes = 6
-
-            scaling = 15
-            self.scale = scaling * 1e-6
-
-            if e is not None:
-                self.e = e
-            else:
-                self.e = .025/.42
-
-            self.R_tube = 12.06 / scaling
-            self.T_tube = .84 / scaling
-
-            self.T_cladding = T_cladding / scaling
-            self.T_outer = 30 / scaling
-            self.T_buffer = T_buffer / scaling
-            self.T_soft_polymer = 30 / scaling
-            self.T_hard_polymer = 30 / scaling
-
-            if shift_capillaries:
-                self.R_cladding = (1 + 2 * self.R_tube + (2 - .025/.42) *
-                                   self.T_tube)
-
-                self.R_tube_center = (self.R_cladding - self.R_tube -
-                                      (1 - self.e) * self.T_tube)
-
-                self.core_factor = .75
-                self.R_core = ((self.R_tube_center - self.R_tube -
-                                self.T_tube) * self.core_factor)
-            else:
-                self.R_cladding = (1 + 2 * self.R_tube + (2 - self.e) *
-                                   self.T_tube)
-
-                self.R_tube_center = 1 + self.R_tube + self.T_tube
-                self.core_factor = .75
-                self.R_core = self.core_factor
-
-            self.n_glass = 1.4388164768221814
-            self.n_air = 1.00027717
-            self.n_soft_polymer = 1.44
-            self.n_hard_polymer = 1.56
-            self.n_buffer = self.n_air
-            self.n0 = self.n_air
-
-            self.inner_air_maxh = .2
-            self.fill_air_maxh = .35
-            self.tube_maxh = .11
-            self.cladding_maxh = .25
-
-            self.inner_tube_edge_maxh = .11
-            self.outer_tube_edge_maxh = .11
-            self.inner_cladding_edge_maxh = .25
-            self.outer_cladding_edge_maxh = .25
-            self.fill_edge_maxh = .11
-
-            self.core_maxh = .25
-            self.glass_maxh = 0.05
-
-            if outer_materials is not None:
-                self.outer_materials = outer_materials
-                self.n0 = outer_materials[-1]['n']  # Need to reset n0
-            else:
-                self.outer_materials = [
-
-                    # {'material': 'soft_polymer',
-                    #  'n': self.n_soft_polymer,
-                    #  'T': self.T_soft_polymer,
-                    #  'maxh': 2},
-
-                    # {'material': 'hard_polymer',
-                    #  'n': self.n_hard_polymer,
-                    #  'T': self.T_hard_polymer,
-                    #  'maxh': 2},
-
-                    {'material': 'buffer',
-                     'n': self.n_buffer,
-                     'T': self.T_buffer,
-                     'maxh': 2},
-
-                    {'material': 'Outer',
-                     'n': self.n0,
-                     'T': self.T_outer,
-                     'maxh': 4}
-                ]
-
-            self.wavelength = wl
-
         elif self.name == 'fine_cladding':
 
             self.n_tubes = 6
@@ -390,9 +303,12 @@ class ARF2(ModeSolver):
             self.R_tube = 12.48 / scaling
             self.T_tube = .42 / scaling
 
-            self.T_cladding = T_cladding / scaling
+            self.T_cladding = T_cladding if T_cladding is not None else 10
+            self.T_cladding /= scaling
             self.T_outer = 30 / scaling
-            self.T_buffer = T_buffer / scaling
+            self.T_buffer = T_buffer if T_buffer is not None else 10
+            self.T_buffer /= scaling
+
             self.T_soft_polymer = 30 / scaling
             self.T_hard_polymer = 30 / scaling
 
