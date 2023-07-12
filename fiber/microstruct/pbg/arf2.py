@@ -30,6 +30,7 @@ class ARF2(ModeSolver):
                  fill=None,
                  T_cladding=10,
                  T_buffer=10,
+                 T_outer=None,
                  glass_maxh=None,
                  inner_air_maxh=None,
                  fill_air_maxh=None,
@@ -51,6 +52,7 @@ class ARF2(ModeSolver):
                             buffer_maxh=buffer_maxh,
                             pml_maxh=pml_maxh,
                             T_buffer=T_buffer,
+                            T_outer=T_outer,
                             wl=wl)
 
         self.check_parameters()
@@ -72,6 +74,7 @@ class ARF2(ModeSolver):
                        shift_capillaries=False,
                        outer_materials=None,
                        T_cladding=10,
+                       T_outer=None,
                        glass_maxh=None,
                        inner_air_maxh=None,
                        fill_air_maxh=None,
@@ -192,10 +195,12 @@ class ARF2(ModeSolver):
             self.R_tube = 25.5 / scaling
             self.T_tube = 6 / scaling
 
-            self.T_cladding = 1.2 * 25.5 / scaling
-            self.T_outer = self.T_cladding
-            self.T_buffer = self.T_cladding
-
+            self.T_cladding = T_cladding if T_cladding is not None else 30.6
+            self.T_cladding /= scaling
+            self.T_buffer = T_buffer if T_buffer is not None else 30.6
+            self.T_buffer /= scaling
+            self.T_outer = T_outer if T_outer is not None else 30.6
+            self.T_outer /= scaling
             # self.T_soft_polymer = 30 / scaling
             # self.T_hard_polymer = 30 / scaling
 
