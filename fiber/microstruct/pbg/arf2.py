@@ -305,6 +305,8 @@ class ARF2(ModeSolver):
 
             self.T_cladding = T_cladding if T_cladding is not None else 10
             self.T_cladding /= scaling
+            self.T_outer = T_outer if T_outer is not None else 10
+            self.T_outer /= scaling
             self.T_outer = 30 / scaling
             self.T_buffer = T_buffer if T_buffer is not None else 10
             self.T_buffer /= scaling
@@ -336,6 +338,8 @@ class ARF2(ModeSolver):
             self.n_hard_polymer = 1.56
             self.n_buffer = self.n_air
             self.n0 = self.n_air
+            self.buffer_maxh = buffer_maxh if buffer_maxh is not None else .5
+            self.pml_maxh = pml_maxh if pml_maxh is not None else 4
 
             if outer_materials is not None:
                 self.outer_materials = outer_materials
@@ -356,16 +360,23 @@ class ARF2(ModeSolver):
                     {'material': 'buffer',
                      'n': self.n_buffer,
                      'T': self.T_buffer,
-                     'maxh': .5},
+                     'maxh': self.buffer_maxh},
 
                     {'material': 'Outer',
                      'n': self.n0,
                      'T': self.T_outer,
-                     'maxh': 4}
+                     'maxh': self.pml_maxh}
                 ]
 
-            self.inner_air_maxh = .2
-            self.fill_air_maxh = .35
+            if fill_air_maxh is not None:
+                self.fill_air_maxh = fill_air_maxh
+            else:
+                self.fill_air_maxh = .2
+
+            if inner_air_maxh is not None:
+                self.inner_air_maxh = inner_air_maxh
+            else:
+                self.inner_air_maxh = .35
 
             self.inner_tube_edge_maxh = .11
             self.outer_tube_edge_maxh = .11
@@ -373,11 +384,8 @@ class ARF2(ModeSolver):
             self.outer_cladding_edge_maxh = .25
             self.fill_edge_maxh = .11
 
-            self.core_maxh = .25
-            if glass_maxh is not None:
-                self.glass_maxh = glass_maxh
-            else:
-                self.glass_maxh = 0.05
+            self.core_maxh = core_maxh if core_maxh is not None else .25
+            self.glass_maxh = glass_maxh if glass_maxh is not None else .05
 
             self.wavelength = wl
 
