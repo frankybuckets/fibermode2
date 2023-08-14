@@ -168,12 +168,12 @@ class PBG(ModeSolver):
     @N.setter
     def N(self, ref_coeff_info):
         """Set base refractive coefficient function."""
-        if type(ref_coeff_info) == dict:
+        if isinstance(ref_coeff_info, dict):
             mats = self.mesh.GetMaterials()
             self._N = ng.CoefficientFunction(
                 [ref_coeff_info[mat] for mat in mats])
 
-        elif type(ref_coeff_info) == ng.CoefficientFunction:
+        elif type(ref_coeff_info) is ng.CoefficientFunction:
             self._N = ref_coeff_info
 
         else:
