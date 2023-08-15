@@ -24,7 +24,7 @@ class NANF(ModeSolver):
                  capillary_info=[
                      {'N': 6, 'r': 12.48e-6, 't': .42e-6, 'e': 1},
                      {'N': 1, 'r': 6e-6, 't': .42e-6, 'e': 1},
-                     {'N': 1, 'r': 3e-6, 't': .42e-6, 'e': 1},
+                     # {'N': 1, 'r': 3e-6, 't': .42e-6, 'e': 1},
                  ],
                  scale=15e-6,
                  t_cladding=10e-6,
