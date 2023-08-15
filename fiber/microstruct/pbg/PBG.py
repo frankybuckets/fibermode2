@@ -101,7 +101,7 @@ class PBG(ModeSolver):
         self.eps0 = 8.85418782e-12
         self.mu0 = 1.25663706e-6
 
-        self.v0 = 1 / (self.eps0 * self.mu0) ** .5
+        self.v0 = 1 / (self.eps0 * self.mu0)**.5
         self.eta0 = np.sqrt(self.mu0 / self.eps0)
 
         if self.t_outer == 0:  # enforce outer region (for Modesolver)
@@ -112,10 +112,18 @@ class PBG(ModeSolver):
         self.Rout = self.r_out / self.scale  # end of PML and geometry
 
         # Create geometry
-        self.geo = self.geometry(self.Λ, self.r_tube, self.r_fiber,
-                                 self.r_poly, self.r_pml,
-                                 self.r_out, self.scale, self.r_core,
-                                 self.layers, self.skip, self.p, self.pattern,
+        self.geo = self.geometry(self.Λ,
+                                 self.r_tube,
+                                 self.r_fiber,
+                                 self.r_poly,
+                                 self.r_pml,
+                                 self.r_out,
+                                 self.scale,
+                                 self.r_core,
+                                 self.layers,
+                                 self.skip,
+                                 self.p,
+                                 self.pattern,
                                  pml_type=self.pml_type,
                                  square_buffer=self.square_buffer)
 
@@ -124,18 +132,20 @@ class PBG(ModeSolver):
         self.create_mesh(ref=refine, curve=curve)
 
         # Set refractive indices (Need to implement Sellmeier here)
-        self.refractive_index_dict = {'Outer': self.n_outer,
-                                      'clad': self.n_clad,
-                                      'tube': self.n_tube,
-                                      'buffer': self.n_buffer,
-                                      'core': self.n_core,
-                                      'poly': self.n_poly,
-                                      'NS_pml': self.n_outer,
-                                      'EW_pml': self.n_outer
-                                      }
-        self.index = ng.CoefficientFunction(
-            [self.refractive_index_dict[mat]
-             for mat in self.mesh.GetMaterials()])
+        self.refractive_index_dict = {
+            'Outer': self.n_outer,
+            'clad': self.n_clad,
+            'tube': self.n_tube,
+            'buffer': self.n_buffer,
+            'core': self.n_core,
+            'poly': self.n_poly,
+            'NS_pml': self.n_outer,
+            'EW_pml': self.n_outer
+        }
+        self.index = ng.CoefficientFunction([
+            self.refractive_index_dict[mat]
+            for mat in self.mesh.GetMaterials()
+        ])
 
         # Set wavelength and base coefficent function (these then set k and V)
         self.wavelength = fiber_param_dict['wavelength']
@@ -173,7 +183,7 @@ class PBG(ModeSolver):
             self._N = ng.CoefficientFunction(
                 [ref_coeff_info[mat] for mat in mats])
 
-        elif type(ref_coeff_info) is ng.CoefficientFunction:
+        elif isinstance(ref_coeff_info, ng.CoefficientFunction):
             self._N = ref_coeff_info
 
         else:
@@ -184,7 +194,7 @@ class PBG(ModeSolver):
 
     def set_V(self, N, k):
         """Set coefficient function (V) for mesh."""
-        V = (self.scale * k) ** 2 * (self.n0 ** 2 - N ** 2)
+        V = (self.scale * k)**2 * (self.n0**2 - N**2)
         return V
 
     def reset_N(self):
@@ -193,19 +203,33 @@ class PBG(ModeSolver):
 
     def rotate(self, angle):
         """Rotate fiber by 'angle' (radians)."""
-        self.geo = self.geometry(self.Λ, self.r_tube, self.r_fiber,
-                                 self.r_poly, self.r_pml,
-                                 self.r_out, self.scale, self.r_core,
-                                 self.layers, self.skip, self.p,
-                                 self.pattern, rot=angle)
+        self.geo = self.geometry(self.Λ,
+                                 self.r_tube,
+                                 self.r_fiber,
+                                 self.r_poly,
+                                 self.r_pml,
+                                 self.r_out,
+                                 self.scale,
+                                 self.r_core,
+                                 self.layers,
+                                 self.skip,
+                                 self.p,
+                                 self.pattern,
+                                 rot=angle)
         self.mesh = self.create_mesh()
 
     def create_mesh(self, ref=0, curve=3):
         """Set materials, max diameters and create mesh."""
         # Set the materials for the domain.
         if self.pml_type == 'radial':
-            mat = {6: 'poly', 5: 'Outer', 4: 'buffer',
-                   3: 'tube', 2: 'clad', 1: 'core'}
+            mat = {
+                6: 'poly',
+                5: 'Outer',
+                4: 'buffer',
+                3: 'tube',
+                2: 'clad',
+                1: 'core'
+            }
 
             for domain, material in mat.items():
                 self.geo.SetMaterial(domain, material)
@@ -213,9 +237,16 @@ class PBG(ModeSolver):
             self.geo.SetDomainMaxH(5, self.pml_maxh)
 
         elif self.pml_type == 'square':
-            mat = {8: 'NS_pml', 7: 'EW_pml',
-                   6: 'poly', 5: 'Outer', 4: 'buffer',
-                   3: 'tube', 2: 'clad', 1: 'core'}
+            mat = {
+                8: 'NS_pml',
+                7: 'EW_pml',
+                6: 'poly',
+                5: 'Outer',
+                4: 'buffer',
+                3: 'tube',
+                2: 'clad',
+                1: 'core'
+            }
 
             for domain, material in mat.items():
                 self.geo.SetMaterial(domain, material)
@@ -239,11 +270,19 @@ class PBG(ModeSolver):
 
     def reset_mesh(self):
         """Reset to original mesh."""
-        self.geo = self.geometry(self.Λ, self.r_tube, self.r_fiber,
-                                 self.r_poly, self.r_pml,
-                                 self.r_out, self.scale, self.r_core,
-                                 self.layers, self.skip, self.p,
-                                 self.pattern, pml_type=self.pml_type,
+        self.geo = self.geometry(self.Λ,
+                                 self.r_tube,
+                                 self.r_fiber,
+                                 self.r_poly,
+                                 self.r_pml,
+                                 self.r_out,
+                                 self.scale,
+                                 self.r_core,
+                                 self.layers,
+                                 self.skip,
+                                 self.p,
+                                 self.pattern,
+                                 pml_type=self.pml_type,
                                  square_buffer=self.square_buffer)
 
         self.create_mesh(ref=0, curve=3)
@@ -260,9 +299,23 @@ class PBG(ModeSolver):
     def curve(self, curve=3):
         self.mesh.Curve(curve)
 
-    def geometry(self, Λ, r_tube, r_fiber, r_poly, r_pml, r_out, scale, r_core,
-                 layers=6, skip=1, p=6, pattern=[], rot=0, hexcore=True,
-                 pml_type='radial', square_buffer=.5):
+    def geometry(self,
+                 Λ,
+                 r_tube,
+                 r_fiber,
+                 r_poly,
+                 r_pml,
+                 r_out,
+                 scale,
+                 r_core,
+                 layers=6,
+                 skip=1,
+                 p=6,
+                 pattern=[],
+                 rot=0,
+                 hexcore=True,
+                 pml_type='radial',
+                 square_buffer=.5):
         """
         Construct and return Non-Dimensionalized geometry.
 
@@ -335,20 +388,22 @@ class PBG(ModeSolver):
         elif hexcore:
             R_core = r_core / scale
             coords = [(R_core * np.cos(i * 2 * np.pi / p),
-                       R_core * np.sin(i * 2 * np.pi / p))
-                      for i in range(p)]
+                       R_core * np.sin(i * 2 * np.pi / p)) for i in range(p)]
             pts = [geo.AppendPoint(x, y) for x, y in coords]
 
             for i in range(p - 1):
-                geo.Append(["line", pts[i], pts[i+1]], leftdomain=1,
+                geo.Append(["line", pts[i], pts[i + 1]],
+                           leftdomain=1,
                            rightdomain=2)
 
-            geo.Append(["line", pts[-1], pts[0]], leftdomain=1,
-                       rightdomain=2)
+            geo.Append(["line", pts[-1], pts[0]], leftdomain=1, rightdomain=2)
 
         else:
             R_core = r_core / scale
-            geo.AddCircle(c=(0, 0), r=R_core, leftdomain=1, rightdomain=2,
+            geo.AddCircle(c=(0, 0),
+                          r=R_core,
+                          leftdomain=1,
+                          rightdomain=2,
                           bc='computational_core_cladding_interface')
 
         # Add the layers of tubes
@@ -358,10 +413,19 @@ class PBG(ModeSolver):
             Ri = index_layer * Λ
 
             if len(pattern) > 0:
-                self.add_layer(geo, R_tube, Ri, p=p, innerpoints=index_layer-1,
-                               mask=pattern[i], rot=rot)
+                self.add_layer(geo,
+                               R_tube,
+                               Ri,
+                               p=p,
+                               innerpoints=index_layer - 1,
+                               mask=pattern[i],
+                               rot=rot)
             else:
-                self.add_layer(geo, R_tube, Ri, p=p, innerpoints=index_layer-1,
+                self.add_layer(geo,
+                               R_tube,
+                               Ri,
+                               p=p,
+                               innerpoints=index_layer - 1,
                                rot=rot)
 
         # Create boundary of fiber, polymer and PML region
@@ -370,39 +434,71 @@ class PBG(ModeSolver):
 
             if R_fiber == R_pml:  # No buffer layer or polymer layer
                 print('no buffer no polymer')
-                geo.AddCircle(c=(0, 0), r=R_pml, leftdomain=2, rightdomain=5,
+                geo.AddCircle(c=(0, 0),
+                              r=R_pml,
+                              leftdomain=2,
+                              rightdomain=5,
                               bc='fiber_pml_interface')
-                geo.AddCircle(c=(0, 0), r=R_out,
-                              leftdomain=5, bc="OuterCircle")
+                geo.AddCircle(c=(0, 0),
+                              r=R_out,
+                              leftdomain=5,
+                              bc="OuterCircle")
 
             else:  # one or both exist
                 if R_fiber == R_poly:  # No polymer layer, but yes buffer
 
-                    geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2,
-                                  rightdomain=4, bc='fiber_buffer_interface')
-                    geo.AddCircle(c=(0, 0), r=R_pml, leftdomain=4,
-                                  rightdomain=5, bc='buffer_pml_interface')
-                    geo.AddCircle(c=(0, 0), r=R_out,
-                                  leftdomain=5, bc="OuterCircle")
+                    geo.AddCircle(c=(0, 0),
+                                  r=R_fiber,
+                                  leftdomain=2,
+                                  rightdomain=4,
+                                  bc='fiber_buffer_interface')
+                    geo.AddCircle(c=(0, 0),
+                                  r=R_pml,
+                                  leftdomain=4,
+                                  rightdomain=5,
+                                  bc='buffer_pml_interface')
+                    geo.AddCircle(c=(0, 0),
+                                  r=R_out,
+                                  leftdomain=5,
+                                  bc="OuterCircle")
 
                 elif R_poly == R_pml:  # No buffer layer, but yes polymer
 
-                    geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2,
-                                  rightdomain=6, bc='fiber_polymer_interface')
-                    geo.AddCircle(c=(0, 0), r=R_poly, leftdomain=6,
-                                  rightdomain=5, bc='polymer_pml_interface')
-                    geo.AddCircle(c=(0, 0), r=R_out,
-                                  leftdomain=5, bc="OuterCircle")
+                    geo.AddCircle(c=(0, 0),
+                                  r=R_fiber,
+                                  leftdomain=2,
+                                  rightdomain=6,
+                                  bc='fiber_polymer_interface')
+                    geo.AddCircle(c=(0, 0),
+                                  r=R_poly,
+                                  leftdomain=6,
+                                  rightdomain=5,
+                                  bc='polymer_pml_interface')
+                    geo.AddCircle(c=(0, 0),
+                                  r=R_out,
+                                  leftdomain=5,
+                                  bc="OuterCircle")
 
                 else:  # Both polymer and buffer
-                    geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2,
-                                  rightdomain=6, bc='fiber_polymer_interface')
-                    geo.AddCircle(c=(0, 0), r=R_poly, leftdomain=6,
-                                  rightdomain=4, bc='polymer_buffer_interface')
-                    geo.AddCircle(c=(0, 0), r=R_pml, leftdomain=4,
-                                  rightdomain=5, bc='buffer_pml_interface')
-                    geo.AddCircle(c=(0, 0), r=R_out,
-                                  leftdomain=5, bc="OuterCircle")
+                    geo.AddCircle(c=(0, 0),
+                                  r=R_fiber,
+                                  leftdomain=2,
+                                  rightdomain=6,
+                                  bc='fiber_polymer_interface')
+                    geo.AddCircle(c=(0, 0),
+                                  r=R_poly,
+                                  leftdomain=6,
+                                  rightdomain=4,
+                                  bc='polymer_buffer_interface')
+                    geo.AddCircle(c=(0, 0),
+                                  r=R_pml,
+                                  leftdomain=4,
+                                  rightdomain=5,
+                                  bc='buffer_pml_interface')
+                    geo.AddCircle(c=(0, 0),
+                                  r=R_out,
+                                  leftdomain=5,
+                                  bc="OuterCircle")
 
         elif pml_type == 'square':
 
@@ -415,43 +511,55 @@ class PBG(ModeSolver):
 
             self.R = R_pml  # reset non-dimensional pml starting radius
 
-            pnts = [(-R_pml, -R_pml), (R_pml, -R_pml),
-                    (R_pml, R_pml), (-R_pml, R_pml),
-                    (-R_out, -R_out), (-R_pml, -R_out),
-                    (R_pml, -R_out), (R_out, -R_out),
-                    (R_out, -R_pml), (R_out, R_pml),
-                    (R_out, R_out), (R_pml, R_out),
-                    (-R_pml, R_out), (-R_out, R_out),
-                    (-R_out, R_pml), (-R_out, -R_pml)]
+            pnts = [(-R_pml, -R_pml), (R_pml, -R_pml), (R_pml, R_pml),
+                    (-R_pml, R_pml), (-R_out, -R_out), (-R_pml, -R_out),
+                    (R_pml, -R_out), (R_out, -R_out), (R_out, -R_pml),
+                    (R_out, R_pml), (R_out, R_out), (R_pml, R_out),
+                    (-R_pml, R_out), (-R_out, R_out), (-R_out, R_pml),
+                    (-R_out, -R_pml)]
 
             pml_pnts = [geo.AppendPoint(*pnt) for pnt in pnts]
-            inner_curves = [["line", pml_pnts[i], pml_pnts[i+1]]
+            inner_curves = [["line", pml_pnts[i], pml_pnts[i + 1]]
                             for i in range(3)]
             inner_curves.append(["line", pml_pnts[3], pml_pnts[0]])
 
-            outer_curves = [["line", pml_pnts[i], pml_pnts[i+1]]
-                            for i in range(4, len(pnts)-1)]
-            outer_curves.append(["line", pml_pnts[len(pnts)-1], pml_pnts[4]])
+            outer_curves = [["line", pml_pnts[i], pml_pnts[i + 1]]
+                            for i in range(4,
+                                           len(pnts) - 1)]
+            outer_curves.append(["line", pml_pnts[len(pnts) - 1], pml_pnts[4]])
 
             if R_fiber == R_poly:  # no polymer layer, just buffer
 
-                geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2, rightdomain=4,
+                geo.AddCircle(c=(0, 0),
+                              r=R_fiber,
+                              leftdomain=2,
+                              rightdomain=4,
                               bc='fiber_buffer_interface')
 
             else:  # must be buffer layer, so we have polymer and buffer
 
-                geo.AddCircle(c=(0, 0), r=R_fiber, leftdomain=2, rightdomain=6,
+                geo.AddCircle(c=(0, 0),
+                              r=R_fiber,
+                              leftdomain=2,
+                              rightdomain=6,
                               bc='fiber_polymer_interface')
-                geo.AddCircle(c=(0, 0), r=R_poly, leftdomain=6, rightdomain=4,
+                geo.AddCircle(c=(0, 0),
+                              r=R_poly,
+                              leftdomain=6,
+                              rightdomain=4,
                               bc='polymer_buffer_interface')
 
             for i, c in enumerate(inner_curves):
                 if i % 2 == 0:
-                    geo.Append(c, bc='buffer_pml_interface',
-                               leftdomain=4, rightdomain=5)
+                    geo.Append(c,
+                               bc='buffer_pml_interface',
+                               leftdomain=4,
+                               rightdomain=5)
                 else:
-                    geo.Append(c, bc='buffer_pml_interface',
-                               leftdomain=4, rightdomain=5)
+                    geo.Append(c,
+                               bc='buffer_pml_interface',
+                               leftdomain=4,
+                               rightdomain=5)
 
             for i, c in enumerate(outer_curves):
                 if i in [1, 7]:
@@ -461,22 +569,38 @@ class PBG(ModeSolver):
                 else:
                     geo.Append(c, bc='OuterCircle', leftdomain=5)
 
-            geo.Append(["line", pml_pnts[5], pml_pnts[0]], bc='int_pml_edge',
-                       leftdomain=5, rightdomain=5)
-            geo.Append(["line", pml_pnts[6], pml_pnts[1]], bc='int_pml_edge',
-                       leftdomain=5, rightdomain=5)
-            geo.Append(["line", pml_pnts[8], pml_pnts[1]], bc='int_pml_edge',
-                       leftdomain=5, rightdomain=5)
-            geo.Append(["line", pml_pnts[9], pml_pnts[2]], bc='int_pml_edge',
-                       leftdomain=5, rightdomain=5)
-            geo.Append(["line", pml_pnts[11], pml_pnts[2]], bc='int_pml_edge',
-                       leftdomain=5, rightdomain=5)
-            geo.Append(["line", pml_pnts[12], pml_pnts[3]], bc='int_pml_edge',
-                       leftdomain=5, rightdomain=5)
-            geo.Append(["line", pml_pnts[14], pml_pnts[3]], bc='int_pml_edge',
-                       leftdomain=5, rightdomain=5)
-            geo.Append(["line", pml_pnts[15], pml_pnts[0]], bc='int_pml_edge',
-                       leftdomain=5, rightdomain=5)
+            geo.Append(["line", pml_pnts[5], pml_pnts[0]],
+                       bc='int_pml_edge',
+                       leftdomain=5,
+                       rightdomain=5)
+            geo.Append(["line", pml_pnts[6], pml_pnts[1]],
+                       bc='int_pml_edge',
+                       leftdomain=5,
+                       rightdomain=5)
+            geo.Append(["line", pml_pnts[8], pml_pnts[1]],
+                       bc='int_pml_edge',
+                       leftdomain=5,
+                       rightdomain=5)
+            geo.Append(["line", pml_pnts[9], pml_pnts[2]],
+                       bc='int_pml_edge',
+                       leftdomain=5,
+                       rightdomain=5)
+            geo.Append(["line", pml_pnts[11], pml_pnts[2]],
+                       bc='int_pml_edge',
+                       leftdomain=5,
+                       rightdomain=5)
+            geo.Append(["line", pml_pnts[12], pml_pnts[3]],
+                       bc='int_pml_edge',
+                       leftdomain=5,
+                       rightdomain=5)
+            geo.Append(["line", pml_pnts[14], pml_pnts[3]],
+                       bc='int_pml_edge',
+                       leftdomain=5,
+                       rightdomain=5)
+            geo.Append(["line", pml_pnts[15], pml_pnts[0]],
+                       bc='int_pml_edge',
+                       leftdomain=5,
+                       rightdomain=5)
         else:
             raise NotImplementedError('PML type must be square or radial')
 
@@ -517,8 +641,11 @@ class PBG(ModeSolver):
         if p == 0 or p == 1:
             raise ValueError("Please specify a p of 2 or greater.")
 
-        if R == 0:         # zero big radius draws circle at origin
-            geo.AddCircle(c=(0, 0), r=r, leftdomain=3, rightdomain=2,
+        if R == 0:  # zero big radius draws circle at origin
+            geo.AddCircle(c=(0, 0),
+                          r=r,
+                          leftdomain=3,
+                          rightdomain=2,
                           bc='core_cladding_interface')
 
         else:
@@ -553,8 +680,11 @@ class PBG(ModeSolver):
             for x, y in zip(xs, ys):
 
                 # Add the circles
-                geo.AddCircle(c=(x, y), r=r, leftdomain=3,
-                              rightdomain=2, bc='microtube_cladding_interface')
+                geo.AddCircle(c=(x, y),
+                              r=r,
+                              leftdomain=3,
+                              rightdomain=2,
+                              bc='microtube_cladding_interface')
 
     def E_modes_from_array(self, array, p=1, mesh=None):
         """Create NGvec object containing modes and set data given by array."""
@@ -624,6 +754,79 @@ ing to array has been passed as keyword p.")
         array = np.load(mode_name+'.npy')
         return self.phi_modes_from_array(array, mesh=mesh, p=p)
 
+    def savemodes(self,
+                  name,
+                  folder,
+                  Y,
+                  p,
+                  betas,
+                  Zs,
+                  solverparams=None,
+                  longY=None,
+                  longYl=None,
+                  pbgpickle=False):
+        """
+        Save an NGVecs span object Y containing modes of FE degree p.
+
+        Include any solver parameters to be saved together with the
+        modes in the input dictionary "solverparams". If "pbgpickle"
+        is True, then the pbg object is also saved under the same "name".
+
+
+        Parameters
+        ----------
+        name : str
+            Desired file name.  The suffix '_mode.npz' will be attached.
+        folder : str
+            Path to destination folder.  May be absolute or relative to current
+            directory.  Exception is raised if folder does not exist.
+        Y : NGvecs object
+            Object containing modes to be saved.
+        p : int
+            Finite element degree of associated modes.
+        betas : str
+            Propagation constants of associated modes.
+        Zs : ndarray
+            Eigenvalues of associated modes.
+        solverparams : dict
+            Extra solver parameters to save. The default is None.
+        longY : ndarray, optional
+            Long eigenvectors from linearized problem. The default is None.
+        longYl : ndarray, optional
+            Long left eigenvectors from linearized problem. The default is
+            None.
+        pbgpickle : boolean, optional
+            If set to True, this function will also save the associated PBG
+            object under the same name (with suffix '_npg.pkl' attached).
+            The default is False.
+
+        Returns
+        -------
+        None.
+
+        """
+        if pbgpickle:
+            self.save(name, folder)
+        y = Y.tonumpy()
+        if longY is not None:
+            longY = longY.tonumpy()
+        if longYl is not None:
+            longYl = longYl.tonumpy()
+        d = {
+            'y': y,
+            'p': p,
+            'betas': betas,
+            'Zs': Zs,
+            'longy': longY,
+            'longyl': longYl
+        }
+        if solverparams is not None:
+            d.update(**solverparams)
+
+        f = os.path.relpath(folder + '/' + name + '_mode.npz')
+        print('Writing mode file ', f)
+        np.savez(f, **d)
+
 # End of class PBG ###################################
 
 
@@ -672,7 +875,7 @@ def load_pbg_mode(mode_prefix, pbg_prefix, mode_folder='', pbg_folder=''):
         Long left eigenvectors from linearized problem..
 
     """
-    a = load_pbg(pbg_prefix, pbg_folder)   # load PBG object
+    a = load_pbg(pbg_prefix, pbg_folder)  # load PBG object
 
     mode_path = os.path.relpath(mode_folder + '/' + mode_prefix + '_mode.npz')
     d = dict(np.load(mode_path, allow_pickle=True))  # load saved dictionary

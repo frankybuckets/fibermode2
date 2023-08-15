@@ -3,7 +3,7 @@ from ngsolve import curl, grad, dx, Conj, Integrate, InnerProduct
 import numpy as np
 from numpy import conj
 import sympy as sm
-from pyeigfeast import NGvecs, SpectralProjNGGeneral, SpectralProjNG
+from pyeigfeast import NGvecs, SpectralProjNG
 from pyeigfeast import SpectralProjNGR, SpectralProjNGPoly
 
 
@@ -481,8 +481,6 @@ class ModeSolver:
             A.Assemble()
             B.Assemble()
 
-        # Since B is selfadjoint, we do not use SpectralProjNGGeneral here:
-
         P = SpectralProjNG(X3,
                            A.mat,
                            B.mat,
@@ -555,6 +553,7 @@ class ModeSolver:
                        seed=1,
                        within=None,
                        rhoinv=0.0,
+                       verbose=True,
                        quadrule='circ_trapez_shift',
                        inverse='umfpack',
                        **feastkwargs):
@@ -576,7 +575,7 @@ class ModeSolver:
 
         * zsqr: computed resonance values Z²
         * Yl, Yr: left and right eigenspans
-        * P: SpectralProjNGGeneral object that computed Y, Yl
+        * P: spectral projector object that computed Y, Yl
         """
 
         print('ModeSolver.leakymode called on object with these settings:\n',
@@ -584,16 +583,19 @@ class ModeSolver:
 
         a, b, X = self.autopmlsystem(p, alpha=alpha)
 
-        P = SpectralProjNGGeneral(X,
-                                  a.mat,
-                                  b.mat,
-                                  radius=radiusZ2,
-                                  center=centerZ2,
-                                  npts=npts,
-                                  within=within,
-                                  rhoinv=rhoinv,
-                                  quadrule=quadrule,
-                                  inverse=inverse)
+        P = SpectralProjNG(X,
+                           a.mat,
+                           b.mat,
+                           radius=radiusZ2,
+                           center=centerZ2,
+                           checks=False,
+                           npts=npts,
+                           within=within,
+                           rhoinv=rhoinv,
+                           verbose=verbose,
+                           quadrule=quadrule,
+                           inverse=inverse)
+
         Y = NGvecs(X, nspan)
         Yl = Y.create()
         Y.setrandom(seed=seed)
@@ -693,14 +695,11 @@ class ModeSolver:
         a += (self.pml_A * grad(u) * grad(v) +
               self.V * self.pml_B * u * v) * dx
         b += self.pml_B * u * v * dx
-        m = ng.BilinearForm(X)
-        m += u * v * dx
         with ng.TaskManager():
             a.Assemble()
             b.Assemble()
-            m.Assemble()
 
-        return a, b, m, X
+        return a, b, X
 
     def leakymode_smooth(self,
                          p,
@@ -731,22 +730,25 @@ class ModeSolver:
         ending radius of PML by providing pmlbegin, pmlend.
         """
 
-        a, b, m, X = self.smoothpmlsystem(p,
-                                          alpha=alpha,
-                                          pmlbegin=pmlbegin,
-                                          pmlend=pmlend)
-        P = SpectralProjNGGeneral(X,
-                                  a.mat,
-                                  b.mat,
-                                  M=m.mat,
-                                  radius=radiusZ2,
-                                  center=centerZ2,
-                                  npts=npts,
-                                  within=within,
-                                  rhoinv=rhoinv,
-                                  quadrule=quadrule,
-                                  verbose=verbose,
-                                  inverse=inverse)
+        a, b, X = self.smoothpmlsystem(p,
+                                       alpha=alpha,
+                                       pmlbegin=pmlbegin,
+                                       pmlend=pmlend)
+        # OMIT m computation
+
+        P = SpectralProjNG(X,
+                           a.mat,
+                           b.mat,
+                           radius=radiusZ2,
+                           center=centerZ2,
+                           npts=npts,
+                           checks=False,
+                           within=within,
+                           rhoinv=rhoinv,
+                           quadrule=quadrule,
+                           verbose=verbose,
+                           inverse=inverse)
+
         Y = NGvecs(X, nspan)
         Yl = NGvecs(X, nspan)
         Y.setrandom(seed=seed)
@@ -820,12 +822,20 @@ class ModeSolver:
         def hess(gf):
             return gf.Operator("hesse")
 
-        omegaR = Integrate(h * h * InnerProduct(hess(R), hess(R)),
+        # omegaR = Integrate(h * h * InnerProduct(hess(R), hess(R)),
+        #                    self.mesh,
+        #                    element_wise=True)
+        # omegaL = Integrate(h * h * InnerProduct(hess(L), hess(L)),
+        #                    self.mesh,
+        #                    element_wise=True)
+
+        omegaR = Integrate(h * InnerProduct(grad(R), grad(R)),
                            self.mesh,
                            element_wise=True)
-        omegaL = Integrate(h * h * InnerProduct(hess(L), hess(L)),
+        omegaL = Integrate(h * InnerProduct(grad(L), grad(L)),
                            self.mesh,
                            element_wise=True)
+
         ee = np.sqrt(omegaR.real.NumPy() * rhoR.real.NumPy())
         ee += np.sqrt(omegaL.real.NumPy() * rhoL.real.NumPy())
 
@@ -863,7 +873,7 @@ class ModeSolver:
             is such that Z*Z is contained within the circular contour
             centered at "centerZ2" of radius "radiusZ2" in the complex
             plane.
-        * maxndofs: Stop adaptive loop is number of dofs exceed this.
+        * maxndofs: Stop adaptive loop if number of dofs exceed this.
         * visualize: If true, then pause adaptivity loop to see each iterate.
         * Remaining inputs are as documented in leakymode(..).
 
@@ -871,22 +881,26 @@ class ModeSolver:
 
         * zsqr: Computed Z² at the finest mesh found by adaptivity.
         * Yl, Y: Corresponding left and right eigenspans.
-        * P: SpectralProjNGGeneral object that conducted FEAST.
+        * P: spectral projector object that conducted FEAST.
         """
 
-        a, b, m, X = self.smoothpmlsystem(p,
-                                          alpha=alpha,
-                                          autoupdate=True,
-                                          pmlbegin=pmlbegin,
-                                          pmlend=pmlend)
+        a, b, X = self.smoothpmlsystem(p,
+                                       alpha=alpha,
+                                       autoupdate=True,
+                                       pmlbegin=pmlbegin,
+                                       pmlend=pmlend)
         ndofs = [0]
         Zsqrs = []
-        checks = True
         if visualize:
             eevis = ng.GridFunction(ng.L2(self.mesh, order=0, autoupdate=True),
                                     name='estimator',
                                     autoupdate=True)
             ng.Draw(eevis)
+
+        Yr = NGvecs(X, nspan)
+        Yl = NGvecs(X, nspan)
+        Yr.setrandom(seed=seed)
+        Yl.setrandom(seed=seed)
 
         while ndofs[-1] < maxndofs:  # ADAPTIVITY LOOP ------------------
 
@@ -895,25 +909,20 @@ class ModeSolver:
             with ng.TaskManager():
                 a.Assemble()
                 b.Assemble()
-                m.Assemble()
 
-            P = SpectralProjNGGeneral(X,
-                                      a.mat,
-                                      b.mat,
-                                      M=m.mat,
-                                      radius=radiusZ2,
-                                      center=centerZ2,
-                                      npts=npts,
-                                      within=within,
-                                      rhoinv=rhoinv,
-                                      checks=checks,
-                                      quadrule=quadrule,
-                                      verbose=verbose,
-                                      inverse=inverse)
-            Yr = NGvecs(X, nspan)
-            Yl = NGvecs(X, nspan)
-            Yr.setrandom(seed=seed)
-            Yl.setrandom(seed=seed)
+            P = SpectralProjNG(X,
+                               a.mat,
+                               b.mat,
+                               radius=radiusZ2,
+                               center=centerZ2,
+                               npts=npts,
+                               within=within,
+                               rhoinv=rhoinv,
+                               checks=False,
+                               quadrule=quadrule,
+                               verbose=verbose,
+                               inverse=inverse)
+
             zsqr, Yr, history, Yl = P.feast(Yr,
                                             Yl=Yl,
                                             hermitian=False,
@@ -926,7 +935,8 @@ class ModeSolver:
 
             ndofs.append(Yr.fes.ndof)
             Zsqrs.append(zsqr)
-            print('ADAPTIVITY at ndofs=', ndofs[-1], ' Zsqr=', Zsqrs[-1])
+            print('ADAPTIVITY at {:7d} ndofs:  Zsqr = {:+10.8f}'.format(
+                ndofs[-1], Zsqrs[-1][0]))
 
             # 2. ESTIMATE
 
@@ -945,14 +955,13 @@ class ModeSolver:
 
             avr = sum(ee) / self.mesh.ne
             for elem in self.mesh.Elements():
-                self.mesh.SetRefinementFlag(elem, ee[elem.nr] > avr)
+                self.mesh.SetRefinementFlag(elem, ee[elem.nr] > 0.75 * avr)
 
             # 4. REFINE
 
             self.mesh.Refine()
             npts = 1
             nspan = 1
-            checks = False
             centerZ2 = zsqr
 
         # Adaptivity loop done ------------------------------------------
@@ -965,7 +974,7 @@ class ModeSolver:
         if maxbdrnrm > 1e-6:
             print('*** Mode boundary L2 norm > 1e-6!')
 
-        return zsqr, Yr, Yl, beta, P
+        return Zsqrs, ndofs, Yr, Yl, beta, P
 
     # ###################################################################
     # GUIDED LP MODES FROM SELFADJOINT EIGENPROBLEM #####################
@@ -1437,14 +1446,14 @@ class ModeSolver:
                     ng.SetHeapSize(int(1e9))
                     AA[i].Assemble()
 
-        P = SpectralProjNGGeneral(X,
-                                  A0.mat,
-                                  A1.mat,
-                                  radius=rad,
-                                  center=ctr,
-                                  npts=npts,
-                                  rhoinv=rhoinv,
-                                  quadrule=quadrule)
+        P = SpectralProjNG(X,
+                           A0.mat,
+                           A1.mat,
+                           radius=rad,
+                           center=ctr,
+                           npts=npts,
+                           rhoinv=rhoinv,
+                           quadrule=quadrule)
 
         Y = NGvecs(X, nspan)
         Yl = Y.create()
