@@ -233,11 +233,16 @@ class ModeSolver:
 
         J_Etv = ng.CF((Etv[1], -Etv[0]))
 
-        Stv = J_Etv * Conj(curl(Etv)) + phi / (k_s * beta_s * conj(beta_s)) * \
-            (Conj(grad(phi)) + conj(beta_s)**2 * Conj(Etv))
+        # Stv = J_Etv * Conj(curl(Etv)) + phi / (k_s *
+        # beta_s * conj(beta_s)) * \
+        #     (Conj(grad(phi)) + conj(beta_s)**2 * Conj(Etv))
 
-        Sz = 1 / (k_s * 1j * conj(beta_s)) * \
-            (Etv * grad(phi) + conj(beta_s)**2 * Etv.Norm()**2)
+        Stv = -1j * (J_Etv * Conj(curl(Etv)) +
+                     np.abs(beta_s)**-2 * phi * Conj(grad(phi)) +
+                     conj(beta_s) / beta_s * phi * Conj(Etv))
+
+        Sz = 1 / (k_s * conj(beta_s)) * \
+            (Etv * Conj(grad(phi)) + conj(beta_s)**2 * Etv.Norm()**2)
 
         return 1 / 2 * Stv, 1 / 2 * Sz
 

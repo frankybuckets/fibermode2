@@ -20,16 +20,41 @@ class ARF2(ModeSolver):
     Create ARF fiber using spline geometry (again), which handles fill better.
     """
 
-    def __init__(self, name=None, refine=0, curve=3, e=None,
-                 poly_core=False, shift_capillaries=False,
-                 outer_materials=None, fill=None, T_cladding=10,
-                 T_buffer=10, glass_maxh=None, wl=1.8e-6):
+    def __init__(self, name=None,
+                 refine=0,
+                 curve=3,
+                 e=None,
+                 poly_core=False,
+                 shift_capillaries=False,
+                 outer_materials=None,
+                 fill=None,
+                 T_cladding=None,
+                 T_buffer=None,
+                 T_outer=None,
+                 glass_maxh=None,
+                 inner_air_maxh=None,
+                 fill_air_maxh=None,
+                 core_maxh=None,
+                 buffer_maxh=None,
+                 pml_maxh=None,
+                 wl=1.8e-6):
 
         # Set and check the fiber parameters.
-        self.set_parameters(name=name, shift_capillaries=shift_capillaries,
-                            e=e, outer_materials=outer_materials,
-                            T_cladding=T_cladding, glass_maxh=glass_maxh,
-                            T_buffer=T_buffer, wl=wl)
+        self.set_parameters(name=name,
+                            shift_capillaries=shift_capillaries,
+                            e=e,
+                            outer_materials=outer_materials,
+                            T_cladding=T_cladding,
+                            glass_maxh=glass_maxh,
+                            inner_air_maxh=inner_air_maxh,
+                            fill_air_maxh=fill_air_maxh,
+                            core_maxh=core_maxh,
+                            buffer_maxh=buffer_maxh,
+                            pml_maxh=pml_maxh,
+                            T_buffer=T_buffer,
+                            T_outer=T_outer,
+                            wl=wl)
+
         self.check_parameters()
 
         if self.name == 'original':  # Override for original fiber
@@ -44,9 +69,20 @@ class ARF2(ModeSolver):
 
         super().__init__(self.mesh, self.scale, self.n0)
 
-    def set_parameters(self, name=None, e=None, shift_capillaries=False,
-                       outer_materials=None, T_cladding=10, glass_maxh=None,
-                       T_buffer=10, wl=1.8e-6):
+    def set_parameters(self, name=None,
+                       e=None,
+                       shift_capillaries=False,
+                       outer_materials=None,
+                       T_cladding=10,
+                       T_outer=None,
+                       glass_maxh=None,
+                       inner_air_maxh=None,
+                       fill_air_maxh=None,
+                       core_maxh=None,
+                       buffer_maxh=None,
+                       pml_maxh=None,
+                       T_buffer=10,
+                       wl=1.8e-6):
         """
         Set fiber parameters.
         """
@@ -67,9 +103,11 @@ class ARF2(ModeSolver):
             self.R_tube = 12.48 / scaling
             self.T_tube = .42 / scaling
 
-            self.T_cladding = T_cladding / scaling
+            self.T_cladding = T_cladding if T_cladding is not None else 10
+            self.T_cladding /= scaling
             self.T_outer = 30 / scaling
-            self.T_buffer = T_buffer / scaling
+            self.T_buffer = T_buffer if T_buffer is not None else 10
+            self.T_buffer /= scaling
 
             # self.T_soft_polymer = 30 / scaling
             # self.T_hard_polymer = 30 / scaling
@@ -104,8 +142,6 @@ class ARF2(ModeSolver):
 
             self.inner_air_maxh = .2
             self.fill_air_maxh = .35
-            self.tube_maxh = .11
-            self.cladding_maxh = .25
 
             self.inner_tube_edge_maxh = .11
             self.outer_tube_edge_maxh = .11
@@ -161,10 +197,12 @@ class ARF2(ModeSolver):
             self.R_tube = 25.5 / scaling
             self.T_tube = 6 / scaling
 
-            self.T_cladding = 1.2 * 25.5 / scaling
-            self.T_outer = self.T_cladding
-            self.T_buffer = self.T_cladding
-
+            self.T_cladding = T_cladding if T_cladding is not None else 30.6
+            self.T_cladding /= scaling
+            self.T_buffer = T_buffer if T_buffer is not None else 30.6
+            self.T_buffer /= scaling
+            self.T_outer = T_outer if T_outer is not None else 30.6
+            self.T_outer /= scaling
             # self.T_soft_polymer = 30 / scaling
             # self.T_hard_polymer = 30 / scaling
 
@@ -188,6 +226,7 @@ class ARF2(ModeSolver):
 
             self.wavelength = wl
             self.n_glass = sellmeier.index(wl, material='FusedSilica')
+            # self.n_glass = 1.4388164768221814
             self.n_air = 1.00027717
 
             # self.n_soft_polymer = 1.44
@@ -196,19 +235,31 @@ class ARF2(ModeSolver):
             self.n_buffer = self.n_air
             self.n0 = self.n_air
 
-            self.inner_air_maxh = .15
-            self.fill_air_maxh = .25
-            self.tube_maxh = .11
-            self.cladding_maxh = .25
-
             self.inner_tube_edge_maxh = .11
             self.outer_tube_edge_maxh = .11
             self.inner_cladding_edge_maxh = .25
             self.outer_cladding_edge_maxh = .25
             self.fill_edge_maxh = .11
 
-            self.core_maxh = .2
-            self.glass_maxh = 0.03
+            if glass_maxh is not None:
+                self.glass_maxh = glass_maxh
+            else:
+                self.glass_maxh = 0.03
+
+            if inner_air_maxh is not None:
+                self.inner_air_maxh = inner_air_maxh
+            else:
+                self.inner_air_maxh = 0.15
+
+            if fill_air_maxh is not None:
+                self.fill_air_maxh = fill_air_maxh
+            else:
+                self.fill_air_maxh = 0.25
+
+            if core_maxh is not None:
+                self.core_maxh = core_maxh
+            else:
+                self.core_maxh = 0.2
 
             if outer_materials is not None:
                 self.outer_materials = outer_materials
@@ -229,102 +280,13 @@ class ARF2(ModeSolver):
                     {'material': 'buffer',
                      'n': self.n_buffer,
                      'T': self.T_buffer,
-                     'maxh': .2},
+                     'maxh': buffer_maxh if buffer_maxh else .2},
 
                     {'material': 'Outer',
                      'n': self.n0,
                      'T': self.T_outer,
-                     'maxh': .4}
+                     'maxh': pml_maxh if pml_maxh else .4}
                 ]
-
-        elif self.name == 'basic':
-
-            self.n_tubes = 6
-
-            scaling = 15
-            self.scale = scaling * 1e-6
-
-            if e is not None:
-                self.e = e
-            else:
-                self.e = .025/.42
-
-            self.R_tube = 12.06 / scaling
-            self.T_tube = .84 / scaling
-
-            self.T_cladding = T_cladding / scaling
-            self.T_outer = 30 / scaling
-            self.T_buffer = T_buffer / scaling
-            self.T_soft_polymer = 30 / scaling
-            self.T_hard_polymer = 30 / scaling
-
-            if shift_capillaries:
-                self.R_cladding = (1 + 2 * self.R_tube + (2 - .025/.42) *
-                                   self.T_tube)
-
-                self.R_tube_center = (self.R_cladding - self.R_tube -
-                                      (1 - self.e) * self.T_tube)
-
-                self.core_factor = .75
-                self.R_core = ((self.R_tube_center - self.R_tube -
-                                self.T_tube) * self.core_factor)
-            else:
-                self.R_cladding = (1 + 2 * self.R_tube + (2 - self.e) *
-                                   self.T_tube)
-
-                self.R_tube_center = 1 + self.R_tube + self.T_tube
-                self.core_factor = .75
-                self.R_core = self.core_factor
-
-            self.n_glass = 1.4388164768221814
-            self.n_air = 1.00027717
-            self.n_soft_polymer = 1.44
-            self.n_hard_polymer = 1.56
-            self.n_buffer = self.n_air
-            self.n0 = self.n_air
-
-            self.inner_air_maxh = .2
-            self.fill_air_maxh = .35
-            self.tube_maxh = .11
-            self.cladding_maxh = .25
-
-            self.inner_tube_edge_maxh = .11
-            self.outer_tube_edge_maxh = .11
-            self.inner_cladding_edge_maxh = .25
-            self.outer_cladding_edge_maxh = .25
-            self.fill_edge_maxh = .11
-
-            self.core_maxh = .25
-            self.glass_maxh = 0.05
-
-            if outer_materials is not None:
-                self.outer_materials = outer_materials
-                self.n0 = outer_materials[-1]['n']  # Need to reset n0
-            else:
-                self.outer_materials = [
-
-                    # {'material': 'soft_polymer',
-                    #  'n': self.n_soft_polymer,
-                    #  'T': self.T_soft_polymer,
-                    #  'maxh': 2},
-
-                    # {'material': 'hard_polymer',
-                    #  'n': self.n_hard_polymer,
-                    #  'T': self.T_hard_polymer,
-                    #  'maxh': 2},
-
-                    {'material': 'buffer',
-                     'n': self.n_buffer,
-                     'T': self.T_buffer,
-                     'maxh': 2},
-
-                    {'material': 'Outer',
-                     'n': self.n0,
-                     'T': self.T_outer,
-                     'maxh': 4}
-                ]
-
-            self.wavelength = wl
 
         elif self.name == 'fine_cladding':
 
@@ -341,9 +303,14 @@ class ARF2(ModeSolver):
             self.R_tube = 12.48 / scaling
             self.T_tube = .42 / scaling
 
-            self.T_cladding = T_cladding / scaling
+            self.T_cladding = T_cladding if T_cladding is not None else 10
+            self.T_cladding /= scaling
+            self.T_outer = T_outer if T_outer is not None else 10
+            self.T_outer /= scaling
             self.T_outer = 30 / scaling
-            self.T_buffer = T_buffer / scaling
+            self.T_buffer = T_buffer if T_buffer is not None else 10
+            self.T_buffer /= scaling
+
             self.T_soft_polymer = 30 / scaling
             self.T_hard_polymer = 30 / scaling
 
@@ -371,6 +338,8 @@ class ARF2(ModeSolver):
             self.n_hard_polymer = 1.56
             self.n_buffer = self.n_air
             self.n0 = self.n_air
+            self.buffer_maxh = buffer_maxh if buffer_maxh is not None else .5
+            self.pml_maxh = pml_maxh if pml_maxh is not None else 4
 
             if outer_materials is not None:
                 self.outer_materials = outer_materials
@@ -391,18 +360,23 @@ class ARF2(ModeSolver):
                     {'material': 'buffer',
                      'n': self.n_buffer,
                      'T': self.T_buffer,
-                     'maxh': .5},
+                     'maxh': self.buffer_maxh},
 
                     {'material': 'Outer',
                      'n': self.n0,
                      'T': self.T_outer,
-                     'maxh': 4}
+                     'maxh': self.pml_maxh}
                 ]
 
-            self.inner_air_maxh = .2
-            self.fill_air_maxh = .35
-            self.tube_maxh = .11
-            self.cladding_maxh = .25
+            if fill_air_maxh is not None:
+                self.fill_air_maxh = fill_air_maxh
+            else:
+                self.fill_air_maxh = .2
+
+            if inner_air_maxh is not None:
+                self.inner_air_maxh = inner_air_maxh
+            else:
+                self.inner_air_maxh = .35
 
             self.inner_tube_edge_maxh = .11
             self.outer_tube_edge_maxh = .11
@@ -410,11 +384,8 @@ class ARF2(ModeSolver):
             self.outer_cladding_edge_maxh = .25
             self.fill_edge_maxh = .11
 
-            self.core_maxh = .25
-            if glass_maxh is not None:
-                self.glass_maxh = glass_maxh
-            else:
-                self.glass_maxh = 0.05
+            self.core_maxh = core_maxh if core_maxh is not None else .25
+            self.glass_maxh = glass_maxh if glass_maxh is not None else .05
 
             self.wavelength = wl
 
