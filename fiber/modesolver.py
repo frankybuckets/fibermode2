@@ -897,12 +897,12 @@ class ModeSolver:
                                     autoupdate=True)
             ng.Draw(eevis)
 
-        Yr = NGvecs(X, nspan)
-        Yl = NGvecs(X, nspan)
-        Yr.setrandom(seed=seed)
-        Yl.setrandom(seed=seed)
-
         while ndofs[-1] < maxndofs:  # ADAPTIVITY LOOP ------------------
+
+            Yr = NGvecs(X, nspan)
+            Yl = NGvecs(X, nspan)
+            Yr.setrandom(seed=seed)
+            Yl.setrandom(seed=seed)
 
             # 1. SOLVE
 
