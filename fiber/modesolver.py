@@ -9,6 +9,7 @@ from numpy import conj
 import sympy as sm
 from pyeigfeast import NGvecs, SpectralProjNG
 from pyeigfeast import SpectralProjNGR, SpectralProjNGPoly
+from warnings import warn
 
 
 class ModeSolver:
@@ -616,10 +617,10 @@ class ModeSolver:
         Yl = Y.create()
         Y.setrandom(seed=seed)
         Yl.setrandom(seed=seed)
-        zsqr, Y, history, Yl = P.feast(Y,
-                                       Yl=Yl,
-                                       hermitian=False,
-                                       **feastkwargs)
+        zsqr, Y, _, Yl = P.feast(Y,
+                                 Yl=Yl,
+                                 hermitian=False,
+                                 **feastkwargs)
         beta = self.betafrom(zsqr)
         print('Results:\n Z²:', zsqr)
         print(' beta:', beta)
@@ -633,10 +634,16 @@ class ModeSolver:
     # ###################################################################
     # SMOOTHER HANDMADE PML #############################################
 
+    # ###################################################################
+    # # SYMBOLICS AND RESOLVENT #########################################
+
     def smoothpmlsymb(self, alpha, pmlbegin, pmlend):
         """
         Symbolic pml functions useful for debugging/visualization of pml
+        Kept for backward compatibility. Use self.smooth_pml_symb instead.
         """
+        warn('Use smooth_pml_symb instead',
+             PendingDeprecationWarning)
         # symbolically derive the radial PML functions
         s, t, R0, R1 = sm.symbols('s t R_0 R_1')
         nr = sm.integrate((s - R0)**2 * (s - R1)**2, (s, R0, t)).factor()
@@ -649,6 +656,43 @@ class ModeSolver:
         mappedt = t * taut
         G = (tau / taut).factor()  # this is what appears in the mapped system
         return G, mappedt, tau, taut
+
+    def smooth_pml_symb(self, alpha, pmlbegin, pmlend, d=2):
+        """
+        Symbolic pml useful for debugging/visualization of pml.
+        Derives the radial PML functions.
+        INPUTS:
+        * alpha: PML strength
+        * pmlbegin: radius where PML begins
+        * pmlend: radius where PML ends
+        * d: degree of the PML polynomial
+        OUTPUTS:
+        * mu_sym: mu(r) is such that mapped_x = mu * x
+        * eta_sym: eta(r) = mapped_r is such that eta = mu * r
+        * mu_dt: mu'(r)
+        * eta_dt: eta'(r)
+        Compare with smoothpmlsymb.
+        """
+        print('ModeSolver.smooth_pml_symb called...\n')
+        # symbolically derive the radial PML functions
+        s, t, R0, R1 = sm.symbols('s t R_0 R_1')
+        nr = sm.integrate((s - R0)**d * (s - R1)**d, (s, R0, t)).factor()
+        dr = nr.subs(t, R1).factor()
+        phi = alpha * nr / dr  # called α * φ in the docstring
+        phi = phi.subs(R0, pmlbegin).subs(R1, pmlend)
+
+        mu_sym = 1 + 1j * phi
+        eta_sym = t * mu_sym
+        mu_sym.factor()
+        eta_sym.factor()
+
+        mu_dt = sm.diff(mu_sym, t).factor()
+        eta_dt = sm.diff(eta_sym, t).factor()
+
+        return mu_sym, eta_sym, mu_dt, eta_dt
+
+    # ###################################################################
+    # # SYSTEMS #########################################################
 
     def smoothpmlsystem(self,
                         p,
@@ -713,6 +757,7 @@ class ModeSolver:
         a += (self.pml_A * grad(u) * grad(v) +
               self.V * self.pml_B * u * v) * dx
         b += self.pml_B * u * v * dx
+
         with ng.TaskManager():
             try:
                 a.Assemble()
@@ -1021,6 +1066,7 @@ class ModeSolver:
         A += grad(u) * grad(v) * dx + self.V * u * v * dx
         B = ng.BilinearForm(X)
         B += u * v * dx
+
         with ng.TaskManager():
             try:
                 A.Assemble()
@@ -1209,7 +1255,6 @@ class ModeSolver:
                     try:
                         selfr.Z.Assemble()
                         selfr.ZH.Assemble()
-
                     except Exception:
                         print('*** Trying again with larger heap')
                         ng.SetHeapSize(int(1e9))
