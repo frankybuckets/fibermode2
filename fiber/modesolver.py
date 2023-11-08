@@ -1,3 +1,7 @@
+"""
+Definition of ModeSolver class and its methods for computing
+modes of various fibers.
+"""
 import ngsolve as ng
 from ngsolve import curl, grad, dx, Conj, Integrate, InnerProduct
 import numpy as np
@@ -478,8 +482,14 @@ class ModeSolver:
         B += u2 * v2 * dx_int
 
         with ng.TaskManager():
-            A.Assemble()
-            B.Assemble()
+            try:
+                A.Assemble()
+                B.Assemble()
+            except Exception:
+                print('*** Trying again with larger heap')
+                ng.SetHeapSize(int(1e9))
+                A.Assemble()
+                B.Assemble()
 
         P = SpectralProjNG(X3,
                            A.mat,
@@ -538,8 +548,14 @@ class ModeSolver:
         a += (grad(u) * grad(v) + self.V * u * v) * dx
         b += u * v * dx
         with ng.TaskManager():
-            a.Assemble()
-            b.Assemble()
+            try:
+                a.Assemble()
+                b.Assemble()
+            except Exception:
+                print('*** Trying again with larger heap')
+                ng.SetHeapSize(int(1e9))
+                a.Assemble()
+                b.Assemble()
 
         return a, b, X
 
@@ -618,7 +634,8 @@ class ModeSolver:
     # SMOOTHER HANDMADE PML #############################################
 
     def smoothpmlsymb(self, alpha, pmlbegin, pmlend):
-        """ Symbolic pml functions useful for debugging/visualization of pml
+        """
+        Symbolic pml functions useful for debugging/visualization of pml
         """
         # symbolically derive the radial PML functions
         s, t, R0, R1 = sm.symbols('s t R_0 R_1')
@@ -639,9 +656,10 @@ class ModeSolver:
                         pmlbegin=None,
                         pmlend=None,
                         autoupdate=False):
-        """ Make the matrices needed for formulating the leaky mode
-       eigensystem with frequency-independent C² PML map
-           mapped_x = x * (1 + 1j * α * φ(r))
+        """
+        Make the matrices needed for formulating the leaky mode
+        eigensystem with frequency-independent C² PML map
+            mapped_x = x * (1 + 1j * α * φ(r))
         where φ is a C² function of the radius r.
         """
 
@@ -660,7 +678,7 @@ class ModeSolver:
         # symbolic -> ngsolve coefficient
         x = ng.x
         y = ng.y
-        r = ng.sqrt(x * x + y * y)
+        r = ng.sqrt(x * x + y * y) + 0j
         gstr = str(G).replace('I', '1j').replace('t', 'r')
         ttstr = str(tau * taut).replace('I', '1j').replace('t', 'r')
         self.ttstr = ttstr
@@ -696,8 +714,14 @@ class ModeSolver:
               self.V * self.pml_B * u * v) * dx
         b += self.pml_B * u * v * dx
         with ng.TaskManager():
-            a.Assemble()
-            b.Assemble()
+            try:
+                a.Assemble()
+                b.Assemble()
+            except Exception:
+                print('*** Trying again with larger heap')
+                ng.SetHeapSize(int(1e9))
+                a.Assemble()
+                b.Assemble()
 
         return a, b, X
 
@@ -777,7 +801,8 @@ class ModeSolver:
         return zsqr, Y, Yl, beta, P, moreoutputs
 
     def eestimator_helmholtz(self, rgt, lft, lam, A, B, V):
-        """DWR error estimator for eigenvalues
+        """
+        DWR error estimator for eigenvalues
 
         INPUT:
         * lft: left eigenfunction as NGvecs object
@@ -860,7 +885,8 @@ class ModeSolver:
             inverse='umfpack',
             verbose=True,
             **feastkwargs):
-        """Compute leaky modes by DWR adaptivity, solving in each iteration a
+        """
+        Compute leaky modes by DWR adaptivity, solving in each iteration a
         linear eigenproblem obtained using the (frequency-independent)
         C² smooth PML in which mapped_x = x * (1 + 1j * α * φ(r))
         where φ is a C² function of the radius r.  The eigenproblem is
@@ -907,8 +933,14 @@ class ModeSolver:
             # 1. SOLVE
 
             with ng.TaskManager():
-                a.Assemble()
-                b.Assemble()
+                try:
+                    a.Assemble()
+                    b.Assemble()
+                except Exception:
+                    print('*** Trying again with larger heap')
+                    ng.SetHeapSize(int(1e9))
+                    a.Assemble()
+                    b.Assemble()
 
             P = SpectralProjNG(X,
                                a.mat,
@@ -935,8 +967,8 @@ class ModeSolver:
 
             ndofs.append(Yr.fes.ndof)
             Zsqrs.append(zsqr)
-            print('ADAPTIVITY at {:7d} ndofs:  Zsqr = {:+10.8f}'.format(
-                ndofs[-1], Zsqrs[-1][0]))
+            print(f'ADAPTIVITY at {ndofs[-1]:7d} ndofs: ' +
+                  f'Zsqr = {Zsqrs[-1][0]:+10.8f}')
 
             # 2. ESTIMATE
 
@@ -962,7 +994,7 @@ class ModeSolver:
             self.mesh.Refine()
             npts = 1
             nspan = 1
-            centerZ2 = zsqr
+            centerZ2 = zsqr[0]
 
         # Adaptivity loop done ------------------------------------------
 
@@ -990,8 +1022,14 @@ class ModeSolver:
         B = ng.BilinearForm(X)
         B += u * v * dx
         with ng.TaskManager():
-            A.Assemble()
-            B.Assemble()
+            try:
+                A.Assemble()
+                B.Assemble()
+            except Exception:
+                print('*** Trying again with larger heap')
+                ng.SetHeapSize(int(1e9))
+                A.Assemble()
+                B.Assemble()
 
         return A, B, X
 
@@ -1299,9 +1337,9 @@ class ModeSolver:
         E.setrandom(seed=seed)
 
         print('Using FEAST to search for vector guided modes in')
-        print('circle of radius', rad, 'centered at ', ctr)
-        print('assuming not more than %d modes in this interval.' % nspan)
-        print('System size:', E.n, ' x ', E.n, '  Inverse type:', inverse)
+        print(f'circle of radius {rad} centered at {ctr}')
+        print(f'assuming not more than {nspan} modes in this interval.')
+        print(f'System size: {E.n} x {E.n}  Inverse type: {inverse}')
 
         P = SpectralProjNGR(
             lambda z: R(z, self.V, self.index, inverse=inverse),
