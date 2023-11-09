@@ -657,7 +657,7 @@ class ModeSolver:
         G = (tau / taut).factor()  # this is what appears in the mapped system
         return G, mappedt, tau, taut
 
-    def smooth_pml_symb(self, alpha, pmlbegin, pmlend, d=2):
+    def smooth_pml_symb(self, alpha, pmlbegin, pmlend, deg=2):
         """
         Symbolic pml useful for debugging/visualization of pml.
         Derives the radial PML functions.
@@ -665,7 +665,7 @@ class ModeSolver:
         * alpha: PML strength
         * pmlbegin: radius where PML begins
         * pmlend: radius where PML ends
-        * d: degree of the PML polynomial
+        * deg: degree of the PML polynomial
         OUTPUTS:
         * mu_sym: mu(r) is such that mapped_x = mu * x
         * eta_sym: eta(r) = mapped_r is such that eta = mu * r
@@ -676,7 +676,7 @@ class ModeSolver:
         print('ModeSolver.smooth_pml_symb called...\n')
         # symbolically derive the radial PML functions
         s, t, R0, R1 = sm.symbols('s t R_0 R_1')
-        nr = sm.integrate((s - R0)**d * (s - R1)**d, (s, R0, t)).factor()
+        nr = sm.integrate((s - R0)**deg * (s - R1)**deg, (s, R0, t)).factor()
         dr = nr.subs(t, R1).factor()
         phi = alpha * nr / dr  # called α * φ in the docstring
         phi = phi.subs(R0, pmlbegin).subs(R1, pmlend)
@@ -691,8 +691,25 @@ class ModeSolver:
 
         return mu_sym, eta_sym, mu_dt, eta_dt
 
+    def symb_to_cf(self, symb, r=None):
+        """
+        Convert a symbolic expression to an ngsolve coefficient function.
+        If r is None, then the symbolic expression is assumed to be the radius.
+        Otherwise, r is assumed to be a valid ngsolve coefficient function.
+        Assumes that the symbolic expression is a function of t, and that
+        the imaginary unit is I.
+        """
+        x = ng.x
+        y = ng.y
+        if r is None:
+            r = ng.sqrt(x * x + y * y) + 0j
+        # TODO How to assert r is a valid ngsolve coefficient function?
+        strng = str(symb).replace('I', '1j').replace('t', 'r')
+        cf = eval(strng)
+        return cf
+
     # ###################################################################
-    # # SYSTEMS #########################################################
+    # # PML SYSTEMS #####################################################
 
     def smoothpmlsystem(self,
                         p,
@@ -769,6 +786,143 @@ class ModeSolver:
                 b.Assemble()
 
         return a, b, X
+
+    def smoothvecpmlsystem_compound(
+            self,
+            p,
+            alpha=1,
+            pmlbegin=None,
+            pmlend=None,
+            deg=2,
+            autoupdate=True):
+        """
+        Make the matrices needed for formulating the vector
+        leaky mode eigensystem with frequency-independent
+        C² PML map mapped_x = x * (1 + 1j * α * φ(r)) where
+        φ is a C² function of the radius r.
+        Using the compound finite element space X*Y.
+        INPUTS:
+        * p: polynomial degree of finite elements
+        * alpha: PML strength
+        * pmlbegin: radius where PML begins
+        * pmlend: radius where PML ends
+        * deg: degree of the PML polynomial
+        * autoupdate: whether to use autoupdate in NGSolve
+        OUTPUTS:
+        * aa: bilinear form for the LHS
+        * mm: bilinear form for the RHS
+        * Z: finite element space
+        """
+        print('ModeSolver.smoothvecpmlsystem_compound called...\n')
+        if self.ngspmlset:
+            raise RuntimeError('NGSolve pml set. Cannot combine with smooth.')
+        if abs(alpha.imag) > 0 or alpha < 0:
+            raise ValueError('Expecting PML strength alpha > 0')
+        if pmlbegin is None:
+            pmlbegin = self.R
+        if pmlend is None:
+            pmlend = self.Rout
+
+        # Get symbolic functions
+        mu_sym, eta_sym, mu_dt, eta_dt = self.smooth_pml_symb(
+                alpha, pmlbegin, pmlend, deg=deg)
+
+        # Transform to ngsolve coefficient functions
+        x = ng.x
+        y = ng.y
+        r = ng.sqrt(x * x + y * y) + 0j
+
+        mu_ = self.symb_to_cf(mu_sym)
+        eta_ = self.symb_to_cf(eta_sym)
+        mu_dr_ = self.symb_to_cf(mu_dt)
+        eta_dr_ = self.symb_to_cf(eta_dt)
+
+        mu = ng.IfPos(r - pmlbegin, mu_, 1)
+        eta = ng.IfPos(r - pmlbegin, eta_, r)
+        mu_dr = ng.IfPos(r - pmlbegin, mu_dr_, 0)
+        eta_dr = ng.IfPos(r - pmlbegin, eta_dr_, 1)
+
+        # Jacobian, left as a reminder
+        # j00 = mu + (mu_dr / r) * x * x
+        # j01 = - (mu_dr / r) * x * y
+        # j11 = mu + (mu_dr / r) * y * y
+
+        # Inverse of Jacobian
+        jinv00 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * y * y
+        jinv01 = - (mu_dr / (eta_dr * eta)) * x * y
+        jinv11 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * x * x
+
+        # Determinant of Jacobian
+        detj = mu * eta_dr
+
+        # Compile into coefficient functions
+        mu.Compile()
+        eta.Compile()
+        mu_dr.Compile()
+        eta_dr.Compile()
+        # j00.Compile()
+        # j01.Compile()
+        # j11.Compile()
+        jinv00.Compile()
+        jinv01.Compile()
+        jinv11.Compile()
+        detj.Compile()
+
+        # Make coefficient functions
+        # jac = ng.CoefficientFunction((j00, j01, j01, j11), dims=(2, 2))
+        jacinv = ng.CoefficientFunction((jinv00, jinv01, jinv01, jinv11),
+                                        dims=(2, 2))
+
+        # Adding  terms to the class as needed
+        self.mu = mu
+        self.eta = eta
+        self.mu_dr = mu_dr
+        self.eta_dr = eta_dr
+        # self.jac = jac
+        self.jacinv = jacinv
+        self.detj = detj
+
+        # Make linear eigensystem, cf. self.vecmodesystem
+        n2 = self.index * self.index
+        X = ng.HCurl(
+                self.mesh,
+                order=p + 1 - max(1 - p, 0),
+                type1=True,
+                dirichlet='OuterCircle',
+                complex=True,
+                autoupdate=autoupdate)
+        Y = ng.H1(
+                self.mesh,
+                order=p + 1,
+                dirichlet='OuterCircle',
+                complex=True,
+                autoupdate=autoupdate)
+
+        Z = X*Y
+        (E, phi), (F, psi) = Z.TnT()
+
+        aa = ng.BilinearForm(Z)
+        mm = ng.BilinearForm(Z)
+
+        aa += ((mu / eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2 *
+               curl(E) * curl(F) +
+               self.V * detj * (jacinv * E) * (jacinv * F) +
+               detj * (jacinv * grad(phi)) * (jacinv * F) +
+               n2 * detj * phi * psi -
+               n2 * detj * (jacinv * E) * (jacinv * grad(psi))) * dx
+        mm += detj * (jacinv * E) * (jacinv * F) * dx
+
+        with ng.TaskManager():
+            try:
+                aa.Assemble()
+                mm.Assemble()
+            except Exception:
+                print('*** Trying again with larger heap')
+                ng.SetHeapSize(int(1e9))
+                aa.Assemble()
+                mm.Assemble()
+
+        return aa, mm, Z
 
     def leakymode_smooth(self,
                          p,
