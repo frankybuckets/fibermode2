@@ -691,6 +691,227 @@ class ModeSolver:
 
         return mu_sym, eta_sym, mu_dt, eta_dt
 
+    def make_resolvent_maxwell(
+            self, m, a, b, c, d, X, Y,
+            inverse='umfpack',
+            autoupdate=True):
+        """
+        Create resolvent for Maxwell's equations.
+        INPUTS:
+        * a, b, c, d: bilinear forms of the system, blockwise form
+        * X, Y: FE spaces
+        * inverse: inverse type
+        * autoupdate: ngsolve autoupdate
+        OUTPUTS:
+        * ResolventVectorMode: resolvent
+        * dinv: inverse of d
+        """
+        print('ModeSolver.make_resolvent_maxwell called...\n')
+        # Retrive coefficient functions
+        x = ng.x
+        y = ng.y
+        r = ng.sqrt(x * x + y * y)
+
+        mu = self.mu
+        mu_dr = self.mu_dr
+        eta = self.eta
+        eta_dr = self.eta_dr
+        detj = self.detj
+        jacinv = self.jacinv
+
+        # Create inverse of d
+        dinv = d.mat.Inverse(Y.FreeDofs(coupling=True), inverse=inverse)
+
+        # resolvent class definition done -------------------------------
+
+        class ResolventVectorMode():
+            # static resolvent class attributes, same for all class objects
+            XY = ng.FESpace([X, Y])
+            wrk1 = ng.GridFunction(
+                    XY, name='wrk1', autoupdate=autoupdate, nested=autoupdate)
+            wrk2 = ng.GridFunction(
+                    XY, name='wrk2', autoupdate=autoupdate, nested=autoupdate)
+            tmpY1 = ng.GridFunction(
+                    Y, name='tmpY1', autoupdate=autoupdate, nested=autoupdate)
+            tmpY2 = ng.GridFunction(
+                    Y, name='tmpY2', autoupdate=autoupdate, nested=autoupdate)
+            tmpX1 = ng.GridFunction(
+                    X, name='tmpX1', autoupdate=autoupdate, nested=autoupdate)
+
+            def __init__(selfr, z, V, n, inverse=None):
+                n2 = n * n
+                XY = ng.FESpace([X, Y])
+
+                (E, phi), (F, psi) = XY.TnT()
+
+                selfr.Z = ng.BilinearForm(XY, condense=True)
+                selfr.ZH = ng.BilinearForm(XY, condense=True)
+
+                # m - a - c - b + (-d)
+                selfr.Z += (z * detj * (jacinv * E) * (jacinv * F) -
+                            (mu / eta_dr**3) *
+                            (1 + (mu_dr * r**2) / eta)**2 *
+                            curl(E) * curl(F) -
+                            V * detj * (jacinv * E) * (jacinv * F) -
+                            detj * (jacinv * grad(phi)) * (jacinv * F) -
+                            n2 * detj *
+                            (jacinv * E) * (jacinv * grad(psi)) +
+                            n2 * detj * phi * psi) * dx
+                selfr.ZH += (np.conjugate(z) * detj *
+                             (jacinv * F) * (jacinv * E) -
+                             (mu / eta_dr**3) *
+                             (1 + (mu_dr * r**2) / eta)**2 *
+                             curl(F) * curl(E) -
+                             V * detj * (jacinv * F) * (jacinv * E) -
+                             n2 * detj *
+                             (jacinv * F) * (jacinv * grad(phi)) -
+                             detj * (jacinv * grad(psi)) * (jacinv * E) +
+                             n2 * detj * phi * psi) * dx
+
+                with ng.TaskManager():
+                    try:
+                        selfr.Z.Assemble()
+                        selfr.ZH.Assemble()
+                    except Exception:
+                        print('*** Trying again with larger heap')
+                        ng.SetHeapSize(int(1e9))
+                        selfr.Z.Assemble()
+                        selfr.ZH.Assemble()
+                    selfr.R_I = selfr.Z.mat.Inverse(
+                            selfr.XY.FreeDofs(coupling=True),
+                            inverse=inverse)
+
+            def act(selfr, v, Rv, workspace=None):
+                if workspace is None:
+                    Mv = ng.MultiVector(v._mv[0], v.m)
+                else:
+                    Mv = workspace._mv[:v.m]
+
+                with ng.TaskManager():
+                    Mv[:] = m.mat * v._mv
+                    for i in range(v.m):
+                        selfr.wrk1.components[0].vec[:] = Mv[i]
+                        selfr.wrk1.components[1].vec[:] = 0
+
+                        # selfr.wrk2.vec.data = selfr.R * selfr.wrk1.vec
+
+                        selfr.wrk1.vec.data += \
+                            selfr.Z.harmonic_extension_trans * \
+                            selfr.wrk1.vec
+                        selfr.wrk2.vec.data = selfr.R_I * selfr.wrk1.vec
+                        selfr.wrk2.vec.data += \
+                            selfr.Z.inner_solve * selfr.wrk1.vec
+                        selfr.wrk2.vec.data += \
+                            selfr.Z.harmonic_extension * selfr.wrk2.vec
+
+                        Rv._mv[i][:] = selfr.wrk2.components[0].vec
+
+            def adj(selfr, v, RHv, workspace=None):
+                if workspace is None:
+                    Mv = ng.MultiVector(v._mv[0], v.m)
+                else:
+                    Mv = workspace._mv[:v.m]
+                with ng.TaskManager():
+                    Mv[:] = m.mat * v._mv
+                    for i in range(v.m):
+                        selfr.wrk1.components[0].vec[:] = Mv[i]
+                        selfr.wrk1.components[1].vec[:] = 0
+
+                        # selfr.wrk2.vec.data = selfr.R.H * selfr.wrk1.vec
+
+                        selfr.wrk1.vec.data += \
+                            selfr.ZH.harmonic_extension_trans * \
+                            selfr.wrk1.vec
+                        selfr.wrk2.vec.data = selfr.R_I.H * selfr.wrk1.vec
+                        selfr.wrk2.vec.data += \
+                            selfr.ZH.inner_solve * selfr.wrk1.vec
+                        selfr.wrk2.vec.data += \
+                            selfr.ZH.harmonic_extension * selfr.wrk2.vec
+
+                        RHv._mv[i][:] = selfr.wrk2.components[0].vec
+
+            def rayleigh_nsa(selfr,
+                             ql,
+                             qr,
+                             qAq=not None,
+                             qBq=not None,
+                             workspace=None):
+                """
+                Return qAq[i, j] = (𝒜 qr[j], ql[i]) with
+                𝒜 =  (A - C D⁻¹ B) E
+                and qBq[i, j] = (M qr[j], ql[i]).
+                """
+                if workspace is None:
+                    Aqr = ng.MultiVector(qr._mv[0], qr.m)
+                else:
+                    Aqr = workspace._mv[:qr.m]
+
+                with ng.TaskManager():
+                    if qAq is not None:
+                        Aqr[:] = a.mat * qr._mv
+                        for i in range(qr.m):
+                            selfr.tmpY1.vec.data = b.mat * qr._mv[i]
+
+# TODO
+# Here: If I use static condensation, I get issues with the matrix,
+# If I don't use static condensation, I get issues with this product.
+# Not using static condensation implies the need of redesigning the
+# resolvent class to use the full system matrix
+
+                            selfr.tmpY1.vec.data += \
+                                d.harmonic_extension_trans * selfr.tmpY1.vec
+                            selfr.tmpY2.vec.data = dinv * selfr.tmpY1.vec
+                            selfr.tmpY2.vec.data += \
+                                d.inner_solve * selfr.tmpY1.vec
+                            selfr.tmpY2.vec.data += \
+                                d.harmonic_extension * selfr.tmpY2.vec
+
+                            selfr.tmpX1.vec.data = c.mat * selfr.tmpY2.vec
+                            Aqr[i].data -= selfr.tmpX1.vec
+                        qAq = ng.InnerProduct(Aqr, ql._mv).NumPy().T
+
+                    if qBq is not None:
+                        Bqr = Aqr
+                        Bqr[:] = m.mat * qr._mv
+                        qBq = ng.InnerProduct(Bqr, ql._mv).NumPy().T
+
+                return (qAq, qBq)
+
+            def rayleigh(selfr, q, workspace=None):
+                return selfr.rayleigh_nsa(q, q, workspace=workspace)
+
+            def update_system(selfr, verbose=False):
+                """
+                Update the system matrices.
+                For internal use only.
+                This should be redundant with the autoupdate feature of
+                the GridFunction objects and recreating the resolvent
+                object should not be necessary.
+                Consider removing this method and simplyfing __init__.
+                """
+                warn('This should be redundant with the autoupdate feature of'
+                     ' the GridFunction objects and recreating the resolvent'
+                     ' object should not be necessary.',
+                     PendingDeprecationWarning)
+                if verbose:
+                    print('Updating system matrices...\n')
+                with ng.TaskManager():
+                    try:
+                        selfr.Z.Assemble()
+                        selfr.ZH.Assemble()
+                    except Exception:
+                        if verbose:
+                            print('*** Trying again with larger heap')
+                        ng.SetHeapSize(int(1e9))
+                        selfr.Z.Assemble()
+                        selfr.ZH.Assemble()
+                    selfr.R_I = selfr.Z.mat.Inverse(
+                            selfr.XY.FreeDofs(coupling=True),
+                            inverse=selfr.inverse)
+        # end of class ResolventVectorMode --------------------------------
+
+        return ResolventVectorMode, dinv
+
     def symb_to_cf(self, symb, r=None):
         """
         Convert a symbolic expression to an ngsolve coefficient function.
@@ -702,11 +923,82 @@ class ModeSolver:
         x = ng.x
         y = ng.y
         if r is None:
-            r = ng.sqrt(x * x + y * y) + 0j
+            r = ng.sqrt(x * x + y * y)
         # TODO How to assert r is a valid ngsolve coefficient function?
         strng = str(symb).replace('I', '1j').replace('t', 'r')
         cf = eval(strng)
         return cf
+
+    def visualize_pml(self, alpha, pmlbegin, pmlend, deg=2):
+        """
+        Visualize the radial PML functions.
+        """
+        print('ModeSolver.visualize_pml called...\n')
+        mu_sym, eta_sym, mu_dt, eta_dt = self.smooth_pml_symb(
+                alpha, pmlbegin, pmlend, deg=deg)
+
+        # Transform to ngsolve coefficient functions
+        x = ng.x
+        y = ng.y
+        r = ng.sqrt(x * x + y * y)
+
+        # Convert from symbolic to ngsolve coefficient functions
+        mu_ = self.symb_to_cf(mu_sym, r=r)
+        eta_ = self.symb_to_cf(eta_sym, r=r)
+        mu_dr_ = self.symb_to_cf(mu_dt, r=r)
+        eta_dr_ = self.symb_to_cf(eta_dt, r=r)
+
+        # Main terms
+        mu = ng.IfPos(r - pmlbegin, mu_, 1)
+        eta = ng.IfPos(r - pmlbegin, eta_, r)
+        mu_dr = ng.IfPos(r - pmlbegin, mu_dr_, 0)
+        eta_dr = ng.IfPos(r - pmlbegin, eta_dr_, 1)
+        # Jacobian
+        j00 = mu + (mu_dr / r) * x * x
+        j01 = - (mu_dr / r) * x * y
+        j11 = mu + (mu_dr / r) * y * y
+        # Inverse of Jacobian
+        jinv00 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * y * y
+        jinv01 = - (mu_dr / (eta_dr * eta)) * x * y
+        jinv11 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * x * x
+
+        # Determinant of Jacobian
+        detj = mu * eta_dr
+
+        # Compile into coefficient functions
+        mu.Compile()
+        eta.Compile()
+        mu_dr.Compile()
+        eta_dr.Compile()
+        j00.Compile()
+        j01.Compile()
+        j11.Compile()
+        jinv00.Compile()
+        jinv01.Compile()
+        jinv11.Compile()
+        detj.Compile()
+
+        # Make matrix coefficient functions
+        # jac = ng.CoefficientFunction(
+        #         (j00, j01, j01, j11), dims=(2, 2))
+        # jacinv = ng.CoefficientFunction(
+        #         (jinv00, jinv01, jinv01, jinv11), dims=(2, 2))
+
+        # Draw the PML functions
+        print('Drawing (the norm of) PML functions...\n')
+        ng.Draw(ng.Norm(mu), self.mesh, name='mu')
+        ng.Draw(ng.Norm(eta), self.mesh, name='eta')
+        ng.Draw(ng.Norm(mu_dr), self.mesh, name='mu_dr')
+        ng.Draw(ng.Norm(eta_dr), self.mesh, name='eta_dr')
+        # ng.Draw(jac, self.mesh, name='jac')
+        ng.Draw(ng.Norm(j00), self.mesh, name='j00')
+        ng.Draw(ng.Norm(j01), self.mesh, name='j01')
+        ng.Draw(ng.Norm(j11), self.mesh, name='j11')
+        # ng.Draw(jacinv, self.mesh, name='jacinv')
+        ng.Draw(ng.Norm(jinv00), self.mesh, name='jinv00')
+        ng.Draw(ng.Norm(jinv01), self.mesh, name='jinv01')
+        ng.Draw(ng.Norm(jinv11), self.mesh, name='jinv11')
+        ng.Draw(ng.Norm(detj), self.mesh, name='detj')
 
     # ###################################################################
     # # PML SYSTEMS #####################################################
@@ -739,7 +1031,7 @@ class ModeSolver:
         # symbolic -> ngsolve coefficient
         x = ng.x
         y = ng.y
-        r = ng.sqrt(x * x + y * y) + 0j
+        r = ng.sqrt(x * x + y * y)
         gstr = str(G).replace('I', '1j').replace('t', 'r')
         ttstr = str(tau * taut).replace('I', '1j').replace('t', 'r')
         self.ttstr = ttstr
@@ -830,7 +1122,7 @@ class ModeSolver:
         # Transform to ngsolve coefficient functions
         x = ng.x
         y = ng.y
-        r = ng.sqrt(x * x + y * y) + 0j
+        r = ng.sqrt(x * x + y * y)
 
         mu_ = self.symb_to_cf(mu_sym)
         eta_ = self.symb_to_cf(eta_sym)
@@ -923,6 +1215,161 @@ class ModeSolver:
                 mm.Assemble()
 
         return aa, mm, Z
+
+# TODO
+#    def smoothvecpmlsystem_resolvent(
+#            self,
+#            p,
+#            alpha=1,
+#            pmlbegin=None,
+#            pmlend=None,
+#            deg=2,
+#            inverse='umfpack',
+#            autoupdate=True):
+#        """
+#        Make the matrices needed for formulating the vector
+#        leaky mode eigensystem with frequency-independent
+#        C² PML map mapped_x = x * (1 + 1j * α * φ(r)) where
+#        φ is a C² function of the radius r.
+#        Using the resolvent T = A - C * D⁻¹ * B.
+#        INPUTS:
+#        * p: polynomial degree of finite elements
+#        * alpha: PML strength
+#        * pmlbegin: radius where PML begins
+#        * pmlend: radius where PML ends
+#        * deg: degree of the PML polynomial
+#        * inverse: inverse method to use in spectral projector
+#        * autoupdate: whether to use autoupdate in NGSolve
+#        OUTPUTS:
+#        * ResolventVectorMode: resolvent
+#        * m: bilinear form for the LHS
+#        * a, b, c, d: bilinear forms for the block matrices for the RHS
+#        * dinv: inverse of d
+#        """
+#        print('ModeSolver.smoothvecpmlsystem_resolvent called...\n')
+#        if self.ngspmlset:
+#            raise RuntimeError('NGSolve pml set. Cannot combine with smooth.')
+#        if abs(alpha.imag) > 0 or alpha < 0:
+#            raise ValueError('Expecting PML strength alpha > 0')
+#        if pmlbegin is None:
+#            pmlbegin = self.R
+#        if pmlend is None:
+#            pmlend = self.Rout
+#
+#        # Get symbolic functions
+#        mu_sym, eta_sym, mu_dt, eta_dt = self.smooth_pml_symb(
+#                alpha, pmlbegin, pmlend, deg=deg)
+#
+#        # Transform to ngsolve coefficient functions
+#        x = ng.x
+#        y = ng.y
+#        r = ng.sqrt(x * x + y * y)
+#
+#        mu_ = self.symb_to_cf(mu_sym)
+#        eta_ = self.symb_to_cf(eta_sym)
+#        mu_dr_ = self.symb_to_cf(mu_dt)
+#        eta_dr_ = self.symb_to_cf(eta_dt)
+#
+#        mu = ng.IfPos(r - pmlbegin, mu_, 1)
+#        eta = ng.IfPos(r - pmlbegin, eta_, r)
+#        mu_dr = ng.IfPos(r - pmlbegin, mu_dr_, 0)
+#        eta_dr = ng.IfPos(r - pmlbegin, eta_dr_, 1)
+#
+#        # Jacobian, left as a reminder
+#        # j00 = mu + (mu_dr / r) * x * x
+#        # j01 = - (mu_dr / r) * x * y
+#        # j11 = mu + (mu_dr / r) * y * y
+#
+#        # Inverse of Jacobian
+#        jinv00 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * y * y
+#        jinv01 = - (mu_dr / (eta_dr * eta)) * x * y
+#        jinv11 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * x * x
+#
+#        # Determinant of Jacobian
+#        detj = mu * eta_dr
+#
+#        # Compile into coefficient functions
+#        mu.Compile()
+#        eta.Compile()
+#        mu_dr.Compile()
+#        eta_dr.Compile()
+#        # j00.Compile()
+#        # j01.Compile()
+#        # j11.Compile()
+#        jinv00.Compile()
+#        jinv01.Compile()
+#        jinv11.Compile()
+#        detj.Compile()
+#
+#        # Make coefficient functions
+#        # jac = ng.CoefficientFunction((j00, j01, j01, j11), dims=(2, 2))
+#        jacinv = ng.CoefficientFunction((jinv00, jinv01, jinv01, jinv11),
+#                                        dims=(2, 2))
+#
+#        # Adding  terms to the class as needed
+#        self.mu = mu
+#        self.eta = eta
+#        self.mu_dr = mu_dr
+#        self.eta_dr = eta_dr
+#        # self.jac = jac
+#        self.jacinv = jacinv
+#        self.detj = detj
+#
+#        # Make linear eigensystem, cf. self.vecmodesystem
+#        n2 = self.index * self.index
+#        X = ng.HCurl(
+#                self.mesh,
+#                order=p + 1 - max(1 - p, 0),
+#                type1=True,
+#                dirichlet='OuterCircle',
+#                complex=True,
+#                autoupdate=autoupdate)
+#        Y = ng.H1(
+#                self.mesh,
+#                order=p + 1,
+#                dirichlet='OuterCircle',
+#                complex=True,
+#                autoupdate=autoupdate)
+#
+#        E, F = X.TnT()
+#        phi, psi = Y.TnT()
+#
+#        m = ng.BilinearForm(X)
+#        a = ng.BilinearForm(X)
+#        c = ng.BilinearForm(trialspace=Y, testspace=X)
+#        b = ng.BilinearForm(trialspace=X, testspace=Y)
+#        # d = ng.BilinearForm(Y)
+#        d = ng.BilinearForm(Y, condense=True)
+#
+#        m += detj * (jacinv * E) * (jacinv * F) * dx
+#        a += ((mu / eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2 *
+#              curl(E) * curl(F)) * dx
+#        a += self.V * detj * (jacinv * E) * (jacinv * F) * dx
+#        c += detj * (jacinv * grad(phi)) * (jacinv * F) * dx
+#        b += n2 * detj * (jacinv * E) * (jacinv * grad(psi)) * dx
+#        d += - n2 * detj * phi * psi * dx
+#
+#        with ng.TaskManager():
+#            try:
+#                m.Assemble()
+#                a.Assemble()
+#                c.Assemble()
+#                b.Assemble()
+#                d.Assemble()
+#            except Exception:
+#                print('*** Trying again with larger heap')
+#                ng.SetHeapSize(int(1e9))
+#                m.Assemble()
+#                a.Assemble()
+#                c.Assemble()
+#                b.Assemble()
+#                d.Assemble()
+#        res, dinv = self.make_resolvent_maxwell(
+#                m, a, b, c, d, X, Y,
+#                inverse=inverse,
+#                autoupdate=autoupdate)
+#
+#        return res, m, a, b, c, d, dinv
 
     def leakymode_smooth(self,
                          p,
@@ -1366,7 +1813,6 @@ class ModeSolver:
             Dinv = D.mat.Inverse(Y.FreeDofs(coupling=True), inverse=inverse)
 
         # resolvent of the vector mode problem --------------------------
-
         class ResolventVectorMode():
 
             # static resolvent class attributes, same for all class objects
