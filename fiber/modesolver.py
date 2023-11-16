@@ -1551,6 +1551,9 @@ class ModeSolver:
 
         return zsqr, E_r, E_l, phi_r, phi_l, beta, P, moreoutputs
 
+    # ###################################################################
+    # ERROR ESTIMATORS FOR ADAPTIVITY ###################################
+
     def eestimator_helmholtz(self, rgt, lft, lam, A, B, V):
         """
         DWR error estimator for eigenvalues
@@ -1614,6 +1617,149 @@ class ModeSolver:
 
         ee = np.sqrt(omegaR.real.NumPy() * rhoR.real.NumPy())
         ee += np.sqrt(omegaL.real.NumPy() * rhoL.real.NumPy())
+
+        return ee
+
+    def eestimator_maxwell_compound(self, rgt, lft, lam):
+        """
+        DWR error estimator for eigenvalues
+        Maxwell eigenproblem for compound form
+        INPUT:
+        * lft: left eigenfunction as NGvecs object for the compound form
+        * rgt: right eigenfunction as NGvecs object for the compound form
+        * lam: eigenvalue
+        OUTPUT:
+        * ee: element-wise error estimator
+        """
+        if rgt.m > 1 or lft.m > 1:
+            # raise NotImplementedError(
+            #     'What to do with multiple eigenfunctions?')
+            print('What to do with multiple eigenfunctions?')
+
+        # Extract coefficient functions
+        mu = self.mu
+        eta = self.eta
+        mu_dr = self.mu_dr
+        eta_dr = self.eta_dr
+        # jac = self.jac
+        jacinv = self.jacinv
+        detj = self.detj
+
+        x = ng.x
+        y = ng.y
+        r = ng.sqrt(x * x + y * y)
+
+        h = ng.specialcf.mesh_size
+        n = ng.specialcf.normal(self.mesh.dim)
+        n2 = self.index * self.index
+
+        # Extract grid functions and its components
+        E_r = rgt.gridfun('E_r', i=0).components[0]
+        E_l = lft.gridfun('E_l', i=0).components[0]
+        phi_r = rgt.gridfun('phi_r', i=0).components[1]
+        phi_l = lft.gridfun('phi_l', i=0).components[1]
+
+        # Compute coefficients
+        # # Mapped fields
+        JE_r = detj * jacinv * jacinv * E_r
+        JE_l = detj * jacinv * jacinv * E_l
+        # # First order derivatives
+        gradE_r = grad(E_r)
+        gradphi_r = grad(phi_r)
+        gradE_l = grad(E_l)
+        gradphi_l = grad(phi_l)
+        # # PML First order derivatives
+        Jgradphi_r = detj * jacinv * jacinv * gradphi_r
+        Jgradphi_l = detj * jacinv * jacinv * gradphi_l
+        # # Remaining terms
+        curlE_r = (mu * eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2 * curl(E_r)
+        rotcurlE_r_x = curlE_r.Diff(y)
+        rotcurlE_r_y = -curlE_r.Diff(x)
+
+        curlE_l = (mu * eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2 * curl(E_l)
+        rotcurlE_l_x = curlE_l.Diff(y)
+        rotcurlE_l_y = -curlE_l.Diff(x)
+
+        div_E_r = JE_r[0].Diff(x) + JE_r[1].Diff(y)
+        div_E_l = JE_l[0].Diff(x) + JE_l[1].Diff(y)
+
+        # Residual integrals
+        # j is for jump, r is for right, l is for left
+        # t is for transversal, z is for longitudinal
+        r_t_x = h * (rotcurlE_r_x + self.V * JE_r[0] + Jgradphi_r[0] -
+                     lam * JE_r[0])
+        r_t_y = h * (rotcurlE_r_y + self.V * JE_r[1] + Jgradphi_r[1] -
+                     lam * JE_r[1])
+        jr_t = curlE_r - curlE_r.Other()
+
+        r_z = h * (n2 * div_E_r + n2 * detj * phi_r)
+        jr_z = n2 * n * (JE_r - JE_r.Other())
+
+        l_t_x = h * (rotcurlE_l_x + self.V * JE_l[0] + n2 * Jgradphi_l[0] -
+                     np.conj(lam) * JE_l[0])
+        l_t_y = h * (rotcurlE_l_y + self.V * JE_l[1] + n2 * Jgradphi_l[1] -
+                     np.conj(lam) * JE_l[1])
+        jl_t = curlE_l - curlE_l.Other()
+
+        l_z = h * (div_E_l + n2 * detj * phi_l)
+        jl_z = n2 * n * (JE_l - JE_l.Other())
+
+        rho_r = Integrate(
+                InnerProduct(r_t_x, r_t_x) * dx, self.mesh, element_wise=True)
+        rho_r += Integrate(
+                InnerProduct(r_t_y, r_t_y) * dx, self.mesh, element_wise=True)
+        rho_r += Integrate(
+                0.5 * h * InnerProduct(jr_t, jr_t) * dx(element_boundary=True),
+                self.mesh, element_wise=True)
+        rho_r += Integrate(
+                InnerProduct(r_z, r_z) * dx, self.mesh, element_wise=True)
+        rho_r += Integrate(
+                0.5 * h * InnerProduct(jr_z, jr_z) * dx(element_boundary=True),
+                self.mesh, element_wise=True)
+
+        rho_l = Integrate(
+                InnerProduct(l_t_x, l_t_x) * dx, self.mesh, element_wise=True)
+        rho_l += Integrate(
+                InnerProduct(l_t_y, l_t_y) * dx, self.mesh, element_wise=True)
+        rho_l += Integrate(
+                0.5 * h * InnerProduct(jl_t, jl_t) * dx(element_boundary=True),
+                self.mesh, element_wise=True)
+        rho_l += Integrate(
+                InnerProduct(l_z, l_z) * dx, self.mesh, element_wise=True)
+        rho_l += Integrate(
+                0.5 * h * InnerProduct(jl_z, jl_z) * dx(element_boundary=True),
+                self.mesh, element_wise=True)
+
+        # def hess(gf):
+        #     return gf.Operator("hesse")
+
+        # omegaR = Integrate(h * h * InnerProduct(hess(R), hess(R)),
+        #                    self.mesh,
+        #                    element_wise=True)
+        # omegaL = Integrate(h * h * InnerProduct(hess(L), hess(L)),
+        #                    self.mesh,
+        #                    element_wise=True)
+
+        omega_r = Integrate(
+                InnerProduct(gradE_r, gradE_r),
+                self.mesh,
+                element_wise=True)
+        omega_r += Integrate(
+                InnerProduct(gradphi_r, gradphi_r),
+                self.mesh,
+                element_wise=True)
+
+        omega_l = Integrate(
+                InnerProduct(gradE_l, gradE_l),
+                self.mesh,
+                element_wise=True)
+        omega_l += Integrate(
+                InnerProduct(gradphi_l, gradphi_l),
+                self.mesh,
+                element_wise=True)
+
+        ee = np.sqrt(omega_r.real.NumPy() * rho_r.real.NumPy())
+        ee += np.sqrt(omega_l.real.NumPy() * rho_l.real.NumPy())
 
         return ee
 
@@ -1758,6 +1904,185 @@ class ModeSolver:
             print('*** Mode boundary L2 norm > 1e-6!')
 
         return Zsqrs, ndofs, Yr, Yl, beta, P
+
+    def leakyvecmodes_adapt(
+            self,
+            p=None,
+            radius=None,
+            center=None,
+            alpha=None,
+            pmlbegin=None,
+            pmlend=None,
+            maxndofs=200000,  # Stop if ndofs become larger than this
+            visualize=True,  # Pause adaptive loop to see iterate
+            npts=4,
+            nspan=5,
+            seed=1,
+            within=None,
+            rhoinv=0.0,
+            quadrule='circ_trapez_shift',
+            inverse='umfpack',
+            autoupdate=True,
+            verbose=True,
+            **feastkwargs):
+        """
+        Compute vector leaky modes by DWR adaptivity, solving in each
+        iteration a linear eigenproblem obtained using the
+        (frequency-independent) C² smooth PML in which
+            mapped_x = x * (1 + 1j * α * φ(r))
+        where φ is a C² function of the radius r.  The eigenproblem is
+        solved by a non-selfadjoint FEAST algorithm.
+
+        INPUT:
+
+        * radius, center:
+            Capture modes whose non-dimensional resonance value Z²
+            is such that Z*Z is contained within the circular contour
+            centered at "centerZ2" of radius "radiusZ2" in the complex
+            plane.
+        * maxndofs: Stop adaptive loop if number of dofs exceed this.
+        * visualize: If true, then pause adaptivity loop to see each iterate.
+        * Remaining inputs are as documented in leakymode(..).
+
+        OUTPUT:   zsqr, E_r, E_l, phi_r, phi_l, P
+        """
+        # Check validity of inputs
+        if p is None or radius is None or center is None:
+            raise ValueError('Missing input(s)')
+
+        aa, mm, Z = self.smoothvecpmlsystem_compound(
+                p,
+                alpha=alpha,
+                pmlbegin=pmlbegin,
+                pmlend=pmlend,
+                deg=2,
+                autoupdate=autoupdate)
+
+        ndofs = [0]
+        Zsqrs = []
+
+        if visualize:
+            eevis = ng.GridFunction(ng.L2(self.mesh, order=0, autoupdate=True),
+                                    name='estimator',
+                                    autoupdate=True,
+                                    nested=True)
+            ng.Draw(eevis)
+
+        while ndofs[-1] < maxndofs:  # ADAPTIVITY LOOP ------------------
+
+            E_phi_r = NGvecs(Z, nspan)
+            E_phi_l = NGvecs(Z, nspan)
+            E_phi_r.setrandom(seed=seed)
+            E_phi_l.setrandom(seed=seed)
+
+            # 1. SOLVE
+
+            with ng.TaskManager():
+                try:
+                    aa.Assemble()
+                    mm.Assemble()
+                except Exception:
+                    print('*** Trying again with larger heap')
+                    ng.SetHeapSize(int(1e9))
+                    aa.Assemble()
+                    mm.Assemble()
+
+            P = SpectralProjNG(
+                    Z,
+                    aa.mat,
+                    mm.mat,
+                    radius=radius,
+                    center=center,
+                    npts=npts,
+                    within=within,
+                    rhoinv=rhoinv,
+                    checks=False,
+                    quadrule=quadrule,
+                    verbose=verbose,
+                    inverse=inverse)
+
+            zsqr, E_phi_r, history, E_phi_l = P.feast(
+                    E_phi_r, Yl=E_phi_l, hermitian=False, **feastkwargs)
+
+            _, cgd = history[-2], history[-1]
+
+            # Small checks
+            # TODO To replace the prints with exceptions
+            if not cgd:
+                # raise NotImplementedError('What to do when FEAST fails?')
+                print('What to do when FEAST fails?')
+            if E_phi_r.m > 1:
+                # raise NotImplementedError(
+                # 'How to handle multidim eigenspace?')
+                print('How to handle multidim eigenspace?')
+
+            ndofs.append(E_phi_r.fes.ndof)
+            Zsqrs.append(zsqr)
+            print(f'ADAPTIVITY at {ndofs[-1]:7d} ndofs: ' +
+                  f'Zsqr = {Zsqrs[-1][0]:+10.8f}')
+
+            # 2. ESTIMATE
+            # TODO Using one eigenvalue
+            ee = self.eestimator_maxwell_compound(
+                    E_phi_r, E_phi_l, zsqr[0])
+
+            if visualize:
+                eevis.vec.FV().NumPy()[:] = ee
+                ng.Draw(eevis)
+                for i in range(E_phi_r.m):
+                    ng.Draw(E_phi_r.gridfun(
+                        name="r_vecs_compound"+str(i), i=i).components[0])
+                    ng.Draw(E_phi_r.gridfun(
+                        name="r_scas_compound"+str(i), i=i).components[1])
+                    ng.Draw(E_phi_l.gridfun(
+                        name="l_vecs_compound"+str(i), i=i).components[0])
+                    ng.Draw(E_phi_l.gridfun(
+                        name="l_scas_compound"+str(i), i=i).components[1])
+                input('* Pausing for visualization. Enter any key to continue')
+
+            if ndofs[-1] > maxndofs:
+                break
+
+            # 3. MARK
+
+            avr = sum(ee) / self.mesh.ne
+            for elem in self.mesh.Elements():
+                self.mesh.SetRefinementFlag(elem, ee[elem.nr] > 0.75 * avr)
+
+            # 4. REFINE
+
+            self.mesh.Refine()
+            npts = 1
+            nspan = 1
+            center = zsqr[0]
+
+        # Adaptivity loop done ------------------------------------------
+
+        beta = self.betafrom(zsqr)
+        print('Results:\n Z²:', zsqr)
+        print(' beta:', beta)
+        print(' CL dB/m:', 20 * beta.imag / np.log(10))
+
+        # Unpack E_phi_r, E_phi_l into E_r, E_l, phi_r, phi_l
+        X, Y = Z.components
+        E_r = NGvecs(X, E_phi_r.m)
+        E_l = NGvecs(X, E_phi_l.m)
+        phi_r = NGvecs(Y, E_phi_r.m)
+        phi_l = NGvecs(Y, E_phi_l.m)
+
+        for i in range(E_phi_r.m):
+            E_r._mv[i].data = E_phi_r[i].components[0].vec.data
+            E_l._mv[i].data = E_phi_l[i].components[0].vec.data
+            phi_r._mv[i].data = E_phi_r[i].components[1].vec.data
+            phi_l._mv[i].data = E_phi_l[i].components[1].vec.data
+
+        maxbdrnrm_r = np.max(self.boundarynorm(E_r))
+        maxbdrnrm_l = np.max(self.boundarynorm(E_l))
+        maxbdrnrm = max(maxbdrnrm_r, maxbdrnrm_l)
+        if maxbdrnrm > 1e-6:
+            print('*** Mode boundary L2 norm > 1e-6!')
+
+        return Zsqrs, ndofs, E_r, E_l, phi_r, phi_l, beta, P
 
     # ###################################################################
     # GUIDED LP MODES FROM SELFADJOINT EIGENPROBLEM #####################
