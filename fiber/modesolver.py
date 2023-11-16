@@ -1446,6 +1446,111 @@ class ModeSolver:
 
         return zsqr, Y, Yl, beta, P, moreoutputs
 
+    def leakyvecmodes_smooth_compound(
+            self,
+            p=None,
+            radius=None,
+            center=None,
+            pmlbegin=None,
+            pmlend=None,
+            alpha=None,
+            npts=None,
+            nspan=None,
+            seed=1,
+            within=None,
+            rhoinv=0.0,
+            quadrule='circ_trapez_shift',
+            inverse='umfpack',
+            verbose=True,
+            **feastkwargs):
+        """
+        Compute vector leaky modes by solving a linear eigenproblem using
+        the frequency-independent C²  PML map
+           mapped_x = x * (1 + 1j * α * φ(r))
+        where φ is a C² function of the radius r. The coefficients of
+        the mapped eigenproblem are used to make the eigensystem.
+        Using the compound finite element space X*Y and compound
+        bilinear forms.
+
+        Inputs and outputs are as documented in leakymode_auto(...). The
+        only difference is that here you may override the starting and
+        ending radius of PML by providing pmlbegin, pmlend.
+        """
+        print('ModeSolver.leakyvecmodes_smooth_compound called on:\n', self)
+        # Check validity of inputs
+        if p is None or radius is None or center is None:
+            raise ValueError('Missing input(s)')
+        # Get compound system
+        aa, mm, Z = self.smoothvecpmlsystem_compound(
+                p,
+                alpha=alpha,
+                pmlbegin=pmlbegin,
+                pmlend=pmlend,
+                deg=2,
+                autoupdate=True)
+        # Create spectral projector
+        P = SpectralProjNG(
+                Z,
+                aa.mat,
+                mm.mat,
+                radius=radius,
+                center=center,
+                npts=npts,
+                checks=False,
+                within=within,
+                rhoinv=rhoinv,
+                quadrule=quadrule,
+                verbose=verbose,
+                inverse=inverse)
+
+        # Set up NGvecs
+        E_phi_r = NGvecs(Z, nspan)
+        E_phi_l = NGvecs(Z, nspan)
+        E_phi_r.setrandom(seed=seed)
+        E_phi_l.setrandom(seed=seed)
+
+        # Use FEAST
+        zsqr, E_phi_r, history, E_phi_l = P.feast(
+                E_phi_r,
+                Yl=E_phi_l,
+                hermitian=False,
+                **feastkwargs)
+
+        # Compute betas, extract relevant variables
+        ewhist, cgd = history[-2], history[-1]
+        beta = self.betafrom(zsqr)
+
+        print('Results:\n Z²:', zsqr)
+        print(' beta:', beta)
+        print(' CL dB/m:', 20 * beta.imag / np.log(10))
+
+        # Unpack E_phi_r, E_phi_l into E_r, E_l, phi_r, phi_l
+        X, Y = Z.components
+        E_r = NGvecs(X, E_phi_r.m)
+        E_l = NGvecs(X, E_phi_l.m)
+        phi_r = NGvecs(Y, E_phi_r.m)
+        phi_l = NGvecs(Y, E_phi_l.m)
+
+        for i in range(E_phi_r.m):
+            E_r._mv[i].data = E_phi_r[i].components[0].vec.data
+            E_l._mv[i].data = E_phi_l[i].components[0].vec.data
+            phi_r._mv[i].data = E_phi_r[i].components[1].vec.data
+            phi_l._mv[i].data = E_phi_l[i].components[1].vec.data
+
+        maxbdrnrm_r = np.max(self.boundarynorm(E_r))
+        maxbdrnrm_l = np.max(self.boundarynorm(E_l))
+        maxbdrnrm = max(maxbdrnrm_r, maxbdrnrm_l)
+        if maxbdrnrm > 1e-6:
+            print('*** Mode boundary L2 norm > 1e-6!')
+
+        moreoutputs = {
+            'ewshistory': ewhist,
+            'bdrnorm': maxbdrnrm,
+            'converged': cgd,
+        }
+
+        return zsqr, E_r, E_l, phi_r, phi_l, beta, P, moreoutputs
+
     def eestimator_helmholtz(self, rgt, lft, lam, A, B, V):
         """
         DWR error estimator for eigenvalues
