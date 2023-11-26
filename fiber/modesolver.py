@@ -2,14 +2,15 @@
 Definition of ModeSolver class and its methods for computing
 modes of various fibers.
 """
-import ngsolve as ng
+from warnings import warn
+from enum import Enum
 from ngsolve import curl, grad, dx, Conj, Integrate, InnerProduct
-import numpy as np
 from numpy import conj
-import sympy as sm
 from pyeigfeast import NGvecs, SpectralProjNG
 from pyeigfeast import SpectralProjNGR, SpectralProjNGPoly
-from warnings import warn
+import ngsolve as ng
+import numpy as np
+import sympy as sm
 
 
 class ModeSolver:
@@ -722,8 +723,7 @@ class ModeSolver:
         # Create inverse of d
         dinv = d.mat.Inverse(Y.FreeDofs(coupling=True), inverse=inverse)
 
-        # resolvent class definition done -------------------------------
-
+        # resolvent class definition begins here ------------------------------
         class ResolventVectorMode():
             # static resolvent class attributes, same for all class objects
             XY = ng.FESpace([X, Y])
@@ -1216,37 +1216,38 @@ class ModeSolver:
 
         return aa, mm, Z
 
-# TODO
-#    def smoothvecpmlsystem_resolvent(
-#            self,
-#            p,
-#            alpha=1,
-#            pmlbegin=None,
-#            pmlend=None,
-#            deg=2,
-#            inverse='umfpack',
-#            autoupdate=True):
-#        """
-#        Make the matrices needed for formulating the vector
-#        leaky mode eigensystem with frequency-independent
-#        C² PML map mapped_x = x * (1 + 1j * α * φ(r)) where
-#        φ is a C² function of the radius r.
-#        Using the resolvent T = A - C * D⁻¹ * B.
-#        INPUTS:
-#        * p: polynomial degree of finite elements
-#        * alpha: PML strength
-#        * pmlbegin: radius where PML begins
-#        * pmlend: radius where PML ends
-#        * deg: degree of the PML polynomial
-#        * inverse: inverse method to use in spectral projector
-#        * autoupdate: whether to use autoupdate in NGSolve
-#        OUTPUTS:
-#        * ResolventVectorMode: resolvent
-#        * m: bilinear form for the LHS
-#        * a, b, c, d: bilinear forms for the block matrices for the RHS
-#        * dinv: inverse of d
-#        """
-#        print('ModeSolver.smoothvecpmlsystem_resolvent called...\n')
+    def smoothvecpmlsystem_resolvent(
+            self,
+            p,
+            alpha=1,
+            pmlbegin=None,
+            pmlend=None,
+            deg=2,
+            inverse='umfpack',
+            autoupdate=True):
+        """
+        Make the matrices needed for formulating the vector
+        leaky mode eigensystem with frequency-independent
+        C² PML map mapped_x = x * (1 + 1j * α * φ(r)) where
+        φ is a C² function of the radius r.
+        Using the resolvent T = A - C * D⁻¹ * B.
+        INPUTS:
+        * p: polynomial degree of finite elements
+        * alpha: PML strength
+        * pmlbegin: radius where PML begins
+        * pmlend: radius where PML ends
+        * deg: degree of the PML polynomial
+        * inverse: inverse method to use in spectral projector
+        * autoupdate: whether to use autoupdate in NGSolve
+        OUTPUTS:
+        * ResolventVectorMode: resolvent
+        * m: bilinear form for the LHS
+        * a, b, c, d: bilinear forms for the block matrices for the RHS
+        * dinv: inverse of d
+        """
+        print('ModeSolver.smoothvecpmlsystem_resolvent called...\n')
+        # TODO: This is not working yet.
+        raise NotImplementedError('This is not working yet.')
 #        if self.ngspmlset:
 #            raise RuntimeError('NGSolve pml set. Cannot combine with smooth.')
 #        if abs(alpha.imag) > 0 or alpha < 0:
@@ -2031,13 +2032,13 @@ class ModeSolver:
                 ng.Draw(eevis)
                 for i in range(E_phi_r.m):
                     ng.Draw(E_phi_r.gridfun(
-                        name="r_vecs_compound"+str(i), i=i).components[0])
+                        name="E_r"+str(i), i=i).components[0])
                     ng.Draw(E_phi_r.gridfun(
-                        name="r_scas_compound"+str(i), i=i).components[1])
+                        name="phi_r"+str(i), i=i).components[1])
                     ng.Draw(E_phi_l.gridfun(
-                        name="l_vecs_compound"+str(i), i=i).components[0])
+                        name="E_l"+str(i), i=i).components[0])
                     ng.Draw(E_phi_l.gridfun(
-                        name="l_scas_compound"+str(i), i=i).components[1])
+                        name="phi_l"+str(i), i=i).components[1])
                 input('* Pausing for visualization. Enter any key to continue')
 
             if ndofs[-1] > maxndofs:
@@ -2045,9 +2046,13 @@ class ModeSolver:
 
             # 3. MARK
 
-            avr = sum(ee) / self.mesh.ne
-            for elem in self.mesh.Elements():
-                self.mesh.SetRefinementFlag(elem, ee[elem.nr] > 0.75 * avr)
+            # avr = sum(ee) / self.mesh.ne
+            # for elem in self.mesh.Elements():
+            #     self.mesh.SetRefinementFlag(elem, ee[elem.nr] > 0.75 * avr)
+            # TODO Maybe make ModeSolver class a subclass of AdaptivityStrategy
+            # and use Strategy.DEFAULT
+            strat = AdaptivityStrategy(Strategy.MAX)
+            strat.apply(self.mesh, ee)
 
             # 4. REFINE
 
@@ -2820,3 +2825,127 @@ class ModeSolver:
         print(' CL dB/m:', CLs)
 
         return Nu_sqrs, E, phi, R, CLs
+
+# TODO WIP
+##############################################################################
+# Adaptivity strategies ######################################################
+
+
+class Strategy(Enum):
+    """
+    Enumerators for different adaptivity strategies.
+    """
+    DEFAULT = 0
+    MAX = 1
+    AVG = 2
+    FIXED_RATES = 3
+    EXTRAPOLATION = 4
+
+
+class AdaptivityStrategy:
+    """
+    Base class for adaptivity strategies.
+    """
+    def __init__(self, type_estimator):
+        self.type_estimator = type_estimator
+        self.old_estimator = None
+
+    def __repr__(self):
+        str_out = f'AdaptivityStrategy: {self.__class__.__name__}'
+        # str_out = str_out + f'\n\tmesh: {self.mesh}'
+        # str_out = str_out + f'\n\tnumber of elements: {self.ne}'
+        # str_out = str_out + f'\n\testimator: {type(self.estimator)}'
+        str_out = str_out + f'\n\ttype_estimator: {self.type_estimator}'
+        str_out = str_out + f'\n\told_estimator: {self.old_estimator}'
+        return str_out
+
+    def max(self, mesh, estimator, weight=0.9):
+        """
+        Take the maximum of the error estimators.
+        INPUTS:
+        * mesh: NGSolve mesh
+        * estimator: NumPy array of error estimators on mesh, with length
+            equal to the number of elements in the mesh.
+        * weight: Weight to multiply the maximum error estimator by.
+        """
+        assert len(estimator) == mesh.ne, f'Est. length {len(estimator)}' \
+            + f' does not match mesh.ne {mesh.ne}.'
+        assert 0.0 < weight < 1.0, 'Weight must be between 0 and 1.'
+        threshold = max(estimator)*weight
+        for element in mesh.Elements():
+            mesh.SetRefinementFlag(element, estimator[element.nr] > threshold)
+
+    def avg(self, mesh, estimator, weight=1.0, shift=0.0):
+        """
+        Take the average of the error estimators.
+        We can implemen an skewed average by using a weight and a shift.
+        The threshold is defined by
+            threshold = (sum(estimator) / len(estimator) + shift) * weight
+        INPUTS:
+        * mesh: NGSolve mesh
+        * estimator: NumPy array of error estimators on mesh, with length
+            equal to the number of elements in the mesh.
+        * weight: Weight to multiply the average error estimator by.
+        * shift: Shift to add to the average error estimator.
+        """
+        assert len(estimator) == mesh.ne, f'Est. length {len(estimator)}' \
+            + f' does not match mesh.ne {mesh.ne}.'
+        assert 0.0 < weight <= 1.0, 'Weight must be between 0 and 1.'
+        assert 0.0 <= shift, 'Shift must be non-negative.'
+        threshold = (sum(estimator) / len(estimator) + shift) * weight
+        for element in mesh.Elements():
+            mesh.SetRefinementFlag(element, estimator[element.nr] > threshold)
+
+    def fixed_rates(self, mesh, estimator, rate=0.5):
+        """
+        Use fixed rates to determine the refinement criteria.
+        (Cf. Heuveline and Rannacher, 2001)
+        The goal is to either increase the refinements by a fixed rate
+        or to reduce the error estimators by a fixed rate.
+        """
+        # raise NotImplementedError('Fixed rates not implemented yet.')
+        assert len(estimator) == mesh.ne, f'Est. length {len(estimator)}' \
+            + f' does not match mesh.ne {mesh.ne}.'
+        assert 0.0 < rate < 1.0, 'Rate must be between 0 and 1.'
+        threshold = sum(estimator)*rate
+        total = 0.0
+        while total < threshold:
+            index_max = np.argmax(estimator)
+            max_elem = list(iter(mesh.Elements()))[index_max]
+            mesh.SetRefinementFlag(max_elem, True)
+            total += estimator[index_max]
+            if total >= threshold:
+                break
+            # TODO: This is not the best way to do this.
+            estimator[index_max] = 0.0
+
+    def extrapolation(self, mesh, estimator):
+        """
+        Use extrapolation to determine the refinement criteria.
+        (Cf. Verfürth, 1996)
+        """
+        raise NotImplementedError('Extrapolation not implemented yet.')
+        # assert self.old_estimator is not None, 'Old estimator not set.'
+
+    def apply(self, mesh, estimator, **kwargs):
+        """
+        Apply the adaptivity strategy to the mesh.
+        INPUTS:
+        * mesh: NGSolve mesh
+        * estimator: NumPy array of error estimators on mesh, with length
+            equal to the number of elements in the mesh.
+        * kwargs: Keyword arguments to pass to the strategy.
+        """
+        assert self.type_estimator is not Strategy.DEFAULT, \
+            'Must specify type of estimator to use.'
+        print(f'Applying {self.type_estimator} adaptivity strategy.')
+        if self.type_estimator is Strategy.MAX:
+            self.max(mesh, estimator, **kwargs)
+        elif self.type_estimator is Strategy.AVG:
+            self.avg(mesh, estimator, **kwargs)
+        elif self.type_estimator is Strategy.FIXED_RATES:
+            self.fixed_rates(mesh, estimator, **kwargs)
+        elif self.type_estimator is Strategy.EXTRAPOLATION:
+            self.extrapolation(mesh, estimator, **kwargs)
+        else:
+            raise ValueError('Unknown adaptivity strategy.')
