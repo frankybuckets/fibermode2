@@ -24,7 +24,7 @@ class Fiber:
     """ A class of step-index cylindrical fibers """
 
     def __init__(self, case=None,
-                 L=None, rcore=None, rclad=None, nclad=None, ncore=None,
+                 L=1, rcore=None, rclad=None, nclad=None, ncore=None,
                  ks=None, extra_wavelens=None):
         """
         A step-index fiber object F can be made using a preprogrammed case
@@ -41,7 +41,7 @@ class Fiber:
         """
 
         if case is None:
-            self.L = L             # total fiber length
+            self.L = L             # total fiber length, irrelevant for modes
             self.rcore = rcore     # core cross-section radius
             self.rclad = rclad     # cladding cross-section radius
             self.nclad = nclad     # cladding refractive index
