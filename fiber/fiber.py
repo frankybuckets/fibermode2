@@ -20,12 +20,17 @@ import sympy as sm
 
 
 class Fiber:
-
     """ A class of step-index cylindrical fibers """
 
-    def __init__(self, case=None,
-                 L=1, rcore=None, rclad=None, nclad=None, ncore=None,
-                 ks=None, extra_wavelens=None):
+    def __init__(self,
+                 case=None,
+                 L=1,
+                 rcore=None,
+                 rclad=None,
+                 nclad=None,
+                 ncore=None,
+                 ks=None,
+                 extra_wavelens=None):
         """
         A step-index fiber object F can be made using a preprogrammed case
         name (such as 'Nufern_Yb', 'liekki_1', 'corning_smf_28_1', etc), e.g.,
@@ -41,15 +46,15 @@ class Fiber:
         """
 
         if case is None:
-            self.L = L             # total fiber length, irrelevant for modes
-            self.rcore = rcore     # core cross-section radius
-            self.rclad = rclad     # cladding cross-section radius
-            self.nclad = nclad     # cladding refractive index
-            self.ncore = ncore     # core refractive index
-            self.ks = ks           # signal wavenumber
+            self.L = L  # total fiber length, irrelevant for modes
+            self.rcore = rcore  # core cross-section radius
+            self.rclad = rclad  # cladding cross-section radius
+            self.nclad = nclad  # cladding refractive index
+            self.ncore = ncore  # core refractive index
+            self.ks = ks  # signal wavenumber
             if extra_wavelens:
                 # wavenumbers in a list if considering tone/ase wavelengths
-                self.ke = [2*pi/lam for lam in extra_wavelens]
+                self.ke = [2 * pi / lam for lam in extra_wavelens]
         else:
             self.set(case)
 
@@ -90,9 +95,11 @@ class Fiber:
         V = self.fiberV() if v is None else v
         a = self.rcore
         ks = V / (self.numerical_aperture() * a)
-        kappas = [x/a for x in X]
-        betas = [sqrt(self.ncore*self.ncore*ks*ks - kappa*kappa)
-                 for kappa in kappas]
+        kappas = [x / a for x in X]
+        betas = [
+            sqrt(self.ncore * self.ncore * ks * ks - kappa * kappa)
+            for kappa in kappas
+        ]
         return betas
 
     def ZtoBeta(self, Z, v=None):
@@ -103,7 +110,7 @@ class Fiber:
         V = self.fiberV() if v is None else v
         a = self.rcore
         ks = V / (self.numerical_aperture() * a)
-        return np.sqrt((ks*self.nclad)**2-(Z/a)**2)
+        return np.sqrt((ks * self.nclad)**2 - (Z / a)**2)
 
     def visualize_mode(self, ll, m):
         """
@@ -115,37 +122,41 @@ class Fiber:
 
         X = self.propagation_constants(ll)
         if len(X) < m:
-            raise ValueError('For ll=%d, only %d fiber modes computed'
-                             % (ll, len(X)))
+            raise ValueError('For ll=%d, only %d fiber modes computed' %
+                             (ll, len(X)))
         kappa = X[m] / self.rcore
         k0 = self.ks
-        beta = sqrt(self.ncore*self.ncore*k0*k0 - kappa*kappa)
-        gamma = sqrt(beta*beta - self.nclad*self.nclad*k0*k0)
-        Jkrcr = jv(ll, kappa*self.rcore)
-        Kgrcr = kv(ll, gamma*self.rcore)
+        beta = sqrt(self.ncore * self.ncore * k0 * k0 - kappa * kappa)
+        gamma = sqrt(beta * beta - self.nclad * self.nclad * k0 * k0)
+        Jkrcr = jv(ll, kappa * self.rcore)
+        Kgrcr = kv(ll, gamma * self.rcore)
 
         def mode(x, y):
-            r = sqrt(x*x + y*y)
+            r = sqrt(x * x + y * y)
             theta = atan2(y, x)
             if r < self.rcore:
-                u = Kgrcr * jv(ll, kappa*r)
+                u = Kgrcr * jv(ll, kappa * r)
             else:
-                u = Jkrcr * kv(ll, gamma*r)
+                u = Jkrcr * kv(ll, gamma * r)
 
-            u = u*np.cos(ll*theta)
+            u = u * np.cos(ll * theta)
             return u
 
         fig = plt.figure()
         ax = Axes3D(fig)
         lim = self.rcore * 1.5
-        X = np.arange(-lim, lim, 2*lim/100)
-        Y = np.arange(-lim, lim, 2*lim/100)
+        X = np.arange(-lim, lim, 2 * lim / 100)
+        Y = np.arange(-lim, lim, 2 * lim / 100)
         X, Y = np.meshgrid(X, Y)
         vmode = np.vectorize(mode)
         Z = vmode(X, Y)
 
-        ax.plot_surface(X, Y, Z, cmap=cm.coolwarm,
-                        linewidth=0, antialiased=False)
+        ax.plot_surface(X,
+                        Y,
+                        Z,
+                        cmap=cm.coolwarm,
+                        linewidth=0,
+                        antialiased=False)
         plt.show(block=False)
 
         return mode
@@ -154,7 +165,7 @@ class Fiber:
         """
         Given mode index "ll", attempt to find all propagation constants by
         bisection or other nonlinear root finders. (Circularly
-        symmetric modes are obtained with l=0.  Modes with higher l
+        symmetric modes are obtained with ll=0.  Modes with higher ll
         have angular variations.)
         """
         if v is None:
@@ -175,7 +186,7 @@ class Fiber:
             # engineer X so that this beta is produced by later formulae.
 
             jz = jn_zeros(ll, maxnroots)
-            jz = jz[np.where(jz < ks*self.rclad)[0]]
+            jz = jz[np.where(jz < ks * self.rclad)[0]]
             if len(jz) == 0:
                 print('There are no propagating modes for wavenumber ks!')
                 print('   ks = ', ks)
@@ -197,13 +208,12 @@ class Fiber:
         jz = np.insert(jz, 0, 0)
         jz = np.append(jz, V)
         X = []
-        print('\nSEARCHING FOR ROOTS in [0,V] (V = %7g) ' % (V) +
-              '-'*29)
+        print('\nSEARCHING FOR ROOTS in [0,V] (V = %7g) ' % (V) + '-' * 29)
 
         def root_check(x):  # Subfunction used for checking if x is a root
             if abs(f(x)) < 1.e-9 and abs(g(x)) < 1.e-9:
-                print('  Root x=%g found with f(x)=%g and g(x)=%g'
-                      % (x, f(x), g(x)))
+                print('  Root x=%g found with f(x)=%g and g(x)=%g' %
+                      (x, f(x), g(x)))
                 return True
             else:
                 return False
@@ -212,9 +222,9 @@ class Fiber:
 
             # Try bisection based on intervals between bessel roots
 
-            a = jz[i-1]+1.e-15
-            b = jz[i]-1.e-15
-            if np.sign(g(a)*g(b)) < 0:
+            a = jz[i - 1] + 1.e-15
+            b = jz[i] - 1.e-15
+            if np.sign(g(a) * g(b)) < 0:
                 print(' SEARCH %1d: Sign change in [%g, %g]' % (i, a, b))
                 x = bisect(g, a, b)
                 if root_check(x):
@@ -239,23 +249,24 @@ class Fiber:
 
             else:
 
-                x0 = 0.5*(a+b)
-                print('  Trying nonlinear solve on g with initial guess %g'
-                      % x0)
+                x0 = 0.5 * (a + b)
+                print('  Trying nonlinear solve on g with initial guess %g' %
+                      x0)
                 x = fsolve(g, x0, xtol=1.e-10)[0]
                 if root_check(x):
                     X += [x]
                 else:
                     print('  Nonlinear solve on g did not find a root.')
-                    print('  Trying nonlinear solve on f with initial guess %g'
-                          % x0)
+                    print(
+                        '  Trying nonlinear solve on f with initial guess %g' %
+                        x0)
                     x = fsolve(f, x0, xtol=1.e-10)[0]
                     if root_check(x):
                         X += [x]
                     else:
                         print('  Nonlinear solve on f did not find a root.')
-                        print('  Giving up on finding roots in [%g, %g].'
-                              % (a, b))
+                        print('  Giving up on finding roots in [%g, %g].' %
+                              (a, b))
 
         print(' ROOTS FOUND: ', X)
         return X
@@ -275,23 +286,23 @@ class Fiber:
         fig.suptitle(r'Mode index $ll=$%1d:' % ll +
                      r'$\beta$ found by roots of $f$ or $g$',
                      fontsize=14)
-        xx = np.arange(0, V, V/500.0)
+        xx = np.arange(0, V, V / 500.0)
 
         axes[0, 0].plot(xx, [f(x) for x in xx])
         axes[0, 0].grid(True)
-        axes[0, 0].plot(xx, [0]*len(xx), 'b--')
+        axes[0, 0].plot(xx, [0] * len(xx), 'b--')
         axes[0, 0].set_ylim(-V, V)
         axes[0, 0].set_title('$f = f_1 - f_2$')
 
         axes[1, 0].plot(xx, [f1(x) for x in xx])
         axes[1, 0].grid(True)
         axes[1, 0].plot(xx, [f2(x) for x in xx])
-        axes[1, 0].set_ylim(-2*V, 2*V)
+        axes[1, 0].set_ylim(-2 * V, 2 * V)
         axes[1, 0].legend(['$f_1$', '$f_2$'])
 
         axes[0, 1].plot(xx, [g(x) for x in xx])
         axes[0, 1].grid(True)
-        axes[0, 1].plot(xx, [0]*len(xx), 'b--')
+        axes[0, 1].plot(xx, [0] * len(xx), 'b--')
         axes[0, 1].set_ylim(-V, V)
         axes[0, 1].set_title('$g = g_1 - g_2$')
 
@@ -327,18 +338,18 @@ class Fiber:
 
         def f1(X):
             JlX = jl(X)
-            return J(ll+1, X) * X / JlX
+            return J(ll + 1, X) * X / JlX
 
         def y(X):
             if X > V:
                 Y = 0
             else:
-                Y = sqrt(V*V - X*X)
+                Y = sqrt(V * V - X * X)
             return Y
 
         def f2(X):
             Y = y(X)
-            return K(ll+1, Y) * Y / K(ll, Y)
+            return K(ll + 1, Y) * Y / K(ll, Y)
 
         def f(X):  # Propagation constant is a root of f(X)
             return f1(X) - f2(X)
@@ -346,10 +357,10 @@ class Fiber:
         def g1(X):
             JlX = jl(X)
             Y = y(X)
-            return J(ll+1, X) * K(ll, Y) / (JlX * K(ll+1, Y))
+            return J(ll + 1, X) * K(ll, Y) / (JlX * K(ll + 1, Y))
 
         def g2(X):
-            return y(X)/max(X, 1e-15)
+            return y(X) / max(X, 1e-15)
 
         def g(X):  # Propagation constant is also a root of g(X)
             return g1(X) - g2(X)
@@ -365,7 +376,7 @@ class Fiber:
         """
         z, nu = sm.symbols('z nu')
         V = self.fiberV()
-        x = sm.sqrt(V*V + z*z)
+        x = sm.sqrt(V * V + z * z)
         g = z*sm.besselj(ll, x)*sm.hankel1(ll+1, z) - \
             x*sm.besselj(ll+1, x)*sm.hankel1(ll, z)
         dg = g.diff(z).expand()
@@ -392,25 +403,26 @@ class Fiber:
         """
 
         if xran is None:
-            xran = (0.01, 3*self.fiberV())
+            xran = (0.01, 3 * self.fiberV())
         if yran is None:
             yran = (-2, 0)
-        print('Searching region (%g, %g) x (%g, %g) in complex plane'
-              % (xran[0], xran[1], yran[0], yran[1]))
+        print('Searching region (%g, %g) x (%g, %g) in complex plane' %
+              (xran[0], xran[1], yran[0], yran[1]))
         gstr, dgstr = self.VJHfuns(ll)
         try:
             rect = Rectangle(xran, yran)
             r = rect.roots(lambda Z: eval(gstr),
                            lambda Z: eval(dgstr),
-                           rootErrTol=1.e-13, newtonStepTol=1.e-15)
+                           rootErrTol=1.e-13,
+                           newtonStepTol=1.e-15)
         except RuntimeError as err:
             print('Root search failed:\n', err.__str__())
-            dx = xran[1]-xran[0]
-            dy = yran[1]-yran[0]
+            dx = xran[1] - xran[0]
+            dy = yran[1] - yran[0]
             xran2 = (xran[0] + 0.01 * dx, xran[1] - 0.01 * dx)
             yran2 = (yran[0] + 0.01 * dy, yran[1] - 0.01 * dy)
-            print('Retrying in adjusted search region (%g, %g) x (%g, %g)'
-                  % (xran2[0], xran2[1], yran2[0], yran2[1]))
+            print('Retrying in adjusted search region (%g, %g) x (%g, %g)' %
+                  (xran2[0], xran2[1], yran2[0], yran2[1]))
             r = self.leaky_propagation_constants(ll, xran=xran2, yran=yran2)
         return r.roots
 
@@ -424,26 +436,26 @@ class Fiber:
         """
 
         V = self.fiberV()
-        X = np.sqrt(Z*Z+V*V)
+        X = np.sqrt(Z * Z + V * V)
         a = self.rcore
-        alpha0 = Z/a
-        alpha1 = X/a
+        alpha0 = Z / a
+        alpha1 = X / a
         B = jv(ll, X)
         A = hankel1(ll, Z)
 
         def modefun(x, y):
-            r = np.sqrt(x*x + y*y)
+            r = np.sqrt(x * x + y * y)
             theta = atan2(y, x)
             if r < a:
-                u = A * jv(ll, alpha1*r)
+                u = A * jv(ll, alpha1 * r)
             else:
-                u = B * hankel1(ll, alpha0*r)
-            u = u*np.cos(ll*theta)
+                u = B * hankel1(ll, alpha0 * r)
+            u = u * np.cos(ll * theta)
             return u
 
         lim = a * corelim
-        X = np.arange(-lim, lim, 2*lim/300)
-        Y = np.arange(-lim, lim, 2*lim/300)
+        X = np.arange(-lim, lim, 2 * lim / 300)
+        Y = np.arange(-lim, lim, 2 * lim / 300)
         X, Y = np.meshgrid(X, Y)
         vmode = np.vectorize(modefun)
         F = vmode(X, Y)
@@ -458,8 +470,13 @@ class Fiber:
 
         return X, Y, F, modefun, ax
 
-    def vec_propagation_constants(self, m, delta=0.01, nrefine=10000,
-                                  tol=1e-9, maxnroots=50, m0name=None):
+    def vec_propagation_constants(self,
+                                  m,
+                                  delta=0.01,
+                                  nrefine=10000,
+                                  tol=1e-9,
+                                  maxnroots=50,
+                                  m0name=None):
         """
         Given mode angular variation index "m", attempt to find all
         propagation constants of vector modes (with m=0 corresponding
@@ -493,7 +510,7 @@ class Fiber:
         n1 = self.ncore
         n0 = self.nclad
         a = self.rcore
-        kn0a2 = (k*n0*a)**2
+        kn0a2 = (k * n0 * a)**2
 
         if abs(self.numerical_aperture()) < 1.e-15:
             raise NotImplementedError()
@@ -510,7 +527,7 @@ class Fiber:
                 if m0name == 'TE':
                     fY = dJ * KY + JX * dK
                 elif m0name == 'TM':
-                    fY = (n1/n0)**2 * dJ * KY + JX * dK
+                    fY = (n1 / n0)**2 * dJ * KY + JX * dK
                 else:
                     raise ValueError('m=0 case should specify m0name!')
                 return fY
@@ -532,27 +549,28 @@ class Fiber:
         for i in range(1, len(jz)):
 
             # Try bisection on "nrefine" intervals between bessel roots
-            a0 = jy[i-1]+delta
-            b0 = jy[i]-delta
+            a0 = jy[i - 1] + delta
+            b0 = jy[i] - delta
             aa = np.linspace(a0, b0, num=nrefine)
-            print('\nSEARCHING FOR ROOTS Y in [%6g, %6g]' % (a0, b0) + '-'*29)
+            print('\nSEARCHING FOR ROOTS Y in [%6g, %6g]' % (a0, b0) +
+                  '-' * 29)
             ys = []
-            for ii in range(nrefine-1):
+            for ii in range(nrefine - 1):
                 roots = []
                 a = aa[ii]
-                b = aa[ii+1]
+                b = aa[ii + 1]
                 if abs(f(a)) < tol:
                     roots += [a]
                 elif abs(f(b)) < tol:
                     roots += [b]
-                elif np.sign(f(a)*f(b)) < 0:
+                elif np.sign(f(a) * f(b)) < 0:
                     print(' SEARCH %1d: Sign change in [%g, %g]' % (ii, a, b))
                     y = bisect(f, a, b, xtol=tol, maxiter=10000)
                     if abs(f(y)) < tol:
                         print('  Bisection succeeded.')
                         roots += [y]
                     else:
-                        y = fsolve(f, (a+b)/2, xtol=tol)[0]
+                        y = fsolve(f, (a + b) / 2, xtol=tol)[0]
                         if abs(f(y)) < tol:
                             print('  Nonlinear solve succeeded.')
                             roots += [y]
@@ -562,8 +580,9 @@ class Fiber:
                     ys += [(roots, a, b)]
 
             if len(ys) == 0:
-                y = fsolve(f, (a0+b0)/2, xtol=tol)[0]
-                if abs(f(y)) < tol and abs(y-b0) > delta and abs(y-a0) > delta:
+                y = fsolve(f, (a0 + b0) / 2, xtol=tol)[0]
+                if abs(f(y)) < tol and abs(y - b0) > delta and abs(y -
+                                                                   a0) > delta:
                     print('  Nonlinear solve b/w Bessel roots succeeded.')
                     ys += [(y, a0, b0)]
                 else:
@@ -572,16 +591,16 @@ class Fiber:
             Y += ys
 
         # Report
-        print('-'*64)
+        print('-' * 64)
         if len(Y):
-            print('ROOTS FOR m =', m,  ' FOUND:')
+            print('ROOTS FOR m =', m, ' FOUND:')
             for yy in Y:
                 y, a, b = yy
                 for yroot in y:
                     print('  %12.10f in [%8.6f, %8.6f]' % (yroot, a, b))
         else:
             print('NO ROOTS FOUND FOR m =', m)
-        print('-'*64)
+        print('-' * 64)
 
         return Y
 
@@ -597,7 +616,7 @@ class Fiber:
         n0 = self.nclad
         a = self.rcore
         k = self.ks
-        kn0a2 = (k*n0*a)**2
+        kn0a2 = (k * n0 * a)**2
         V = self.fiberV()
 
         J = sm.besselj(m, x)
@@ -607,10 +626,10 @@ class Fiber:
         KY = K * y
         dK = K.diff(y).factor()
 
-        fY = kn0a2 * ((x * y)**2 * ((n1/n0)**2 * dJ * KY + JX * dK) *
+        fY = kn0a2 * ((x * y)**2 * ((n1 / n0)**2 * dJ * KY + JX * dK) *
                       (dJ * KY + JX * dK))
         if m > 0:
-            fY -= (m**2 * V**4) * ((y**2 + kn0a2) * (J*K)**2)
+            fY -= (m**2 * V**4) * ((y**2 + kn0a2) * (J * K)**2)
 
         fY = fY.subs(x, sm.sqrt(V**2 - y**2))
         dfY = fY.diff(y).factor()
@@ -640,11 +659,13 @@ class Fiber:
         for yy in YY:
             y, a, b = yy
             for ctr in y:
-                rad = max(ctr-a, b-ctr, 1e-6)
+                rad = max(ctr - a, b - ctr, 1e-6)
                 print(' Checking root ', ctr, ' about radius', rad)
                 rec = Circle(ctr, rad)
-                r = rec.roots(lambda Y: eval(g), lambda Y: eval(dg),
-                              rootErrTol=1.e-10, newtonStepTol=1.e-14)
+                r = rec.roots(lambda Y: eval(g),
+                              lambda Y: eval(dg),
+                              rootErrTol=1.e-10,
+                              newtonStepTol=1.e-14)
                 roots += [r]
         return roots
 
@@ -687,39 +708,43 @@ class Fiber:
                 / (m * beta * J * K * V**2)
             phase = sm.exp(sm.I * m * t)
 
-            Ezcore = sm.besselj(m, X*r/a) * phase
-            Hztcore = B1t * sm.besselj(m, X*r/a) * phase
-            Ercore = -sm.I*(a/X)**2 * (beta*Ezcore.diff(r) + Hztcore.diff(t)/r)
-            Etcore = -sm.I*(a/X)**2 * (beta*Ezcore.diff(t)/r - Hztcore.diff(r))
+            Ezcore = sm.besselj(m, X * r / a) * phase
+            Hztcore = B1t * sm.besselj(m, X * r / a) * phase
+            Ercore = -sm.I * (a / X)**2 * (beta * Ezcore.diff(r) +
+                                           Hztcore.diff(t) / r)
+            Etcore = -sm.I * (a / X)**2 * (beta * Ezcore.diff(t) / r -
+                                           Hztcore.diff(r))
 
-            Ezclad = (J/K) * sm.besselk(m, Y*r/a) * phase
-            Hztclad = B1t * (J/K) * sm.besselk(m, Y*r/a) * phase
-            Erclad = sm.I*(a/Y)**2 * (beta*Ezclad.diff(r) + Hztclad.diff(t)/r)
-            Etclad = sm.I*(a/Y)**2 * (beta*Ezclad.diff(t)/r - Hztclad.diff(r))
+            Ezclad = (J / K) * sm.besselk(m, Y * r / a) * phase
+            Hztclad = B1t * (J / K) * sm.besselk(m, Y * r / a) * phase
+            Erclad = sm.I * (a / Y)**2 * (beta * Ezclad.diff(r) +
+                                          Hztclad.diff(t) / r)
+            Etclad = sm.I * (a / Y)**2 * (beta * Ezclad.diff(t) / r -
+                                          Hztclad.diff(r))
 
         elif m == 0 and m0name == 'TE':
 
             Ezcore = 0
-            Hztcore = sm.besselj(m, X*r/a)
-            Ercore = -sm.I*(a/X)**2 * Hztcore.diff(t)/r
-            Etcore = sm.I*(a/X)**2 * Hztcore.diff(r)
+            Hztcore = sm.besselj(m, X * r / a)
+            Ercore = -sm.I * (a / X)**2 * Hztcore.diff(t) / r
+            Etcore = sm.I * (a / X)**2 * Hztcore.diff(r)
 
             Ezclad = 0
-            Hztclad = (J/K) * sm.besselk(m, Y*r/a)
-            Erclad = sm.I*(a/Y)**2 * Hztclad.diff(t)/r
-            Etclad = -sm.I*(a/Y)**2 * Hztclad.diff(r)
+            Hztclad = (J / K) * sm.besselk(m, Y * r / a)
+            Erclad = sm.I * (a / Y)**2 * Hztclad.diff(t) / r
+            Etclad = -sm.I * (a / Y)**2 * Hztclad.diff(r)
 
         elif m == 0 and m0name == 'TM':
 
-            Ezcore = sm.besselj(m, X*r/a)
+            Ezcore = sm.besselj(m, X * r / a)
             Hztcore = 0 * sm.I
-            Ercore = -sm.I*(a/X)**2 * beta*Ezcore.diff(r)
-            Etcore = -sm.I*(a/X)**2 * beta*Ezcore.diff(t)/r
+            Ercore = -sm.I * (a / X)**2 * beta * Ezcore.diff(r)
+            Etcore = -sm.I * (a / X)**2 * beta * Ezcore.diff(t) / r
 
-            Ezclad = (J/K) * sm.besselk(m, Y*r/a)
+            Ezclad = (J / K) * sm.besselk(m, Y * r / a)
             Hztclad = 0 * sm.I
-            Erclad = sm.I*(a/Y)**2 * beta*Ezclad.diff(r)
-            Etclad = sm.I*(a/Y)**2 * beta*Ezclad.diff(t)/r
+            Erclad = sm.I * (a / Y)**2 * beta * Ezclad.diff(r)
+            Etclad = sm.I * (a / Y)**2 * beta * Ezclad.diff(t) / r
 
         else:
             raise ValueError('Improper input parameters')
@@ -732,8 +757,13 @@ class Fiber:
 
         return Ecore, Eclad
 
-    def visualize_vec_Emode(self, m, Y, m0name=None, real=False,
-                            num=200, block=True):
+    def visualize_vec_Emode(self,
+                            m,
+                            Y,
+                            m0name=None,
+                            real=False,
+                            num=200,
+                            block=True):
         """
         An inefficient quick hack for visualizing hybrid electric modes.
 
@@ -750,8 +780,8 @@ class Fiber:
 
         Ecore, Eclad = self.vec_symbolic_Emode(m, Y, m0name=m0name)
         a = self.rcore
-        x = np.linspace(-2*a, 2*a, num=num)
-        y = np.linspace(-2*a, 2*a, num=num)
+        x = np.linspace(-2 * a, 2 * a, num=num)
+        y = np.linspace(-2 * a, 2 * a, num=num)
         x, y = np.meshgrid(x, y)
         r = np.sqrt(x**2 + y**2)
         t = np.arctan2(y, x)
@@ -767,7 +797,7 @@ class Fiber:
         fig = plt.figure()
         ax = fig.add_subplot()
         ax.axis('equal')
-        ax.set(xlim=(-1.5*a, 1.5*a), ylim=(-1.5*a, 1.5*a))
+        ax.set(xlim=(-1.5 * a, 1.5 * a), ylim=(-1.5 * a, 1.5 * a))
         if real:
             rep = 'real'
             U = Ex.real
@@ -791,21 +821,27 @@ class Fiber:
         cbar = fig.colorbar(cs, location='right')
         cbar.ax.set_ylabel(ctit)
         s0 = np.linspace(-a, a, num=20)
-        sl = np.linspace(-1.5*a, -a, num=3, endpoint=False)
+        sl = np.linspace(-1.5 * a, -a, num=3, endpoint=False)
         s = np.concatenate((sl, s0, -sl))
         sx, sy = np.meshgrid(s, s)
-        xs = sx.reshape(1, sx.shape[0]*sx.shape[1])
-        ys = sy.reshape(1, sy.shape[0]*sy.shape[1])
+        xs = sx.reshape(1, sx.shape[0] * sx.shape[1])
+        ys = sy.reshape(1, sy.shape[0] * sy.shape[1])
         seeds = np.concatenate((ys, xs), axis=0)
         Intens = U**2 + V**2
         if np.linalg.norm(Intens) < 1e-20:
-            print('**** Refusing to drawing the 0 ' + rep
-                  + ' part of transverse E!')
+            print('**** Refusing to drawing the 0 ' + rep +
+                  ' part of transverse E!')
             print('(Have you tried to draw the other part?)')
         else:
-            strm = ax.streamplot(x, y, U, V, start_points=seeds.T,
-                                 density=2.5, linewidth=1.5,
-                                 color=Intens, cmap='PuBuGn')
+            strm = ax.streamplot(x,
+                                 y,
+                                 U,
+                                 V,
+                                 start_points=seeds.T,
+                                 density=2.5,
+                                 linewidth=1.5,
+                                 color=Intens,
+                                 cmap='PuBuGn')
             sbar = fig.colorbar(strm.lines, location='left')
             sbar.ax.set_ylabel(stit)
 
@@ -826,7 +862,7 @@ class Fiber:
             k0 = 4
             NA = 0.5
             ncore = 1
-            nclad = sqrt(ncore*ncore - NA*NA)
+            nclad = sqrt(ncore * ncore - NA * NA)
 
         elif case == 'artificial_multimode':
 
@@ -836,7 +872,7 @@ class Fiber:
             k0 = 100
             NA = 0.05
             ncore = 1
-            nclad = sqrt(ncore*ncore - NA*NA)
+            nclad = sqrt(ncore * ncore - NA * NA)
 
         elif case == 'Nufern_Yb':
 
@@ -849,9 +885,9 @@ class Fiber:
             ncore = 1.450971
             k0 = 2 * pi / wavelen
             NA = 0.06
-            nclad = sqrt(ncore*ncore - NA*NA)
+            nclad = sqrt(ncore * ncore - NA * NA)
 
-            L = 0.1   # to be varied for each simulation
+            L = 0.1  # to be varied for each simulation
 
         elif case == 'Nufern_Tm':
 
@@ -864,9 +900,9 @@ class Fiber:
             ncore = 1.439994
             k0 = 2 * pi / wavelen
             NA = 0.1
-            nclad = sqrt(ncore*ncore - NA*NA)
+            nclad = sqrt(ncore * ncore - NA * NA)
 
-            L = 0.1   # to be varied for each simulation
+            L = 0.1  # to be varied for each simulation
 
         elif case == 'Nufern_Tm2':
 
@@ -879,9 +915,9 @@ class Fiber:
             ncore = 1.439994
             k0 = 2 * pi / wavelen
             NA = 0.1
-            nclad = sqrt(ncore*ncore - NA*NA)
+            nclad = sqrt(ncore * ncore - NA * NA)
 
-            L = 0.1   # to be varied for each simulation
+            L = 0.1  # to be varied for each simulation
 
         elif case == 'Nufern_Tm3':
 
@@ -894,9 +930,9 @@ class Fiber:
             ncore = 1.439994
             k0 = 2 * pi / wavelen
             NA = 0.1
-            nclad = sqrt(ncore*ncore - NA*NA)
+            nclad = sqrt(ncore * ncore - NA * NA)
 
-            L = 0.1   # to be varied for each simulation
+            L = 0.1  # to be varied for each simulation
 
         elif case == 'Toned_Tm':
 
@@ -908,7 +944,7 @@ class Fiber:
             ncore = 1.439994
             k0 = 2 * pi / wavelen
             NA = 0.099
-            nclad = sqrt(ncore*ncore - NA*NA)
+            nclad = sqrt(ncore * ncore - NA * NA)
             tone_wavelens = [1.9305876e-6]
 
             extra_wavelens = tone_wavelens
@@ -925,7 +961,7 @@ class Fiber:
             ncore = 1.439994
             k0 = 2 * pi / wavelen
             NA = 0.09
-            nclad = sqrt(ncore*ncore - NA*NA)
+            nclad = sqrt(ncore * ncore - NA * NA)
             tone_wavelens = [1.95e-6]
 
             extra_wavelens = tone_wavelens
@@ -943,7 +979,7 @@ class Fiber:
             ncore = 1.439994
             k0 = 2 * pi / wavelen
             NA = 0.09
-            nclad = sqrt(ncore*ncore - NA*NA)
+            nclad = sqrt(ncore * ncore - NA * NA)
             tone_wavelens = [1.9306356965146654e-6]
             ASE_wavelens = [1.925e-6, 1.975e-6, 2.025e-6, 2.075e-6, 2.125e-6]
 
@@ -961,7 +997,7 @@ class Fiber:
             ncore = 1.439994
             k0 = 2 * pi / wavelen
             NA = 0.09
-            nclad = sqrt(ncore*ncore - NA*NA)
+            nclad = sqrt(ncore * ncore - NA * NA)
             tone_wavelens = [1.9498737599293853e-6]
             ASE_wavelens = [1.925e-6, 1.975e-6, 2.025e-6, 2.075e-6, 2.125e-6]
 
@@ -979,7 +1015,7 @@ class Fiber:
             ncore = 1.439994
             k0 = 2 * pi / wavelen
             NA = 0.09
-            nclad = sqrt(ncore*ncore - NA*NA)
+            nclad = sqrt(ncore * ncore - NA * NA)
             tone_wavelens = [1.9807473196535323e-6]
             ASE_wavelens = [1.925e-6, 1.975e-6, 2.025e-6, 2.075e-6, 2.125e-6]
 
@@ -991,8 +1027,8 @@ class Fiber:
             rclad = 2e-4
             ncore = 1.450971
             NA = 0.06
-            nclad = sqrt(ncore*ncore - NA*NA)
-            L = 0.1   # to be varied for each simulation
+            nclad = sqrt(ncore * ncore - NA * NA)
+            L = 0.1  # to be varied for each simulation
             # specify signal wavelength first,
             # then specify tones
             wavelen = 1.064e-6
@@ -1012,9 +1048,9 @@ class Fiber:
             ncore = 1.439994
             k0 = 2 * pi / wavelen
             NA = 0.099
-            nclad = sqrt(ncore*ncore - NA*NA)
+            nclad = sqrt(ncore * ncore - NA * NA)
 
-            L = 0.1   # to be varied for each simulation
+            L = 0.1  # to be varied for each simulation
 
         elif case == 'highestgain_100-400_Tm':
 
@@ -1028,9 +1064,9 @@ class Fiber:
             nclad = 1.4384197348119947
             k0 = 2 * pi / wavelen
             NA = 0.04
-            ncore = sqrt(nclad*nclad + NA*NA)  # 1.439994
+            ncore = sqrt(nclad * nclad + NA * NA)  # 1.439994
 
-            L = 0.1   # to be varied for each simulation
+            L = 0.1  # to be varied for each simulation
 
         elif case == 'TonedASE_Tm_highestgain':
 
@@ -1043,7 +1079,7 @@ class Fiber:
             nclad = 1.4384197348119947
             k0 = 2 * pi / wavelen
             NA = 0.04
-            ncore = sqrt(nclad*nclad + NA*NA)
+            ncore = sqrt(nclad * nclad + NA * NA)
             tone_wavelens = [1.9306356965146654e-6]
             ASE_wavelens = [1.925e-6, 1.975e-6, 2.025e-6, 2.075e-6, 2.125e-6]
 
@@ -1061,9 +1097,9 @@ class Fiber:
             ncore = 1.450971
             k0 = 2 * pi / wavelen
             NA = 0.06
-            nclad = sqrt(ncore*ncore - NA*NA)
+            nclad = sqrt(ncore * ncore - NA * NA)
 
-            L = 0.1   # to be varied for each simulation
+            L = 0.1  # to be varied for each simulation
 
         elif case == 'LLMA_Tm':
 
@@ -1076,9 +1112,9 @@ class Fiber:
             ncore = 1.439994
             k0 = 2 * pi / wavelen
             NA = 0.1
-            nclad = sqrt(ncore*ncore - NA*NA)
+            nclad = sqrt(ncore * ncore - NA * NA)
 
-            L = 0.1   # to be varied for each simulation
+            L = 0.1  # to be varied for each simulation
 
         elif case == 'schermer_cole':
 
@@ -1087,7 +1123,7 @@ class Fiber:
             wavelen = 1.064e-6
             nclad = 1.52
             NA = 0.1
-            ncore = sqrt(NA*NA + nclad*nclad)
+            ncore = sqrt(NA * NA + nclad * nclad)
             k0 = 2 * pi / wavelen
 
             L = 0.1
@@ -1103,7 +1139,7 @@ class Fiber:
             k0 = 2 * pi / wavelen
             NA = 0.117
             nclad = 1.447
-            ncore = sqrt(nclad*nclad + NA*NA)
+            ncore = sqrt(nclad * nclad + NA * NA)
 
         elif case == 'corning_smf_28_2':
 
@@ -1116,7 +1152,7 @@ class Fiber:
             k0 = 2 * pi / wavelen
             NA = 0.117
             nclad = 1.440
-            ncore = sqrt(nclad*nclad + NA*NA)
+            ncore = sqrt(nclad * nclad + NA * NA)
 
         elif case == 'liekki_1':
 
@@ -1131,7 +1167,7 @@ class Fiber:
             k0 = 2 * pi / wavelen
             NA = 0.06
             nclad = 1.46
-            ncore = sqrt(nclad*nclad + NA*NA)
+            ncore = sqrt(nclad * nclad + NA * NA)
 
         elif case == 'liekki_2':
 
@@ -1146,7 +1182,7 @@ class Fiber:
             k0 = 2 * pi / wavelen
             NA = 0.06
             nclad = 1.46
-            ncore = sqrt(nclad*nclad + NA*NA)
+            ncore = sqrt(nclad * nclad + NA * NA)
 
         elif case == 'book':
 
@@ -1192,22 +1228,31 @@ class Fiber:
             raise ValueError('Unknown fiber parameter case %s' % case)
 
         if case.startswith('Toned'):
-            self.__init__(None, L=L, rcore=rcore, rclad=rclad,
-                          nclad=nclad, ncore=ncore, ks=k0,
+            self.__init__(None,
+                          L=L,
+                          rcore=rcore,
+                          rclad=rclad,
+                          nclad=nclad,
+                          ncore=ncore,
+                          ks=k0,
                           extra_wavelens=extra_wavelens)
         else:
-            self.__init__(None, L=L, rcore=rcore, rclad=rclad,
-                          nclad=nclad, ncore=ncore, ks=k0,
+            self.__init__(None,
+                          L=L,
+                          rcore=rcore,
+                          rclad=rclad,
+                          nclad=nclad,
+                          ncore=ncore,
+                          ks=k0,
                           extra_wavelens=None)
 
     def print_params(self):
-        print('\nFIBER PARAMETERS: ' + '-'*54)
+        print('\nFIBER PARAMETERS: ' + '-' * 54)
         print('ks:         %20g' % self.ks +
               '{:>40}'.format('signal wavenumber'))
-        print('wavelength: %20g' % (2*pi/self.ks) +
+        print('wavelength: %20g' % (2 * pi / self.ks) +
               '{:>40}'.format('signal wavelength'))
-        print('L:          %20g' % (self.L) +
-              '{:>40}'.format('fiber length'))
+        print('L:          %20g' % (self.L) + '{:>40}'.format('fiber length'))
         print('V:          %20g' % (self.fiberV()) +
               '{:>40}'.format('V-number of fiber'))
         if isinstance(self.ncore, complex):
@@ -1235,4 +1280,4 @@ class Fiber:
                   '{:>40}'.format('tone wave numbers'))
             print('Ve:         {}'.format(self.fiberV(tone=True)) +
                   '{}'.format('tone V-numbers'))
-        print('-'*72)
+        print('-' * 72)
