@@ -17,6 +17,7 @@ from scipy.optimize import fsolve, bisect
 from scipy.special import hankel1, jv, kv, jvp, kvp, jn_zeros
 from cxroots import Rectangle, Circle
 import sympy as sm
+import logging
 
 
 class Fiber:
@@ -161,13 +162,20 @@ class Fiber:
 
         return mode
 
-    def propagation_constants(self, ll, maxnroots=50, v=None):
+    def propagation_constants(self,
+                              ll,
+                              maxnroots=50,
+                              v=None,
+                              level=logging.WARNING):
         """
         Given mode index "ll", attempt to find all propagation constants by
         bisection or other nonlinear root finders. (Circularly
         symmetric modes are obtained with ll=0.  Modes with higher ll
-        have angular variations.)
+        have angular variations.) When level=logging.INFO, verbose
+        outputs are logged.
         """
+        logging.basicConfig(format='%(message)s', level=level)
+
         if v is None:
             ks = self.ks
             V = self.fiberV()
@@ -188,8 +196,9 @@ class Fiber:
             jz = jn_zeros(ll, maxnroots)
             jz = jz[np.where(jz < ks * self.rclad)[0]]
             if len(jz) == 0:
-                print('There are no propagating modes for wavenumber ks!')
-                print('   ks = ', ks)
+                logging.info(
+                    'There are no propagating modes for wavenumber ks!')
+                logging.info('   ks = %g' % ks)
             # Return X adjusted so that later formulas
             # like kappa = X[m] / rcore   are still valid.
             X = jz * (self.rcore / self.rclad)
@@ -208,12 +217,14 @@ class Fiber:
         jz = np.insert(jz, 0, 0)
         jz = np.append(jz, V)
         X = []
-        print('\nSEARCHING FOR ROOTS in [0,V] (V = %7g) ' % (V) + '-' * 29)
+        logging.info('\nSEARCHING FOR ROOTS in [0,V] (V = %7g) ' % (V) +
+                     '-' * 29)
 
         def root_check(x):  # Subfunction used for checking if x is a root
             if abs(f(x)) < 1.e-9 and abs(g(x)) < 1.e-9:
-                print('  Root x=%g found with f(x)=%g and g(x)=%g' %
-                      (x, f(x), g(x)))
+                logging.info('  Root x=%g found with f(x)=%g and g(x)=%g' %
+                             (x, f(x), g(x)))
+
                 return True
             else:
                 return False
@@ -225,17 +236,19 @@ class Fiber:
             a = jz[i - 1] + 1.e-15
             b = jz[i] - 1.e-15
             if np.sign(g(a) * g(b)) < 0:
-                print(' SEARCH %1d: Sign change in [%g, %g]' % (i, a, b))
+                logging.info(' SEARCH %1d: Sign change in [%g, %g]' %
+                             (i, a, b))
                 x = bisect(g, a, b)
                 if root_check(x):
                     X += [x]
                 else:
-                    print('  Bisection on g did not find a root!\n')
+                    logging.info('  Bisection on g did not find a root!\n')
                     x = bisect(f, a, b)
                     if root_check(x):
                         X += [x]
                     else:
-                        print('  Bisection on f also did not find a root!')
+                        logging.info(
+                            '  Bisection on f also did not find a root!')
 
             # Check if end points are roots:
 
@@ -250,25 +263,27 @@ class Fiber:
             else:
 
                 x0 = 0.5 * (a + b)
-                print('  Trying nonlinear solve on g with initial guess %g' %
-                      x0)
+                logging.info(
+                    '  Trying nonlinear solve on g with initial guess %g' % x0)
                 x = fsolve(g, x0, xtol=1.e-10)[0]
                 if root_check(x):
                     X += [x]
                 else:
-                    print('  Nonlinear solve on g did not find a root.')
-                    print(
+                    logging.info('  Nonlinear solve on g did not find a root.')
+                    logging.info(
                         '  Trying nonlinear solve on f with initial guess %g' %
                         x0)
                     x = fsolve(f, x0, xtol=1.e-10)[0]
                     if root_check(x):
                         X += [x]
                     else:
-                        print('  Nonlinear solve on f did not find a root.')
-                        print('  Giving up on finding roots in [%g, %g].' %
-                              (a, b))
+                        logging.info(
+                            '  Nonlinear solve on f did not find a root.')
+                        logging.info(
+                            '  Giving up on finding roots in [%g, %g].' %
+                            (a, b))
 
-        print(' ROOTS FOUND: ', X)
+        logging.info(' ROOTS FOUND: ' + ' '.join(map(str, X)))
         return X
 
     def visualize_roots(self, ll):
