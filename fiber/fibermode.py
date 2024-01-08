@@ -14,15 +14,22 @@ import scipy.special as scf
 
 
 class FiberMode(ModeSolver):
-
     """Class with facilities to numerically approximate transverse modes
     of a RADIALLY SYMMETRIC STEP-INDEX fiber using a nondimensional
     eigenproblem and FEAST. Guided modes and leaky modes can be computed.
     """
 
-    def __init__(self, fibername=None, fromfile=None,
-                 R=None, Rout=None, geom=None, curveorder=3,
-                 h=3, hcore=None, refine=0, dtemp=None):
+    def __init__(self,
+                 fibername=None,
+                 fromfile=None,
+                 R=None,
+                 Rout=None,
+                 geom=None,
+                 curveorder=3,
+                 h=3,
+                 hcore=None,
+                 refine=0,
+                 dtemp=None):
         """
         EITHER provide a prefix "filename" of a collection of files, e.g.,
 
@@ -51,16 +58,21 @@ class FiberMode(ModeSolver):
         is length in meters.)
         """
 
-        self.outfolder = os.path.abspath(fiberamp.__path__[0]+'/outputs/')
+        self.outfolder = os.path.abspath(fiberamp.__path__[0] + '/outputs/')
 
         if fromfile is None:
             if fibername is None:
                 raise ValueError('Need either a file or a fiber name')
-            self.makefibermode(fibername, R=R, Rout=Rout, geom=geom,
-                               h=h, hcore=hcore)
+
+            self.makefibermode(fibername,
+                               R=R,
+                               Rout=Rout,
+                               geom=geom,
+                               h=h,
+                               hcore=hcore)
             self.makemesh(refine, curveorder)
         else:
-            fbmfilename = self.outfolder+'/'+fromfile+'_fbm.npz'
+            fbmfilename = self.outfolder + '/' + fromfile + '_fbm.npz'
             if os.path.isfile(fbmfilename):
                 self.loadfibermode(fbmfilename)
             else:
@@ -68,7 +80,7 @@ class FiberMode(ModeSolver):
                 self.makefibermode(fromfile)
                 self.savefbm(fromfile)
 
-            meshfname = self.outfolder+'/'+fromfile+'_msh.vol.gz'
+            meshfname = self.outfolder + '/' + fromfile + '_msh.vol.gz'
             if os.path.isfile(meshfname):
                 if geom is None:
                     self.setstepindexgeom()
@@ -81,7 +93,7 @@ class FiberMode(ModeSolver):
                 self.makemesh(refine)
                 self.savemesh(fromfile)
 
-        self.p = None        # degree of finite elements used in mode calc
+        self.p = None  # degree of finite elements used in mode calc
         self.a = None
         self.b = None
         self.V = None
@@ -115,8 +127,13 @@ class FiberMode(ModeSolver):
 
     # FURTHER INITIALIZATIONS & SETTERS #####################################
 
-    def makefibermode(self, fibername=None, R=None, Rout=None,
-                      geom=None, h=4, hcore=None):
+    def makefibermode(self,
+                      fibername=None,
+                      R=None,
+                      Rout=None,
+                      geom=None,
+                      h=4,
+                      hcore=None):
 
         self.fibername = fibername
         self.fiber = Fiber(fibername)
@@ -124,14 +141,14 @@ class FiberMode(ModeSolver):
         if Rout is None:
             Rout = self.fiber.rclad / self.fiber.rcore
         if R is None:
-            R = (Rout+1)/2
+            R = (Rout + 1) / 2
         if R < 1 or R > Rout:
             raise ValueError('Set R between 1 and Rout')
         self.R = R
         self.Rout = Rout
 
         if hcore is None:
-            hcore = h/10
+            hcore = h / 10
         self.hcore = hcore
         self.hclad = h
         self.hpml = h
@@ -169,12 +186,17 @@ class FiberMode(ModeSolver):
 
     def setstepindexgeom(self):
         geo = SplineGeometry()
-        geo.AddCircle((0, 0), r=self.Rout,
-                      leftdomain=1, rightdomain=0, bc='OuterCircle')
-        geo.AddCircle((0, 0), r=self.R,
-                      leftdomain=2, rightdomain=1, bc='cladbdry')
-        geo.AddCircle((0, 0), r=1,
-                      leftdomain=3, rightdomain=2, bc='corebdry')
+        geo.AddCircle((0, 0),
+                      r=self.Rout,
+                      leftdomain=1,
+                      rightdomain=0,
+                      bc='OuterCircle')
+        geo.AddCircle((0, 0),
+                      r=self.R,
+                      leftdomain=2,
+                      rightdomain=1,
+                      bc='cladbdry')
+        geo.AddCircle((0, 0), r=1, leftdomain=3, rightdomain=2, bc='corebdry')
         geo.SetMaterial(1, 'Outer')
         geo.SetMaterial(2, 'clad')
         geo.SetMaterial(3, 'core')
@@ -218,14 +240,14 @@ class FiberMode(ModeSolver):
         if curvature == 0:
             if self.dtemp is None:
                 V = fib.fiberV()
-                self.V = CF([0, 0, -V*V])
+                self.V = CF([0, 0, -V * V])
                 self.index = CF([fib.nclad, fib.nclad, fib.ncore])
             else:
                 a = fib.rcore
                 n = CF([fib.nclad, fib.nclad, fib.ncore]) + \
                     self.dndT * self.dtemp
 
-                self.V = (a*fib.ks)**2 * (fib.nclad**2 - n**2)
+                self.V = (a * fib.ks)**2 * (fib.nclad**2 - n**2)
                 self.index = n
         else:
             if self.dtemp is None:
@@ -235,10 +257,10 @@ class FiberMode(ModeSolver):
                     self.dndT * self.dtemp
 
             a = fib.rcore
-            ka2 = (fib.ks * a) ** 2
-            kan2 = ka2 * (fib.nclad ** 2)
+            ka2 = (fib.ks * a)**2
+            kan2 = ka2 * (fib.nclad**2)
 
-            nbent = n * (1 + (ng.x * a * curvature/bendfactor))
+            nbent = n * (1 + (ng.x * a * curvature / bendfactor))
             self.index = nbent
             m = kan2 - ka2 * nbent * nbent
             self.V = CF([0, m, m])
@@ -263,7 +285,7 @@ class FiberMode(ModeSolver):
         ks = V / (self.fiber.numerical_aperture() * a)
         Xsqr = np.array(X2)
 
-        return np.sqrt((ks*self.fiber.ncore)**2 - Xsqr/a**2)
+        return np.sqrt((ks * self.fiber.ncore)**2 - Xsqr / a**2)
 
     def Z2toBeta(self, Z2, v=None):
         """Convert nondimensional Z² (input as "Z2") in the complex plane to
@@ -271,8 +293,15 @@ class FiberMode(ModeSolver):
 
         return self.X2toBeta(self.Z2toX2(Z2, v=v), v=v)
 
-    def guidedmodes(self, interval=None, p=3, nquadpts=20, seed=1,
-                    nspan=15, verbose=True, tone=False, bent=False,
+    def guidedmodes(self,
+                    interval=None,
+                    p=3,
+                    nquadpts=20,
+                    seed=1,
+                    nspan=15,
+                    verbose=True,
+                    tone=False,
+                    bent=False,
                     **feastkwargs):
         """
         Search for guided modes in interval=(left, right). If interval is None,
@@ -313,7 +342,7 @@ class FiberMode(ModeSolver):
         for vnum, kk in zip(V, k):
 
             if not bent:
-                self.V = CF([0, 0, -vnum*vnum])
+                self.V = CF([0, 0, -vnum * vnum])
             self.k = kk
 
             if interval is None:
@@ -324,7 +353,7 @@ class FiberMode(ModeSolver):
                 # It follows that Z² = (a α₀)² = (a k₀ nclad)² - (a β)²
                 # satisfies
                 #         0 > Z² > (a k₀ nclad)² - (a k₀ ncore)² = -V².
-                interval = (-vnum*vnum, 0)
+                interval = (-vnum * vnum, 0)
 
             betas_, Zsqrs_, Y_ =  \
                 super().selfadjmodes(interval=interval, p=p, seed=seed,
@@ -379,23 +408,23 @@ class FiberMode(ModeSolver):
             """
 
             lft = self.Z2toBeta(0, v=vnum)  # βs must be in (lft, rgt)
-            rgt = self.Z2toBeta(-vnum*vnum, v=vnum)
+            rgt = self.Z2toBeta(-vnum * vnum, v=vnum)
             # roughly identify simple and multiple ew approximants
-            sm, ml = splitzoom.simple_multiple_zoom(lft, rgt, β,
-                                                    delta=delta)
+            sm, ml = splitzoom.simple_multiple_zoom(lft, rgt, β, delta=delta)
 
             name2ind = {}
             exact = -np.ones_like(β)
 
             # l=0 case should be simple eigenvalues:
             activesimple = np.arange(len(sm['index']))
-            LP0 = self.fiber.XtoBeta(
-                self.fiber.propagation_constants(0, v=vnum), v=vnum)
+            LP0 = self.fiber.XtoBeta(self.fiber.propagation_constants(0,
+                                                                      v=vnum),
+                                     v=vnum)
             b = β[sm['index']]
             for m in range(len(LP0)):
-                ind = np.argmin(abs(LP0[m]-b[activesimple]))
+                ind = np.argmin(abs(LP0[m] - b[activesimple]))
                 i2beta = sm['index'][activesimple[ind]]
-                name2ind['LP0' + str(m+1)] = i2beta
+                name2ind['LP0' + str(m + 1)] = i2beta
                 exact[i2beta] = LP0[m]
                 activesimple = np.delete(activesimple, [ind])
                 if len(activesimple) == 0:
@@ -405,14 +434,15 @@ class FiberMode(ModeSolver):
             activemultiple = np.arange(len(ml['index']))
             ctrs = np.array(ml['center'])
             for ll in range(1, maxl):
-                LPl = self.fiber.XtoBeta(
-                    self.fiber.propagation_constants(ll, v=vnum), v=vnum)
+                LPl = self.fiber.XtoBeta(self.fiber.propagation_constants(
+                    ll, v=vnum),
+                                         v=vnum)
                 for m in range(len(LPl)):
-                    ind = np.argmin(abs(LPl[m]-ctrs[activemultiple]))
+                    ind = np.argmin(abs(LPl[m] - ctrs[activemultiple]))
                     i2beta_a = ml['index'][activemultiple[ind]][0]
                     i2beta_b = ml['index'][activemultiple[ind]][1]
-                    name2ind['LP' + str(ll) + str(m+1)+'_a'] = i2beta_a
-                    name2ind['LP' + str(ll) + str(m+1)+'_b'] = i2beta_b
+                    name2ind['LP' + str(ll) + str(m + 1) + '_a'] = i2beta_a
+                    name2ind['LP' + str(ll) + str(m + 1) + '_b'] = i2beta_b
                     exact[i2beta_a] = LPl[m]
                     exact[i2beta_b] = LPl[m]
                     activemultiple = np.delete(activemultiple, ind)
@@ -425,8 +455,8 @@ class FiberMode(ModeSolver):
             # in multitone, data will be stored in a list
             name2ind, exact = [], []
             for i, v in enumerate(V):
-                betaslice = betas[self.firstmodeindex[i]:
-                                  self.firstmodeindex[i+1]]
+                betaslice = betas[self.firstmodeindex[i]:self.
+                                  firstmodeindex[i + 1]]
                 n2i, ex = construct_names(v, betaslice)
                 name2ind.append(n2i)
                 exact.append(ex)
@@ -448,11 +478,18 @@ class FiberMode(ModeSolver):
 
     # BENT MODES ############################################################
 
-    def bentmode(self, curvature, radiusZ, centerZ, p,
-                 bendfactor=1.28, **kwargs):
+    def bentmode(self,
+                 curvature,
+                 radiusZ,
+                 centerZ,
+                 p,
+                 bendfactor=1.28,
+                 **kwargs):
 
         self.setnondimmat(curvature=curvature, bendfactor=bendfactor)
-        z, y, _, betas, P, _ = self.leakymode(p=p, ctr=centerZ, rad=radiusZ,
+        z, y, _, betas, P, _ = self.leakymode(p=p,
+                                              ctr=centerZ,
+                                              rad=radiusZ,
                                               **kwargs)
 
         print('Nonlinear eigenvalues in nondimensional Z-plane:\n', z)
@@ -476,8 +513,12 @@ class FiberMode(ModeSolver):
 
         if self.fibername == 'LLMA_Yb':
             simple = list(range(4))
-            multi = [list(range(1, 9)), list(range(1, 7)), list(range(1, 5)),
-                     list(range(1, 2))]
+            multi = [
+                list(range(1, 9)),
+                list(range(1, 7)),
+                list(range(1, 5)),
+                list(range(1, 2))
+            ]
         elif self.fibername == 'Nufern_Yb':
             simple = list(range(2))
             multi = [list(range(1, 3))]
@@ -516,13 +557,16 @@ class FiberMode(ModeSolver):
                   constants in descending order.
         """
         simple_pairs = [self.interpmodeLP(0, i) for i in simple]
-        simple_names = ['LP0{}'.format(i+1) for i in simple]
-        multi_pairs = [self.interpmodeLP(j, i) for i, lst in enumerate(multi)
-                       for j in lst]
-        multi_names = ['LP{}{}'.format(j, i+1) for i, lst in enumerate(multi)
-                       for j in lst]
-        betas, modes = zip(*(simple_pairs+multi_pairs))
-        triples = sorted(list(zip(betas, modes, simple_names+multi_names)),
+        simple_names = ['LP0{}'.format(i + 1) for i in simple]
+        multi_pairs = [
+            self.interpmodeLP(j, i) for i, lst in enumerate(multi) for j in lst
+        ]
+        multi_names = [
+            'LP{}{}'.format(j, i + 1) for i, lst in enumerate(multi)
+            for j in lst
+        ]
+        betas, modes = zip(*(simple_pairs + multi_pairs))
+        triples = sorted(list(zip(betas, modes, simple_names + multi_names)),
                          reverse=True)
         betas, modes, names = zip(*triples)  # lists ordered by betas
         name2ind = dict(zip(names, range(len(names))))
@@ -546,46 +590,46 @@ class FiberMode(ModeSolver):
         X = self.fiber.propagation_constants(ll)
 
         if len(X) <= m:
-            raise ValueError('For ll=%d, only %d fiber modes computed'
-                             % (ll, len(X)))
+            raise ValueError('For ll=%d, only %d fiber modes computed' %
+                             (ll, len(X)))
 
         kappa = X[m] / self.fiber.rcore
         ncore, nclad = self.fiber.ncore, self.fiber.nclad
         k0 = self.fiber.ks
-        beta = ng.sqrt(ncore*ncore*k0*k0 - kappa*kappa)
-        gamma = ng.sqrt(beta*beta - nclad*nclad*k0*k0)
+        beta = ng.sqrt(ncore * ncore * k0 * k0 - kappa * kappa)
+        gamma = ng.sqrt(beta * beta - nclad * nclad * k0 * k0)
 
-        r = ng.sqrt(ng.x*ng.x + ng.y*ng.y)
+        r = ng.sqrt(ng.x * ng.x + ng.y * ng.y)
         theta = ng.atan2(ng.y, ng.x)
 
-        print('\nCOMPUTED LP(%1d,%d) MODE: ' % (ll, m) + '-'*49)
+        print('\nCOMPUTED LP(%1d,%d) MODE: ' % (ll, m) + '-' * 49)
         print('  beta:      %20g' % (beta) +
               '{:>39}'.format('exact propagation constant'))
 
         # If NA=0, then return the Bessel mode of an empty waveguide:
         if abs(self.fiber.numerical_aperture()) < 1.e-15:
             print('  NA = 0, so further parameters are meaningless.\n')
-            a0cf = jv(kappa*r*self.R, ll) * ng.cos(ll*theta)
+            a0cf = jv(kappa * r * self.R, ll) * ng.cos(ll * theta)
 
             return beta, a0cf
 
         # For NA>0, define the guided mode piecewise:
-        print('  variation: %20g' % (k0*abs(nclad-ncore)) +
+        print('  variation: %20g' % (k0 * abs(nclad - ncore)) +
               '{:>39}'.format('interval length of propagation consts'))
-        Jkrcr = scf.jv(ll, kappa*self.fiber.rcore)
-        Kgrcr = scf.kv(ll, gamma*self.fiber.rcore)
-        print('  edge value:%20g'
-              % (Jkrcr*scf.kv(ll, gamma*self.fiber.rclad)) +
+        Jkrcr = scf.jv(ll, kappa * self.fiber.rcore)
+        Kgrcr = scf.kv(ll, gamma * self.fiber.rcore)
+        print('  edge value:%20g' %
+              (Jkrcr * scf.kv(ll, gamma * self.fiber.rclad)) +
               '{:>39}'.format('mode size at outer cladding edge'))
         print('  kappa:     %20g' % (kappa) +
               '{:>39}'.format('coefficient in BesselJ core mode'))
         print('  gamma:     %20g' % (gamma) +
               '{:>39}'.format('coefficient in BesselK cladding mode'))
 
-        Jkr = jv(kappa*r*self.fiber.rcore, ll)
-        Kgr = kv(gamma*r*self.fiber.rcore, ll)
+        Jkr = jv(kappa * r * self.fiber.rcore, ll)
+        Kgr = kv(gamma * r * self.fiber.rcore, ll)
 
-        a0cf = IfPos(1 - r, Kgrcr*Jkr, Jkrcr*Kgr) * ng.cos(ll*theta)
+        a0cf = IfPos(1 - r, Kgrcr * Jkr, Jkrcr * Kgr) * ng.cos(ll * theta)
         return beta, a0cf
 
     # CONVENIENCE & DEBUGGING ###############################################
@@ -624,22 +668,31 @@ class FiberMode(ModeSolver):
 
         if os.path.isdir(self.outfolder) is not True:
             os.mkdir(self.outfolder)
-        fbmfilename = self.outfolder+'/'+fileprefix+'_fbm.npz'
+        fbmfilename = self.outfolder + '/' + fileprefix + '_fbm.npz'
         print('Writing FiberMode object into:\n', fbmfilename)
         np.savez(fbmfilename,
                  fibername=self.fibername,
-                 hcore=self.hcore, hclad=self.hclad, hpml=self.hpml,
-                 R=self.R, Rout=self.Rout)
+                 hcore=self.hcore,
+                 hclad=self.hclad,
+                 hpml=self.hpml,
+                 R=self.R,
+                 Rout=self.Rout)
 
     def savemesh(self, fileprefix):
 
-        meshfname = self.outfolder+'/'+fileprefix+'_msh.vol.gz'
+        meshfname = self.outfolder + '/' + fileprefix + '_msh.vol.gz'
         print('Writing mesh into:\n', meshfname)
         self.mesh.ngmesh.Save(meshfname)
 
-    def savemodes(self, fileprefix, betas, Y,
-                  saveallagain=True, name2ind=None, exact=None,
-                  interp=False, tone=False):
+    def savemodes(self,
+                  fileprefix,
+                  betas,
+                  Y,
+                  saveallagain=True,
+                  name2ind=None,
+                  exact=None,
+                  interp=False,
+                  tone=False):
         """ Convert Y to numpy and save in npz format. """
 
         if saveallagain:
@@ -651,27 +704,40 @@ class FiberMode(ModeSolver):
         if os.path.isdir(self.outfolder) is not True:
             os.mkdir(self.outfolder)
         suffix = '_imde.npz' if interp else '_mde.npz'
-        fullname = self.outfolder+'/'+fileprefix+suffix
+        fullname = self.outfolder + '/' + fileprefix + suffix
         print('Writing modes into:\n', fullname)
         if tone:
-            np.savez(fullname, fibername=self.fibername,
-                     hcore=self.hcore, hclad=self.hclad, hpml=self.hpml,
-                     p=self.p, R=self.R, Rout=self.Rout,
-                     betas=betas, y=y,
-                     exactbetas=exact, name2ind=name2ind,
+            np.savez(fullname,
+                     fibername=self.fibername,
+                     hcore=self.hcore,
+                     hclad=self.hclad,
+                     hpml=self.hpml,
+                     p=self.p,
+                     R=self.R,
+                     Rout=self.Rout,
+                     betas=betas,
+                     y=y,
+                     exactbetas=exact,
+                     name2ind=name2ind,
                      firstmodeindex=self.firstmodeindex)
         else:
-            np.savez(fullname, fibername=self.fibername,
-                     hcore=self.hcore, hclad=self.hclad, hpml=self.hpml,
-                     p=self.p, R=self.R, Rout=self.Rout,
-                     betas=betas, y=y,
-                     exactbetas=exact, name2ind=name2ind)
+            np.savez(fullname,
+                     fibername=self.fibername,
+                     hcore=self.hcore,
+                     hclad=self.hclad,
+                     hpml=self.hpml,
+                     p=self.p,
+                     R=self.R,
+                     Rout=self.Rout,
+                     betas=betas,
+                     y=y,
+                     exactbetas=exact,
+                     name2ind=name2ind)
 
     def checkload(self, f):
         """Check if the loaded file has expected values of certain data"""
 
-        for member in {'fibername', 'hcore', 'hclad', 'hpml',
-                       'R', 'Rout'}:
+        for member in {'fibername', 'hcore', 'hclad', 'hpml', 'R', 'Rout'}:
             print('  From file:', member, '=', f[member])
             assert self.__dict__[member] == f[member], \
                 'Load error! Data member %s does not match!' % member
@@ -679,14 +745,16 @@ class FiberMode(ModeSolver):
     def loadmodes(self, modefile, tone=False):
         """Load modes from "outputs/modefile" (filename with extension)"""
 
-        fname = self.outfolder+'/'+modefile
+        fname = self.outfolder + '/' + modefile
         if os.path.isfile(fname):
             print('Loading modes from:\n ', fname)
             f = np.load(fname, allow_pickle=True)
             self.checkload(f)
             self.p = int(f['p'])
             print('  Degree %d modes found in file' % self.p)
-            self.X = H1(self.mesh, order=self.p, dirichlet='OuterCircle',
+            self.X = H1(self.mesh,
+                        order=self.p,
+                        dirichlet='OuterCircle',
                         complex=True)
             y = f['y']
             betas = f['betas']
@@ -703,19 +771,32 @@ class FiberMode(ModeSolver):
             fibername, p, interp = _extract_fbname_and_p(modefile)
             if interp:
                 betas, n2i, Y = self.interpmodes(p=p)
-                self.savemodes(fibername+'_p' + str(p), betas, Y,
-                               saveallagain=False, name2ind=n2i,
-                               exact=betas, interp=True)
+                self.savemodes(fibername + '_p' + str(p),
+                               betas,
+                               Y,
+                               saveallagain=False,
+                               name2ind=n2i,
+                               exact=betas,
+                               interp=True)
             else:
                 betas, zsqrs, Y = self.guidedmodes(p=p, nspan=50, tone=tone)
                 n2i, exbeta = self.name2indices(betas, maxl=9, tone=tone)
-                self.savemodes(fibername+'_p' + str(p), betas, Y,
-                               saveallagain=False, name2ind=n2i,
-                               exact=exbeta, tone=tone)
+                self.savemodes(fibername + '_p' + str(p),
+                               betas,
+                               Y,
+                               saveallagain=False,
+                               name2ind=n2i,
+                               exact=exbeta,
+                               tone=tone)
         return betas, Y, n2i
 
-    def makeguidedmodelibrary(self, maxp=5, maxl=9, delta=None,
-                              nspan=15, interp=False, tone=False):
+    def makeguidedmodelibrary(self,
+                              maxp=5,
+                              maxl=9,
+                              delta=None,
+                              nspan=15,
+                              interp=False,
+                              tone=False):
         """Save full sets of guided modes computed using the same mesh, using
         polynomial degrees p from 1 to "maxp", together with their LP
         names. One modefile per p is written and all output filenames
@@ -724,24 +805,34 @@ class FiberMode(ModeSolver):
         """
 
         fprefix = self.fibername
-        self.savefbm(fprefix)        # save FiberMode object
-        self.savemesh(fprefix)       # save mesh
+        self.savefbm(fprefix)  # save FiberMode object
+        self.savemesh(fprefix)  # save mesh
 
-        for p in range(1, maxp+1):   # save modes, one file per degree
+        for p in range(1, maxp + 1):  # save modes, one file per degree
             if interp:
                 betas, n2i, Y = self.interpmodes(p=p)
                 print('Physical propagation constants:\n', betas)
-                self.savemodes(fprefix+'_p' + str(p), betas, Y,
-                               saveallagain=False, name2ind=n2i,
-                               exact=betas, interp=True)
+                self.savemodes(fprefix + '_p' + str(p),
+                               betas,
+                               Y,
+                               saveallagain=False,
+                               name2ind=n2i,
+                               exact=betas,
+                               interp=True)
             else:
                 betas, zsqrs, Y = self.guidedmodes(p=p, nspan=nspan, tone=tone)
                 print('Physical propagation constants:\n', betas)
                 print('Computed non-dimensional Z-squared values:\n', zsqrs)
-                n2i, exbeta = self.name2indices(betas, maxl=maxl, delta=delta,
+                n2i, exbeta = self.name2indices(betas,
+                                                maxl=maxl,
+                                                delta=delta,
                                                 tone=tone)
-                self.savemodes(fprefix+'_p' + str(p), betas, Y,
-                               saveallagain=False, name2ind=n2i, exact=exbeta,
+                self.savemodes(fprefix + '_p' + str(p),
+                               betas,
+                               Y,
+                               saveallagain=False,
+                               name2ind=n2i,
+                               exact=exbeta,
                                tone=tone)
 
 
@@ -768,5 +859,6 @@ def _extract_fbname_and_p(fn):
     p = int(parts[-1][1:])
     interp = (sfx == sfxs[1])
     return fibername, p, interp
+
 
 # MODULE END #############################################################
