@@ -21,6 +21,7 @@ class FiberMode(ModeSolver):
 
     def __init__(self,
                  fibername=None,
+                 fiber=None,
                  fromfile=None,
                  R=None,
                  Rout=None,
@@ -61,10 +62,11 @@ class FiberMode(ModeSolver):
         self.outfolder = os.path.abspath(fiberamp.__path__[0] + '/outputs/')
 
         if fromfile is None:
-            if fibername is None:
-                raise ValueError('Need either a file or a fiber name')
+            if fibername is None and fiber is None:
+                raise ValueError('Need either a file or fiber or fibername')
 
             self.makefibermode(fibername,
+                               fiber,
                                R=R,
                                Rout=Rout,
                                geom=geom,
@@ -129,14 +131,20 @@ class FiberMode(ModeSolver):
 
     def makefibermode(self,
                       fibername=None,
+                      fiber=None,
                       R=None,
                       Rout=None,
                       geom=None,
                       h=4,
                       hcore=None):
 
-        self.fibername = fibername
-        self.fiber = Fiber(fibername)
+        if fibername is not None:
+            self.fibername = fibername
+            self.fiber = Fiber(fibername)
+        elif fiber is not None:
+            self.fiber = fiber
+        else:
+            raise ValueError('Need fiber or fibername')
 
         if Rout is None:
             Rout = self.fiber.rclad / self.fiber.rcore
@@ -358,7 +366,7 @@ class FiberMode(ModeSolver):
             betas_, Zsqrs_, Y_ =  \
                 super().selfadjmodes(interval=interval, p=p, seed=seed,
                                      nspan=nspan, npts=nquadpts,
-                                     verbose=verbose)
+                                     verbose=verbose, **feastkwargs)
 
             betas = np.append(betas, betas_)
             Zsqrs = np.append(Zsqrs, Zsqrs_)
