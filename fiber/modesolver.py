@@ -2057,6 +2057,7 @@ class ModeSolver:
             rhoinv=0.0,
             quadrule='circ_trapez_shift',
             inverse='umfpack',
+            trustme=False,
             verbose=True,
             **feastkwargs):
         """
@@ -2074,6 +2075,8 @@ class ModeSolver:
             centered at "centerZ2" of radius "radiusZ2" in the complex
             plane.
         * maxndofs: Stop adaptive loop if number of dofs exceed this.
+        * trustme: If True, modify the new centerZ2 to be the average
+            of the Z² values of the modes found in the previous iteration.
         * visualize: If true, then pause adaptivity loop to see each iterate.
         * Remaining inputs are as documented in leakymode(..).
 
@@ -2136,8 +2139,6 @@ class ModeSolver:
             _, cgd = history[-2], history[-1]
             if not cgd:
                 raise NotImplementedError('What to do when FEAST fails?')
-            if Yr.m > 1:
-                raise NotImplementedError('How to handle multidim eigenspace?')
 
             ndofs.append(Yr.fes.ndof)
             Zsqrs.append(zsqr)
@@ -2169,10 +2170,11 @@ class ModeSolver:
             # 4. REFINE
 
             self.mesh.Refine()
-            npts = 1
-            nspan = 1
             # Check the performance of not changing the center
-            # centerZ2 = zsqr[0]
+            if trustme:
+                centerZ2 = avr_zsqr
+                npts = 1
+                nspan = 1
 
         # Adaptivity loop done ------------------------------------------
 
@@ -2204,6 +2206,7 @@ class ModeSolver:
             quadrule='circ_trapez_shift',
             inverse='umfpack',
             autoupdate=True,
+            trustme=False,
             verbose=True,
             **feastkwargs):
         """
@@ -2222,6 +2225,8 @@ class ModeSolver:
             centered at "centerZ2" of radius "radiusZ2" in the complex
             plane.
         * maxndofs: Stop adaptive loop if number of dofs exceed this.
+        * trustme: If True, modify the new center to be the average
+            of the Z² values of the modes found in the previous iteration.
         * visualize: If true, then pause adaptivity loop to see each iterate.
         * Remaining inputs are as documented in leakymode(..).
 
@@ -2290,20 +2295,19 @@ class ModeSolver:
             # Small checks
             # TODO To replace the prints with exceptions
             if not cgd:
-                # raise NotImplementedError('What to do when FEAST fails?')
-                print('What to do when FEAST fails?')
-            if E_phi_r.m > 1:
-                # raise NotImplementedError(
-                # 'How to handle multidim eigenspace?')
-                print('How to handle multidim eigenspace?')
-
+                raise NotImplementedError('What to do when FEAST fails?')
+            # Implement average of multiple eigenfunctions
+            avr_zsqr = np.average(zsqr)
             ndofs.append(E_phi_r.fes.ndof)
             Zsqrs.append(zsqr)
-            print(f'ADAPTIVITY at {ndofs[-1]:7d} ndofs: ' +
-                  f'Zsqr = {Zsqrs[-1][0]:+10.8f}')
+            if E_phi_r.m > 1:
+                print(f'ADAPTIVITY at {ndofs[-1]:7d} ndofs: ' +
+                      f'avg_zsqr = {avr_zsqr:+10.8f}')
+            else:
+                print(f'ADAPTIVITY at {ndofs[-1]:7d} ndofs: ' +
+                      f'Zsqr = {Zsqrs[-1][0]:+10.8f}')
 
             # 2. ESTIMATE
-            avr_zsqr = np.average(zsqr)
             ee = self.eestimator_maxwell_compound(
                     E_phi_r, E_phi_l, avr_zsqr)
 
@@ -2335,10 +2339,11 @@ class ModeSolver:
             # 4. REFINE
 
             self.mesh.Refine()
-            npts = 1
-            nspan = 1
             # Check performance of not moving the center
-            # center = zsqr[0]
+            if trustme:
+                center = avr_zsqr
+                npts = 1
+                nspan = 1
 
         # Adaptivity loop done ------------------------------------------
 
