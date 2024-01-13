@@ -1364,7 +1364,6 @@ class ModeSolver:
                 c.Assemble()
                 b.Assemble()
                 d.Assemble()
-            # TODO I was not using TaskManager here before, why?
             res, dinv = self.make_resolvent_maxwell(
                     m, a, b, c, d, X, Y,
                     inverse=inverse,
@@ -1931,10 +1930,6 @@ class ModeSolver:
         E_l = self.__compute_avr_ngvecs(El, name='E_l')
         phi_r = self.__compute_avr_ngvecs(phir, name='phi_r')
         phi_l = self.__compute_avr_ngvecs(phil, name='phi_l')
-        # E_r = Er.gridfun('E_r', i=0)
-        # E_l = El.gridfun('E_l', i=0)
-        # phi_r = phir.gridfun('phi_r', i=0)
-        # phi_l = phil.gridfun('phi_l', i=0)
 
         # Compute coefficients
         # # Mapped fields
@@ -2087,11 +2082,6 @@ class ModeSolver:
         * P: spectral projector object that conducted FEAST.
         """
 
-        a, b, X = self.smoothpmlsystem(p,
-                                       alpha=alpha,
-                                       autoupdate=True,
-                                       pmlbegin=pmlbegin,
-                                       pmlend=pmlend)
         ndofs = [0]
         Zsqrs = []
         if visualize:
@@ -2101,6 +2091,12 @@ class ModeSolver:
             ng.Draw(eevis)
 
         while ndofs[-1] < maxndofs:  # ADAPTIVITY LOOP ------------------
+            a, b, X = self.smoothpmlsystem(
+                    p,
+                    alpha=alpha,
+                    autoupdate=True,
+                    pmlbegin=pmlbegin,
+                    pmlend=pmlend)
 
             Yr = NGvecs(X, nspan)
             Yl = NGvecs(X, nspan)
@@ -2161,16 +2157,15 @@ class ModeSolver:
 
             # 3. MARK
 
-            # avr = sum(ee) / self.mesh.ne
-            # for elem in self.mesh.Elements():
-            #     self.mesh.SetRefinementFlag(elem, ee[elem.nr] > 0.75 * avr)
             strat = AdaptivityStrategy(Strategy.AVG)
             strat.apply(self.mesh, ee)
 
             # 4. REFINE
 
             self.mesh.Refine()
-            # Check the performance of not changing the center
+            ngmesh = self.mesh.ngmesh.Copy()
+            self.mesh = ng.Mesh(ngmesh)
+            self.mesh.Curve(8)
             if trustme:
                 centerZ2 = avr_zsqr
                 npts = 1
@@ -2236,14 +2231,6 @@ class ModeSolver:
         if p is None or radius is None or center is None:
             raise ValueError('Missing input(s)')
 
-        aa, mm, Z = self.smoothvecpmlsystem_compound(
-                p,
-                alpha=alpha,
-                pmlbegin=pmlbegin,
-                pmlend=pmlend,
-                deg=2,
-                autoupdate=autoupdate)
-
         ndofs = [0]
         Zsqrs = []
 
@@ -2255,6 +2242,14 @@ class ModeSolver:
             ng.Draw(eevis)
 
         while ndofs[-1] < maxndofs:  # ADAPTIVITY LOOP ------------------
+
+            aa, mm, Z = self.smoothvecpmlsystem_compound(
+                    p,
+                    alpha=alpha,
+                    pmlbegin=pmlbegin,
+                    pmlend=pmlend,
+                    deg=2,
+                    autoupdate=autoupdate)
 
             E_phi_r = NGvecs(Z, nspan)
             E_phi_l = NGvecs(Z, nspan)
@@ -2292,8 +2287,6 @@ class ModeSolver:
 
             _, cgd = history[-2], history[-1]
 
-            # Small checks
-            # TODO To replace the prints with exceptions
             if not cgd:
                 raise NotImplementedError('What to do when FEAST fails?')
             # Implement average of multiple eigenfunctions
@@ -2330,16 +2323,15 @@ class ModeSolver:
 
             # 3. MARK
 
-            # avr = sum(ee) / self.mesh.ne
-            # for elem in self.mesh.Elements():
-            #     self.mesh.SetRefinementFlag(elem, ee[elem.nr] > 0.75 * avr)
             strat = AdaptivityStrategy(Strategy.AVG)
             strat.apply(self.mesh, ee)
 
             # 4. REFINE
 
             self.mesh.Refine()
-            # Check performance of not moving the center
+            ngmesh = self.mesh.ngmesh.Copy()
+            self.mesh = ng.Mesh(ngmesh)
+            self.mesh.Curve(8)
             if trustme:
                 center = avr_zsqr
                 npts = 1
@@ -2372,6 +2364,189 @@ class ModeSolver:
             print('*** Mode boundary L2 norm > 1e-6!')
 
         return Zsqrs, ndofs, E_r, E_l, phi_r, phi_l, beta, P
+
+    def leakyvecmodes_adapt_resolvent(
+            self,
+            p=None,
+            radius=None,
+            center=None,
+            alpha=None,
+            pmlbegin=None,
+            pmlend=None,
+            maxndofs=200000,  # Stop if ndofs become larger than this
+            visualize=True,  # Pause adaptive loop to see iterate
+            npts=4,
+            nspan=5,
+            seed=1,
+            within=None,
+            rhoinv=0.0,
+            quadrule='circ_trapez_shift',
+            inverse='umfpack',
+            autoupdate=True,
+            trustme=False,
+            verbose=True,
+            **feastkwargs):
+        """
+        Compute vector leaky modes by DWR adaptivity, solving in each
+        iteration a linear eigenproblem obtained using the
+        (frequency-independent) C² smooth PML in which
+            mapped_x = x * (1 + 1j * α * φ(r))
+        where φ is a C² function of the radius r.  The eigenproblem is
+        solved by a non-selfadjoint FEAST algorithm.
+        We use the resolvent formulation of the eigenproblem., i.e.,
+        we call smoothvecpmlsystem_resolvent instead of
+        smoothvecpmlsystem_compound.
+
+        INPUT:
+
+        * radius, center:
+            Capture modes whose non-dimensional resonance value Z²
+            is such that Z*Z is contained within the circular contour
+            centered at "centerZ2" of radius "radiusZ2" in the complex
+            plane.
+        * maxndofs: Stop adaptive loop if number of dofs exceed this.
+        * trustme: If True, modify the new center to be the average
+            of the Z² values of the modes found in the previous iteration.
+        * visualize: If true, then pause adaptivity loop to see each iterate.
+        * Remaining inputs are as documented in leakymode(..).
+
+        OUTPUT:   zsqr, E_r, E_l, phi_r, phi_l, P
+        """
+        # Check validity of inputs
+        if p is None or radius is None or center is None:
+            raise ValueError('Missing input(s)')
+
+        ndofs = [0]
+        Zsqrs = []
+
+        if visualize:
+            eevis = ng.GridFunction(ng.L2(self.mesh, order=0, autoupdate=True),
+                                    name='estimator',
+                                    autoupdate=True,
+                                    nested=True)
+            ng.Draw(eevis)
+
+        while ndofs[-1] < maxndofs:  # ADAPTIVITY LOOP ------------------
+
+            res, m, a, b, c, d, dinv = self.smoothvecpmlsystem_resolvent(
+                    p,
+                    alpha=alpha,
+                    pmlbegin=pmlbegin,
+                    pmlend=pmlend,
+                    deg=2,
+                    inverse=inverse,
+                    autoupdate=autoupdate)
+            X, Y = res.XY.components
+
+            E_r = NGvecs(X, nspan, M=m.mat)
+            E_l = NGvecs(X, nspan, M=m.mat)
+            E_r.setrandom(seed=seed)
+            E_l.setrandom(seed=seed)
+
+            # 1. SOLVE
+
+            # The assembling occurs in smoothvecpmlsystem_resolvent
+
+            P = SpectralProjNGR(
+                    lambda z: res(z, self.V, self.index, inverse=inverse),
+                    radius=radius,
+                    center=center,
+                    npts=npts,
+                    within=within,
+                    rhoinv=rhoinv,
+                    quadrule=quadrule,
+                    verbose=verbose,
+                    inverse=inverse)
+
+            zsqr, E_r, history, E_l = P.feast(
+                    E_r, Yl=E_l, hermitian=False, **feastkwargs)
+
+            cgd = history[-1]
+            if not cgd:
+                raise NotImplementedError('What to do when FEAST fails?')
+            # Implement average of multiple eigenfunctions
+            avr_zsqr = np.average(zsqr)
+            ndofs.append(E_r.fes.ndof)
+            Zsqrs.append(zsqr)
+            if E_r.m > 1:
+                print(f'ADAPTIVITY at {ndofs[-1]:7d} ndofs: ' +
+                      f'avg_zsqr = {avr_zsqr:+10.8f}')
+            else:
+                print(f'ADAPTIVITY at {ndofs[-1]:7d} ndofs: ' +
+                      f'Zsqr = {Zsqrs[-1][0]:+10.8f}')
+
+            # Get phi_r, phi_l from E_r, E_l
+            phi_r, phi_l = self.__get_phi_from_E(E_r, E_l, b, c, d, dinv, Y)
+
+            # 2. ESTIMATE
+            ee = self.eestimator_maxwell_resolvent(
+                    E_r, E_l, phi_r, phi_l, avr_zsqr)
+
+            if visualize:
+                eevis.vec.FV().NumPy()[:] = ee
+                ng.Draw(eevis)
+                for i in range(E_r.m):
+                    E_r.draw(name="E_r"+str(i))
+                    phi_r.draw(name="phi_r"+str(i))
+                    E_l.draw(name="E_l"+str(i))
+                    phi_l.draw(name="phi_l"+str(i))
+                    input('* Pausing for visualization.'
+                          'Enter any key to continue')
+
+            if ndofs[-1] > maxndofs:
+                break
+
+            # 3. MARK
+
+            strat = AdaptivityStrategy(Strategy.AVG)
+            strat.apply(self.mesh, ee)
+
+            # 4. REFINE
+
+            self.mesh.Refine()
+            ngmesh = self.mesh.ngmesh.Copy()
+            self.mesh = ng.Mesh(ngmesh)
+            self.mesh.Curve(8)
+            if trustme:
+                center = avr_zsqr
+                npts = 1
+                nspan = 1
+
+        # Adaptivity loop done ------------------------------------------
+
+        beta = self.betafrom(zsqr)
+        print('Results:\n Z²:', zsqr)
+        print(' beta:', beta)
+        print(' CL dB/m:', 20 * beta.imag / np.log(10))
+
+        maxbdrnrm_r = np.max(self.boundarynorm(E_r))
+        maxbdrnrm_l = np.max(self.boundarynorm(E_l))
+        maxbdrnrm = max(maxbdrnrm_r, maxbdrnrm_l)
+        if maxbdrnrm > 1e-6:
+            print('*** Mode boundary L2 norm > 1e-6!')
+
+        return Zsqrs, ndofs, E_r, E_l, phi_r, phi_l, beta, P
+
+    def __get_phi_from_E(self, E_r, E_l, b, c, d, dinv, Y):
+        """
+        Get phi_r, phi_l from E_r, E_l
+        """
+        phi_r, phi_l = NGvecs(Y, E_r.m), NGvecs(Y, E_l.m)
+        bE_r, cE_l = phi_r.zeroclone(), phi_l.zeroclone()
+
+        bE_r._mv[:] = -b.mat * E_r._mv
+        bE_r._mv[:] += d.harmonic_extension_trans * bE_r._mv
+        phi_r._mv[:] = dinv * bE_r._mv
+        phi_r._mv[:] += d.inner_solve * bE_r._mv
+        phi_r._mv[:] += d.harmonic_extension * phi_r._mv
+
+        cE_l._mv[:] = -c.mat.H * E_l._mv
+        cE_l._mv[:] += d.harmonic_extension_trans.H * cE_l._mv
+        phi_l._mv[:] = dinv.H * cE_l._mv
+        phi_l._mv[:] += d.inner_solve.H * cE_l._mv
+        phi_l._mv[:] += d.harmonic_extension.H * phi_l._mv
+
+        return phi_r, phi_l
 
     # ###################################################################
     # GUIDED LP MODES FROM SELFADJOINT EIGENPROBLEM #####################
