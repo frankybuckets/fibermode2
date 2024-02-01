@@ -3,7 +3,7 @@ Definition of ModeSolver class and its methods for computing
 modes of various fibers.
 """
 from warnings import warn
-from ngsolve import curl, grad, dx, Conj, Integrate, InnerProduct
+from ngsolve import curl, grad, dx, Conj, Integrate, InnerProduct, CF
 from numpy import conj
 from pyeigfeast import NGvecs, SpectralProjNG
 from pyeigfeast import SpectralProjNGR, SpectralProjNGPoly
@@ -2547,6 +2547,27 @@ class ModeSolver:
         phi_l._mv[:] += d.harmonic_extension.H * phi_l._mv
 
         return phi_r, phi_l
+
+    def get_intensity(self, E, phi, betas):
+        """
+        Compute the intensity of the modes E = (E, -i/β phi L).
+        Intensity = |E|^2 + |phi|^2 / |β|^2 L
+        INPUTS:
+        E: Transverse electric field
+        phi: Longitudinal electric field
+        zsqr: Non-dimensional Z² value of the mode
+        OUTPUT:
+        intensity: Intensity of the mode (as a list of CFs)
+        """
+        assert E.m == phi.m, f'E.m = {E.m} != phi.m = {phi.m}'
+        assert len(betas) == E.m, f'len(betas) = {len(betas)} != E.m = {E.m}'
+        intensity = []
+        for i, beta in enumerate(betas):
+            intensity.append(
+                    CF(InnerProduct(E[i], E[i]) +
+                       InnerProduct(phi[i], phi[i]) /
+                       (abs(beta)**2 * self.L)))
+        return intensity
 
     # ###################################################################
     # GUIDED LP MODES FROM SELFADJOINT EIGENPROBLEM #####################
