@@ -1791,9 +1791,9 @@ class ModeSolver:
         JE_r = detj * jacinv * jacinv * E_r
         JE_l = detj * jacinv * jacinv * E_l
         # # First order derivatives
-        gradE_r = grad(E_r)
+        # gradE_r = grad(E_r)
         gradphi_r = grad(phi_r)
-        gradE_l = grad(E_l)
+        # gradE_l = grad(E_l)
         gradphi_l = grad(phi_l)
         # # PML First order derivatives
         Jgradphi_r = detj * jacinv * jacinv * gradphi_r
@@ -1867,8 +1867,12 @@ class ModeSolver:
         #                    self.mesh,
         #                    element_wise=True)
 
+        # omega_r = Integrate(
+        #         InnerProduct(gradE_r, gradE_r),
+        #         self.mesh,
+        #         element_wise=True)
         omega_r = Integrate(
-                InnerProduct(gradE_r, gradE_r),
+                InnerProduct(curl(E_r), curl(E_r)),
                 self.mesh,
                 element_wise=True)
         omega_r += Integrate(
@@ -1876,8 +1880,12 @@ class ModeSolver:
                 self.mesh,
                 element_wise=True)
 
+        # omega_l = Integrate(
+        #         InnerProduct(gradE_l, gradE_l),
+        #         self.mesh,
+        #         element_wise=True)
         omega_l = Integrate(
-                InnerProduct(gradE_l, gradE_l),
+                InnerProduct(curl(E_l), curl(E_l)),
                 self.mesh,
                 element_wise=True)
         omega_l += Integrate(
