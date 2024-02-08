@@ -3,7 +3,7 @@ Definition of ModeSolver class and its methods for computing
 modes of various fibers.
 """
 from warnings import warn
-from ngsolve import curl, grad, dx, Conj, Integrate, InnerProduct, CF
+from ngsolve import curl, grad, dx, Conj, Integrate, InnerProduct, CF, sqrt
 from numpy import conj
 from pyeigfeast import NGvecs, SpectralProjNG
 from pyeigfeast import SpectralProjNGR, SpectralProjNGPoly
@@ -1773,6 +1773,7 @@ class ModeSolver:
         h = ng.specialcf.mesh_size
         n = ng.specialcf.normal(self.mesh.dim)
         n2 = self.index * self.index
+        kappa = (mu / eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2
 
         # Extract grid functions and its components
         rgt_avg = self.__compute_avr_ngvecs(rgt, name='rgt')
@@ -1799,11 +1800,11 @@ class ModeSolver:
         Jgradphi_r = detj * jacinv * jacinv * gradphi_r
         Jgradphi_l = detj * jacinv * jacinv * gradphi_l
         # # Remaining terms
-        curlE_r = (mu * eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2 * curl(E_r)
+        curlE_r = kappa * curl(E_r)
         rotcurlE_r_x = curlE_r.Diff(y)
         rotcurlE_r_y = -curlE_r.Diff(x)
 
-        curlE_l = (mu * eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2 * curl(E_l)
+        curlE_l = kappa * curl(E_l)
         rotcurlE_l_x = curlE_l.Diff(y)
         rotcurlE_l_y = -curlE_l.Diff(x)
 
@@ -1898,6 +1899,149 @@ class ModeSolver:
 
         return ee
 
+    def eestimator_maxwell_compound_jj(self, rgt, lft, lam):
+        """
+        DWR error estimator for eigenvalues Maxwell eigenproblem for compound
+        form. We use Joachim's interpolator and we integrate by parts the
+        pseudo-Helmholtz decomposition of the interpolator.
+        INPUT:
+        * lft: left eigenfunction as NGvecs object for the compound form
+        * rgt: right eigenfunction as NGvecs object for the compound form
+        * lam: eigenvalue
+        OUTPUT:
+        * ee: element-wise error estimator
+        """
+        assert rgt.m == lft.m, 'Check FEAST output:\n' + \
+            f'rgt.m {rgt.m} != lft.m {lft.m}'
+        if rgt.m > 1 or lft.m > 1:
+            print('Taking average of multiple eigenfunctions')
+
+        # Extract coefficient functions
+        mu = self.mu
+        eta = self.eta
+        mu_dr = self.mu_dr
+        eta_dr = self.eta_dr
+        # jac = self.jac
+        jacinv = self.jacinv
+        detj = self.detj
+
+        x = ng.x
+        y = ng.y
+        r = ng.sqrt(x * x + y * y)
+
+        h = ng.specialcf.mesh_size
+        n = ng.specialcf.normal(self.mesh.dim)
+        n2 = self.index * self.index
+        kappa = (mu / eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2
+
+        # Extract grid functions and its components
+        rgt_avg = self.__compute_avr_ngvecs(rgt, name='rgt')
+        lft_avg = self.__compute_avr_ngvecs(lft, name='lft')
+
+        E_r = rgt_avg.components[0]
+        E_l = lft_avg.components[0]
+        phi_r = rgt_avg.components[1]
+        phi_l = lft_avg.components[1]
+
+        # Compute coefficients
+        # # Mapped fields
+        JE_r = detj * jacinv * jacinv * E_r
+        JE_l = detj * jacinv * jacinv * E_l
+        # # First order derivatives
+        # gradE_r = grad(E_r)
+        gradphi_r = grad(phi_r)
+        # gradE_l = grad(E_l)
+        gradphi_l = grad(phi_l)
+        # # PML First order derivatives
+        Jgradphi_r = detj * jacinv * jacinv * gradphi_r
+        Jgradphi_l = detj * jacinv * jacinv * gradphi_l
+        # # Remaining terms
+        curlE_r = kappa * curl(E_r)
+        rotcurlE_r_x = curlE_r.Diff(y)
+        rotcurlE_r_y = -curlE_r.Diff(x)
+
+        curlE_l = kappa * curl(E_l)
+        rotcurlE_l_x = curlE_l.Diff(y)
+        rotcurlE_l_y = -curlE_l.Diff(x)
+
+        div_E_r = JE_r[0].Diff(x) + JE_r[1].Diff(y)
+        div_E_l = JE_l[0].Diff(x) + JE_l[1].Diff(y)
+
+        # Residual integrals
+        # j is for jump, r is for right, l is for left
+        # t is for transversal, z is for longitudinal, res is for residual
+        # TODO Check the powers of h
+
+        # Right transversal
+        r_t_x = rotcurlE_r_x + self.V * JE_r[0] + Jgradphi_r[0] - lam * JE_r[0]
+        r_t_y = rotcurlE_r_y + self.V * JE_r[1] + Jgradphi_r[1] - lam * JE_r[1]
+        jr_t = (sqrt(0.5) / sqrt(h)) * (curlE_r - curlE_r.Other())
+
+        # Right residual
+        r_res = self.V * JE_r + Jgradphi_r - lam * JE_r
+        r_res_div = h * (r_res[0].Diff(x) + r_res[1].Diff(y))
+        jr_res = n * (r_res - r_res.Other())
+
+        # Right longitudinal
+        r_z = h * (n2 * div_E_r + n2 * detj * phi_r)
+        jr_z = n2 * n * (JE_r - JE_r.Other())
+
+        # Left transversal
+        l_t_x = h * (rotcurlE_l_x + self.V * JE_l[0] + n2 * Jgradphi_l[0] -
+                     np.conj(lam) * JE_l[0])
+        l_t_y = h * (rotcurlE_l_y + self.V * JE_l[1] + n2 * Jgradphi_l[1] -
+                     np.conj(lam) * JE_l[1])
+        jl_t = curlE_l - curlE_l.Other()
+
+        # Left residual
+        # V gamma F + nt gamma grad(psi) - conj(lam) gamma F
+        l_res = self.V * JE_l + n2 * Jgradphi_l - np.conj(lam) * JE_l
+        l_res_div = h * (l_res[0].Diff(x) + l_res[1].Diff(y))
+        jl_res = n * (l_res - l_res.Other())
+
+        # Left longitudinal
+        l_z = h * (div_E_l + n2 * detj * phi_l)
+        jl_z = n2 * n * (JE_l - JE_l.Other())
+
+        rho_r = Integrate(
+                (InnerProduct(r_t_x, r_t_x) +
+                 InnerProduct(r_t_y, r_t_y) +
+                 InnerProduct(r_res_div, r_res_div) +
+                 InnerProduct(r_z, r_z)) * dx +
+                0.5 * h * (InnerProduct(jr_t, jr_t) +
+                           InnerProduct(jr_z, jr_z) +
+                           InnerProduct(jr_res, jr_res)) *
+                dx(element_boundary=True),
+                self.mesh, element_wise=True)
+
+        rho_l = Integrate(
+                (InnerProduct(l_t_x, l_t_x) +
+                 InnerProduct(l_t_y, l_t_y) +
+                 InnerProduct(l_res_div, l_res_div) +
+                 InnerProduct(l_z, l_z)) * dx +
+                0.5 * h * (InnerProduct(jl_t, jl_t) +
+                           InnerProduct(jl_z, jl_z) +
+                           InnerProduct(jl_res, jl_res)) *
+                dx(element_boundary=True),
+                self.mesh, element_wise=True)
+
+        omega_r = Integrate(
+                (h * InnerProduct(curl(E_r), curl(E_r)) +
+                 InnerProduct(E_r, E_r) +
+                 InnerProduct(gradphi_r, gradphi_r)) * dx,
+                self.mesh, element_wise=True)
+
+        omega_l = Integrate(
+                (h * InnerProduct(curl(E_l), curl(E_l)) +
+                 InnerProduct(E_l, E_l) +
+                 InnerProduct(gradphi_l, gradphi_l)) * dx,
+                self.mesh, element_wise=True)
+
+        ee = np.sqrt(omega_r.real.NumPy() * rho_r.real.NumPy())
+        ee += np.sqrt(omega_l.real.NumPy() * rho_l.real.NumPy())
+
+        return ee
+
     def eestimator_maxwell_resolvent(self, Er, El, phir, phil, lam):
         """
         DWR error estimator for eigenvalues
@@ -1932,6 +2076,7 @@ class ModeSolver:
         h = ng.specialcf.mesh_size
         n = ng.specialcf.normal(self.mesh.dim)
         n2 = self.index * self.index
+        kappa = (mu / eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2
 
         # Extract grid functions and its components
         E_r = self.__compute_avr_ngvecs(Er, name='E_r')
@@ -1952,11 +2097,11 @@ class ModeSolver:
         Jgradphi_r = detj * jacinv * jacinv * gradphi_r
         Jgradphi_l = detj * jacinv * jacinv * gradphi_l
         # # Remaining terms
-        curlE_r = (mu * eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2 * curl(E_r)
+        curlE_r = kappa * curl(E_r)
         rotcurlE_r_x = curlE_r.Diff(y)
         rotcurlE_r_y = -curlE_r.Diff(x)
 
-        curlE_l = (mu * eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2 * curl(E_l)
+        curlE_l = kappa * curl(E_l)
         rotcurlE_l_x = curlE_l.Diff(y)
         rotcurlE_l_y = -curlE_l.Diff(x)
 
@@ -2009,16 +2154,6 @@ class ModeSolver:
         rho_l += Integrate(
                 0.5 * h * InnerProduct(jl_z, jl_z) * dx(element_boundary=True),
                 self.mesh, element_wise=True)
-
-        # def hess(gf):
-        #     return gf.Operator("hesse")
-
-        # omegaR = Integrate(h * h * InnerProduct(hess(R), hess(R)),
-        #                    self.mesh,
-        #                    element_wise=True)
-        # omegaL = Integrate(h * h * InnerProduct(hess(L), hess(L)),
-        #                    self.mesh,
-        #                    element_wise=True)
 
         omega_r = Integrate(
                 InnerProduct(gradE_r, gradE_r),
