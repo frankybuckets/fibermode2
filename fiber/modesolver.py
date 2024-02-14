@@ -86,6 +86,10 @@ class ModeSolver:
         self.L = L
         self.n0 = n0
         self.ngspmlset = False
+        # Set mu to None, so that it can be set later *once*
+        # These coefficients will be members, and will be set by
+        # __set_pml_coeff.  Gabriel
+        self.mu = None
 
         print('ModeSolver: Checking if mesh has required regions')
         print('Mesh has ', mesh.ne, ' elements, ', mesh.nv, ' points, '
@@ -676,11 +680,11 @@ class ModeSolver:
         """
         print('ModeSolver.smooth_pml_symb called...\n')
         # symbolically derive the radial PML functions
-        s, t, R0, R1 = sm.symbols('s t R_0 R_1')
-        nr = sm.integrate((s - R0)**deg * (s - R1)**deg, (s, R0, t)).factor()
-        dr = nr.subs(t, R1).factor()
+        s, t, r0, r1 = sm.symbols('s t R_0 R_1')
+        nr = sm.integrate((s - r0)**deg * (s - r1)**deg, (s, r0, t)).factor()
+        dr = nr.subs(t, r1).factor()
         phi = alpha * nr / dr  # called α * φ in the docstring
-        phi = phi.subs(R0, pmlbegin).subs(R1, pmlend)
+        phi = phi.subs(r0, pmlbegin).subs(r1, pmlend)
 
         mu_sym = 1 + 1j * phi
         eta_sym = t * mu_sym
@@ -691,6 +695,152 @@ class ModeSolver:
         eta_dt = sm.diff(eta_sym, t).factor()
 
         return mu_sym, eta_sym, mu_dt, eta_dt
+
+    def symb_to_cf(self, symb, r=None):
+        """
+        Convert a symbolic expression to an ngsolve coefficient function.
+        If r is None, then the symbolic expression is assumed to be the radius.
+        Otherwise, r is assumed to be a valid ngsolve coefficient function.
+        Assumes that the symbolic expression is a function of t, and that
+        the imaginary unit is I.
+        """
+        x = ng.x
+        y = ng.y
+        if r is None:
+            r = ng.sqrt(x * x + y * y)
+        # TODO How to assert r is a valid ngsolve coefficient function?
+        strng = str(symb).replace('I', '1j').replace('t', 'r')
+        cf = eval(strng)
+        return cf
+
+    def visualize_pml(self, alpha, pmlbegin, pmlend, deg=2):
+        """
+        Visualize the radial PML functions.
+        """
+        print('ModeSolver.visualize_pml called...\n')
+        if self.mu is None:
+            self.__set_pml_coeff(alpha, pmlbegin, pmlend, deg=deg)
+
+        # Get symbolic functions
+        mu = self.mu
+        mu_dr = self.mu_dr
+        eta = self.eta
+        eta_dr = self.eta_dr
+        detj = self.detj
+        jinv00 = self.jinv00
+        jinv01 = self.jinv01
+        jinv11 = self.jinv11
+
+        # Draw the PML functions
+        print('Drawing (the norm of) PML functions...\n')
+        ng.Draw(ng.Norm(mu), self.mesh, name='mu')
+        ng.Draw(ng.Norm(eta), self.mesh, name='eta')
+        ng.Draw(ng.Norm(mu_dr), self.mesh, name='mu_dr')
+        ng.Draw(ng.Norm(eta_dr), self.mesh, name='eta_dr')
+        # ng.Draw(jac, self.mesh, name='jac')
+        # ng.Draw(ng.Norm(j00), self.mesh, name='j00')
+        # ng.Draw(ng.Norm(j01), self.mesh, name='j01')
+        # ng.Draw(ng.Norm(j11), self.mesh, name='j11')
+        # ng.Draw(jacinv, self.mesh, name='jacinv')
+        ng.Draw(ng.Norm(jinv00), self.mesh, name='jinv00')
+        ng.Draw(ng.Norm(jinv01), self.mesh, name='jinv01')
+        ng.Draw(ng.Norm(jinv11), self.mesh, name='jinv11')
+        ng.Draw(ng.Norm(detj), self.mesh, name='detj')
+
+    def __set_pml_coeff(self, alpha, pmlbegin, pmlend, deg=2, **kwargs):
+        """
+        Set the PML coefficients. Function defined to reduce redundancy
+        and improve readability.
+        Check documentation of CF.Compile for kwargs.
+        Recommended realcompile=True and wait=True.
+        """
+        # Standard ngsolve imports
+        x = ng.x
+        y = ng.y
+        r = ng.sqrt(x * x + y * y)
+        # Get symbolic functions
+        mu_sym, eta_sym, mu_dt, eta_dt = self.smooth_pml_symb(
+                alpha, pmlbegin, pmlend, deg=deg)
+        # Make coefficient functions
+        mu_ = self.symb_to_cf(mu_sym)
+        eta_ = self.symb_to_cf(eta_sym)
+        mu_dr_ = self.symb_to_cf(mu_dt)
+        eta_dr_ = self.symb_to_cf(eta_dt)
+        # Main terms, after truncating at pmlbegin
+        mu = ng.IfPos(r - pmlbegin, mu_, 1)
+        eta = ng.IfPos(r - pmlbegin, eta_, r)
+        mu_dr = ng.IfPos(r - pmlbegin, mu_dr_, 0)
+        eta_dr = ng.IfPos(r - pmlbegin, eta_dr_, 1)
+        # Determinant of Jacobian
+        detj = mu * eta_dr
+        # Jacobian, left as a reminder
+        # # j00 = mu + (mu_dr / r) * x * x
+        # # j01 = - (mu_dr / r) * x * y
+        # # j11 = mu + (mu_dr / r) * y * y
+        # Inverse of Jacobian
+        jinv00 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * y * y
+        jinv01 = - (mu_dr / (eta_dr * eta)) * x * y
+        jinv11 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * x * x
+        # Conjugate the main terms
+        mu_conj = ng.Conj(mu)
+        eta_conj = ng.Conj(eta)
+        mu_dr_conj = ng.Conj(mu_dr)
+        eta_dr_conj = ng.Conj(eta_dr)
+        detj_conj = ng.Conj(detj)
+        # j00_conj = ng.Conj(j00)
+        # j01_conj = ng.Conj(j01)
+        # j11_conj = ng.Conj(j11)
+        jinv00_conj = ng.Conj(jinv00)
+        jinv01_conj = ng.Conj(jinv01)
+        jinv11_conj = ng.Conj(jinv11)
+        # Compile into coefficient functions
+        mu.Compile(**kwargs)
+        eta.Compile(**kwargs)
+        mu_dr.Compile(**kwargs)
+        eta_dr.Compile(**kwargs)
+        # j00.Compile(**kwargs)
+        # j01.Compile(**kwargs)
+        # j11.Compile(**kwargs)
+        # j00_conj.Compile(**kwargs)
+        # j01_conj.Compile(**kwargs)
+        # j11_conj.Compile(**kwargs)
+        jinv00.Compile(**kwargs)
+        jinv01.Compile(**kwargs)
+        jinv11.Compile(**kwargs)
+        detj.Compile(**kwargs)
+        mu_conj.Compile(**kwargs)
+        eta_conj.Compile(**kwargs)
+        mu_dr_conj.Compile(**kwargs)
+        eta_dr_conj.Compile(**kwargs)
+        detj_conj.Compile(**kwargs)
+        jinv00_conj.Compile(**kwargs)
+        jinv01_conj.Compile(**kwargs)
+        jinv11_conj.Compile(**kwargs)
+        # Construct jacobians
+        # jac = ng.CoefficientFunction((j00, j01, j01, j11), dims=(2, 2))
+        jacinv = ng.CoefficientFunction(
+                (jinv00, jinv01, jinv01, jinv11),
+                dims=(2, 2))
+        jacinv_conj = ng.CoefficientFunction(
+                (jinv00_conj, jinv01_conj, jinv01_conj, jinv11_conj),
+                dims=(2, 2))
+        # Adding  terms to the class as needed
+        if self.mu is not None:
+            raise RuntimeError('PML coefficients already set.'
+                               ' Check code logic.')
+        self.mu = mu
+        self.eta = eta
+        self.mu_dr = mu_dr
+        self.eta_dr = eta_dr
+        # self.jac = jac
+        self.jacinv = jacinv
+        self.detj = detj
+        self.mu_conj = mu_conj
+        self.eta_conj = eta_conj
+        self.mu_dr_conj = mu_dr_conj
+        self.eta_dr_conj = eta_dr_conj
+        self.detj_conj = detj_conj
+        self.jacinv_conj = jacinv_conj
 
     def make_resolvent_maxwell(
             self, m, a, b, c, d, X, Y,
@@ -850,14 +1000,9 @@ class ModeSolver:
                     if qAq is not None:
                         Aqr[:] = a.mat * qr._mv
                         for i in range(qr.m):
+                            # TODO: Static condensation caused issues when
+                            #       not using TaskManager
                             selfr.tmpY1.vec.data = b.mat * qr._mv[i]
-
-# TODO
-# Here: If I use static condensation, I get issues with the matrix,
-# If I don't use static condensation, I get issues with this product.
-# Not using static condensation implies the need of redesigning the
-# resolvent class to use the full system matrix
-
                             selfr.tmpY1.vec.data += \
                                 d.harmonic_extension_trans * selfr.tmpY1.vec
                             selfr.tmpY2.vec.data = dinv * selfr.tmpY1.vec
@@ -911,94 +1056,6 @@ class ModeSolver:
         # end of class ResolventVectorMode --------------------------------
 
         return ResolventVectorMode, dinv
-
-    def symb_to_cf(self, symb, r=None):
-        """
-        Convert a symbolic expression to an ngsolve coefficient function.
-        If r is None, then the symbolic expression is assumed to be the radius.
-        Otherwise, r is assumed to be a valid ngsolve coefficient function.
-        Assumes that the symbolic expression is a function of t, and that
-        the imaginary unit is I.
-        """
-        x = ng.x
-        y = ng.y
-        if r is None:
-            r = ng.sqrt(x * x + y * y)
-        # TODO How to assert r is a valid ngsolve coefficient function?
-        strng = str(symb).replace('I', '1j').replace('t', 'r')
-        cf = eval(strng)
-        return cf
-
-    def visualize_pml(self, alpha, pmlbegin, pmlend, deg=2):
-        """
-        Visualize the radial PML functions.
-        """
-        print('ModeSolver.visualize_pml called...\n')
-        mu_sym, eta_sym, mu_dt, eta_dt = self.smooth_pml_symb(
-                alpha, pmlbegin, pmlend, deg=deg)
-
-        # Transform to ngsolve coefficient functions
-        x = ng.x
-        y = ng.y
-        r = ng.sqrt(x * x + y * y)
-
-        # Convert from symbolic to ngsolve coefficient functions
-        mu_ = self.symb_to_cf(mu_sym, r=r)
-        eta_ = self.symb_to_cf(eta_sym, r=r)
-        mu_dr_ = self.symb_to_cf(mu_dt, r=r)
-        eta_dr_ = self.symb_to_cf(eta_dt, r=r)
-
-        # Main terms
-        mu = ng.IfPos(r - pmlbegin, mu_, 1)
-        eta = ng.IfPos(r - pmlbegin, eta_, r)
-        mu_dr = ng.IfPos(r - pmlbegin, mu_dr_, 0)
-        eta_dr = ng.IfPos(r - pmlbegin, eta_dr_, 1)
-        # Jacobian
-        j00 = mu + (mu_dr / r) * x * x
-        j01 = - (mu_dr / r) * x * y
-        j11 = mu + (mu_dr / r) * y * y
-        # Inverse of Jacobian
-        jinv00 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * y * y
-        jinv01 = - (mu_dr / (eta_dr * eta)) * x * y
-        jinv11 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * x * x
-
-        # Determinant of Jacobian
-        detj = mu * eta_dr
-
-        # Compile into coefficient functions
-        mu.Compile()
-        eta.Compile()
-        mu_dr.Compile()
-        eta_dr.Compile()
-        j00.Compile()
-        j01.Compile()
-        j11.Compile()
-        jinv00.Compile()
-        jinv01.Compile()
-        jinv11.Compile()
-        detj.Compile()
-
-        # Make matrix coefficient functions
-        # jac = ng.CoefficientFunction(
-        #         (j00, j01, j01, j11), dims=(2, 2))
-        # jacinv = ng.CoefficientFunction(
-        #         (jinv00, jinv01, jinv01, jinv11), dims=(2, 2))
-
-        # Draw the PML functions
-        print('Drawing (the norm of) PML functions...\n')
-        ng.Draw(ng.Norm(mu), self.mesh, name='mu')
-        ng.Draw(ng.Norm(eta), self.mesh, name='eta')
-        ng.Draw(ng.Norm(mu_dr), self.mesh, name='mu_dr')
-        ng.Draw(ng.Norm(eta_dr), self.mesh, name='eta_dr')
-        # ng.Draw(jac, self.mesh, name='jac')
-        ng.Draw(ng.Norm(j00), self.mesh, name='j00')
-        ng.Draw(ng.Norm(j01), self.mesh, name='j01')
-        ng.Draw(ng.Norm(j11), self.mesh, name='j11')
-        # ng.Draw(jacinv, self.mesh, name='jacinv')
-        ng.Draw(ng.Norm(jinv00), self.mesh, name='jinv00')
-        ng.Draw(ng.Norm(jinv01), self.mesh, name='jinv01')
-        ng.Draw(ng.Norm(jinv11), self.mesh, name='jinv11')
-        ng.Draw(ng.Norm(detj), self.mesh, name='detj')
 
     # ###################################################################
     # # PML SYSTEMS #####################################################
@@ -1115,64 +1172,19 @@ class ModeSolver:
         if pmlend is None:
             pmlend = self.Rout
 
-        # Get symbolic functions
-        mu_sym, eta_sym, mu_dt, eta_dt = self.smooth_pml_symb(
-                alpha, pmlbegin, pmlend, deg=deg)
+        if self.mu is None:
+            self.__set_pml_coeff(alpha, pmlbegin, pmlend, deg=deg)
 
-        # Transform to ngsolve coefficient functions
+        # Get symbolic functions
         x = ng.x
         y = ng.y
         r = ng.sqrt(x * x + y * y)
-
-        mu_ = self.symb_to_cf(mu_sym)
-        eta_ = self.symb_to_cf(eta_sym)
-        mu_dr_ = self.symb_to_cf(mu_dt)
-        eta_dr_ = self.symb_to_cf(eta_dt)
-
-        mu = ng.IfPos(r - pmlbegin, mu_, 1)
-        eta = ng.IfPos(r - pmlbegin, eta_, r)
-        mu_dr = ng.IfPos(r - pmlbegin, mu_dr_, 0)
-        eta_dr = ng.IfPos(r - pmlbegin, eta_dr_, 1)
-
-        # Jacobian, left as a reminder
-        # j00 = mu + (mu_dr / r) * x * x
-        # j01 = - (mu_dr / r) * x * y
-        # j11 = mu + (mu_dr / r) * y * y
-
-        # Inverse of Jacobian
-        jinv00 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * y * y
-        jinv01 = - (mu_dr / (eta_dr * eta)) * x * y
-        jinv11 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * x * x
-
-        # Determinant of Jacobian
-        detj = mu * eta_dr
-
-        # Compile into coefficient functions
-        mu.Compile()
-        eta.Compile()
-        mu_dr.Compile()
-        eta_dr.Compile()
-        # j00.Compile()
-        # j01.Compile()
-        # j11.Compile()
-        jinv00.Compile()
-        jinv01.Compile()
-        jinv11.Compile()
-        detj.Compile()
-
-        # Make coefficient functions
-        # jac = ng.CoefficientFunction((j00, j01, j01, j11), dims=(2, 2))
-        jacinv = ng.CoefficientFunction((jinv00, jinv01, jinv01, jinv11),
-                                        dims=(2, 2))
-
-        # Adding  terms to the class as needed
-        self.mu = mu
-        self.eta = eta
-        self.mu_dr = mu_dr
-        self.eta_dr = eta_dr
-        # self.jac = jac
-        self.jacinv = jacinv
-        self.detj = detj
+        mu = self.mu
+        mu_dr = self.mu_dr
+        eta = self.eta
+        eta_dr = self.eta_dr
+        detj = self.detj
+        jacinv = self.jacinv
 
         # Make linear eigensystem, cf. self.vecmodesystem
         n2 = self.index * self.index
@@ -1196,6 +1208,7 @@ class ModeSolver:
         aa = ng.BilinearForm(Z)
         mm = ng.BilinearForm(Z)
 
+        # TODO
         aa += ((mu / eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2 *
                curl(E) * curl(F) +
                self.V * detj * (jacinv * E) * (jacinv * F) +
@@ -1256,64 +1269,20 @@ class ModeSolver:
         if pmlend is None:
             pmlend = self.Rout
 
-        # Get symbolic functions
-        mu_sym, eta_sym, mu_dt, eta_dt = self.smooth_pml_symb(
-                alpha, pmlbegin, pmlend, deg=deg)
-
         # Transform to ngsolve coefficient functions
         x = ng.x
         y = ng.y
         r = ng.sqrt(x * x + y * y)
 
-        mu_ = self.symb_to_cf(mu_sym)
-        eta_ = self.symb_to_cf(eta_sym)
-        mu_dr_ = self.symb_to_cf(mu_dt)
-        eta_dr_ = self.symb_to_cf(eta_dt)
+        if self.mu is None:
+            self.__set_pml_coeff(alpha, pmlbegin, pmlend, deg=deg)
 
-        mu = ng.IfPos(r - pmlbegin, mu_, 1)
-        eta = ng.IfPos(r - pmlbegin, eta_, r)
-        mu_dr = ng.IfPos(r - pmlbegin, mu_dr_, 0)
-        eta_dr = ng.IfPos(r - pmlbegin, eta_dr_, 1)
-
-        # Jacobian, left as a reminder
-        # j00 = mu + (mu_dr / r) * x * x
-        # j01 = - (mu_dr / r) * x * y
-        # j11 = mu + (mu_dr / r) * y * y
-
-        # Inverse of Jacobian
-        jinv00 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * y * y
-        jinv01 = - (mu_dr / (eta_dr * eta)) * x * y
-        jinv11 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * x * x
-
-        # Determinant of Jacobian
-        detj = mu * eta_dr
-
-        # Compile into coefficient functions
-        mu.Compile()
-        eta.Compile()
-        mu_dr.Compile()
-        eta_dr.Compile()
-        # j00.Compile()
-        # j01.Compile()
-        # j11.Compile()
-        jinv00.Compile()
-        jinv01.Compile()
-        jinv11.Compile()
-        detj.Compile()
-
-        # Make coefficient functions
-        # jac = ng.CoefficientFunction((j00, j01, j01, j11), dims=(2, 2))
-        jacinv = ng.CoefficientFunction((jinv00, jinv01, jinv01, jinv11),
-                                        dims=(2, 2))
-
-        # Adding  terms to the class as needed
-        self.mu = mu
-        self.eta = eta
-        self.mu_dr = mu_dr
-        self.eta_dr = eta_dr
-        # self.jac = jac
-        self.jacinv = jacinv
-        self.detj = detj
+        mu = self.mu
+        mu_dr = self.mu_dr
+        eta = self.eta
+        eta_dr = self.eta_dr
+        detj = self.detj
+        jacinv = self.jacinv
 
         # Make linear eigensystem, cf. self.vecmodesystem
         n2 = self.index * self.index
@@ -1341,6 +1310,7 @@ class ModeSolver:
         # d = ng.BilinearForm(Y)
         d = ng.BilinearForm(Y, condense=True)
 
+        # TODO
         m += detj * (jacinv * E) * (jacinv * F) * dx
         a += ((mu / eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2 *
               curl(E) * curl(F)) * dx
@@ -1741,6 +1711,7 @@ class ModeSolver:
 
         return ee
 
+    # TODO: Implement the following error estimator
     def eestimator_maxwell_compound(self, rgt, lft, lam):
         """
         DWR error estimator for eigenvalues
@@ -1757,6 +1728,9 @@ class ModeSolver:
         if rgt.m > 1 or lft.m > 1:
             print('Taking average of multiple eigenfunctions')
 
+        if self.mu is None:
+            raise ValueError('PML coefficients not set. Use set_pml_coeff.'
+                             ' Check code logic.')
         # Extract coefficient functions
         mu = self.mu
         eta = self.eta
@@ -1899,6 +1873,7 @@ class ModeSolver:
 
         return ee
 
+    # TODO: Modify according to the new implementation
     def eestimator_maxwell_compound_jj(self, rgt, lft, lam):
         """
         DWR error estimator for eigenvalues Maxwell eigenproblem for compound
