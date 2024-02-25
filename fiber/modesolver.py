@@ -1160,7 +1160,7 @@ class ModeSolver:
         aa += ((kappa * curl(E)) * curl(F) +
                self.V * (gamma * E) * F +
                n2 * (gamma * E) * grad(psi) +
-               n2 * (gamma * grad(phi)) * F -
+               (gamma * grad(phi)) * F -
                n2 * detj * phi * psi) * dx
         mm += (gamma * E) * F * dx
 
