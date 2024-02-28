@@ -88,7 +88,7 @@ class ModeSolver:
         self.ngspmlset = False
         # Set gamma to None, so that it can be set later *once*
         # These coefficients will be members, and will be set by
-        # __set_pml_coeff.  Gabriel
+        # set_vecpml_coeff.  Gabriel
         self.gamma = None
 
         print('ModeSolver: Checking if mesh has required regions')
@@ -644,57 +644,29 @@ class ModeSolver:
 
     def smoothpmlsymb(self, alpha, pmlbegin, pmlend):
         """
-        Symbolic pml functions useful for debugging/visualization of pml
-        Kept for backward compatibility. Use self.smooth_pml_symb instead.
+        Symbolic pml functions useful for debugging/visualization of pml.
+        ---
+        We compute a radial PML function φ(r) = α * φ(r) and the derived
+        functions τ(r) = μ(r) = 1 + αφ(r) (called taut in the code),
+        and τ_mapped(r) = r * τ(r) = r * μ(r) = η(r) = r * (1 + αφ(r)).
+        Remaining terms are also computed. Notation is not unified.
+        Reader is advised to consult the code for the exact meaning of
+        the symbols used.
+        Cf. Kim and Pasciak; Gopalakrishnan et al.
         """
-        warn('Use smooth_pml_symb instead',
-             PendingDeprecationWarning)
-        # symbolically derive the radial PML functions
-        s, t, R0, R1 = sm.symbols('s t R_0 R_1')
-        nr = sm.integrate((s - R0)**2 * (s - R1)**2, (s, R0, t)).factor()
-        dr = nr.subs(t, R1).factor()
-        phi = alpha * nr / dr  # called α * φ in the docstring
-        phi = phi.subs(R0, pmlbegin).subs(R1, pmlend)
-        sigma = sm.diff(t * phi, t).factor()
-        tau = 1 + 1j * sigma
-        taut = 1 + 1j * phi
-        mappedt = t * taut
-        G = (tau / taut).factor()  # this is what appears in the mapped system
-        return G, mappedt, tau, taut
-
-    def smooth_pml_symb(self, alpha, pmlbegin, pmlend, deg=2):
-        """
-        Symbolic pml useful for debugging/visualization of pml.
-        Derives the radial PML functions.
-        INPUTS:
-        * alpha: PML strength
-        * pmlbegin: radius where PML begins
-        * pmlend: radius where PML ends
-        * deg: degree of the PML polynomial
-        OUTPUTS:
-        * mu_sym: mu(r) is such that mapped_x = mu * x
-        * eta_sym: eta(r) = mapped_r is such that eta = mu * r
-        * mu_dt: mu'(r)
-        * eta_dt: eta'(r)
-        Compare with smoothpmlsymb.
-        """
-        print('ModeSolver.smooth_pml_symb called...\n')
         # symbolically derive the radial PML functions
         s, t, r0, r1 = sm.symbols('s t R_0 R_1')
-        nr = sm.integrate((s - r0)**deg * (s - r1)**deg, (s, r0, t)).factor()
+        nr = sm.integrate((s - r0)**2 * (s - r1)**2, (s, r0, t)).factor()
         dr = nr.subs(t, r1).factor()
         phi = alpha * nr / dr  # called α * φ in the docstring
         phi = phi.subs(r0, pmlbegin).subs(r1, pmlend)
-
-        mu_sym = 1 + 1j * phi
-        eta_sym = t * mu_sym
-        mu_sym.factor()
-        eta_sym.factor()
-
-        mu_dt = sm.diff(mu_sym, t).factor()
-        eta_dt = sm.diff(eta_sym, t).factor()
-
-        return mu_sym, eta_sym, mu_dt, eta_dt
+        # Remaining terms
+        sigma = sm.diff(t * phi, t).factor()
+        tau = 1 + 1j * sigma
+        taut = 1 + 1j * phi  # called μ in the docstring
+        mappedt = t * taut  # called η in the docstring
+        g = (tau / taut).factor()  # this is what appears in the mapped system
+        return g, mappedt, tau, taut
 
     def symb_to_cf(self, symb, r=None):
         """
@@ -713,10 +685,17 @@ class ModeSolver:
         cf = eval(strng)
         return cf
 
-    def __set_pml_coeff(self, alpha, pmlbegin, pmlend, deg=2, **kwargs):
+    def set_vecpml_coeff(self, alpha, pmlbegin, pmlend, **kwargs):
         """
         Set the PML coefficients. Function defined to reduce redundancy
         and improve readability.
+        Adds the following attributes to the class:
+        * self.detj
+        * self.detj_conj
+        * self.kappa
+        * self.kappa_conj
+        * self.gamma
+        * self.gamma_conj
         Check documentation of CF.Compile for kwargs.
         Recommended realcompile=True and wait=True.
         """
@@ -725,8 +704,12 @@ class ModeSolver:
         y = ng.y
         r = ng.sqrt(x * x + y * y)
         # Get symbolic functions
-        mu_sym, eta_sym, mu_dt, eta_dt = self.smooth_pml_symb(
-                alpha, pmlbegin, pmlend, deg=deg)
+        _, eta_sym, _, mu_sym = self.smoothpmlsymb(
+                alpha, pmlbegin, pmlend)
+        t = sm.symbols('t')
+        eta_dt = sm.diff(eta_sym, t).factor()
+        mu_dt = sm.diff(mu_sym, t).factor()
+        # mu_dt = sm.diff(t * mu_sym, t).factor()
         # Make coefficient functions
         mu_ = self.symb_to_cf(mu_sym)
         eta_ = self.symb_to_cf(eta_sym)
@@ -790,12 +773,12 @@ class ModeSolver:
         kappa.Compile(**kwargs)
         kappa_conj.Compile(**kwargs)
         # Set the coefficients
-        self.detj = detj
-        self.detj_conj = detj_conj
-        self.kappa = kappa
-        self.kappa_conj = kappa_conj
-        self.gamma = gamma
-        self.gamma_conj = gamma_conj
+        setattr(self, 'detj', detj)
+        setattr(self, 'detj_conj', detj_conj)
+        setattr(self, 'kappa', kappa)
+        setattr(self, 'kappa_conj', kappa_conj)
+        setattr(self, 'gamma', gamma)
+        setattr(self, 'gamma_conj', gamma_conj)
 
     def make_resolvent_maxwell(
             self, m, a, b, c, d, X, Y,
@@ -1126,9 +1109,8 @@ class ModeSolver:
             pmlbegin = self.R
         if pmlend is None:
             pmlend = self.Rout
-
         if self.gamma is None:
-            self.__set_pml_coeff(alpha, pmlbegin, pmlend, deg=deg, maxderiv=3)
+            self.set_vecpml_coeff(alpha, pmlbegin, pmlend, maxderiv=3)
 
         # Get symbolic functions
         detj = self.detj
@@ -1217,7 +1199,7 @@ class ModeSolver:
             pmlend = self.Rout
 
         if self.gamma is None:
-            self.__set_pml_coeff(alpha, pmlbegin, pmlend, deg=deg, maxderiv=3)
+            self.set_vecpml_coeff(alpha, pmlbegin, pmlend, maxderiv=3)
 
         # Get symbolic functions
         detj = self.detj
@@ -1673,7 +1655,7 @@ class ModeSolver:
             print('Taking average of multiple eigenfunctions')
 
         if self.gamma is None:
-            raise ValueError('PML coefficients not set. Use set_pml_coeff.'
+            raise ValueError('PML coefficients not set. Use set_vecpml_coeff.'
                              ' Check code logic.')
         # Extract coefficient functions
         kappa = self.kappa
