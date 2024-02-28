@@ -3,7 +3,7 @@ Definition of ModeSolver class and its methods for computing
 modes of various fibers.
 """
 from warnings import warn
-from ngsolve import curl, grad, dx, Conj, Integrate, InnerProduct
+from ngsolve import curl, grad, dx, Conj, Integrate, InnerProduct, CF
 from numpy import conj
 from pyeigfeast import NGvecs, SpectralProjNG
 from pyeigfeast import SpectralProjNGR, SpectralProjNGPoly
@@ -86,6 +86,10 @@ class ModeSolver:
         self.L = L
         self.n0 = n0
         self.ngspmlset = False
+        # Set gamma to None, so that it can be set later *once*
+        # These coefficients will be members, and will be set by
+        # set_vecpml_coeff.  Gabriel
+        self.gamma = None
 
         print('ModeSolver: Checking if mesh has required regions')
         print('Mesh has ', mesh.ne, ' elements, ', mesh.nv, ' points, '
@@ -640,57 +644,141 @@ class ModeSolver:
 
     def smoothpmlsymb(self, alpha, pmlbegin, pmlend):
         """
-        Symbolic pml functions useful for debugging/visualization of pml
-        Kept for backward compatibility. Use self.smooth_pml_symb instead.
+        Symbolic pml functions useful for debugging/visualization of pml.
+        ---
+        We compute a radial PML function φ(r) = α * φ(r) and the derived
+        functions τ(r) = μ(r) = 1 + αφ(r) (called taut in the code),
+        and τ_mapped(r) = r * τ(r) = r * μ(r) = η(r) = r * (1 + αφ(r)).
+        Remaining terms are also computed. Notation is not unified.
+        Reader is advised to consult the code for the exact meaning of
+        the symbols used.
+        Cf. Kim and Pasciak; Gopalakrishnan et al.
         """
-        warn('Use smooth_pml_symb instead',
-             PendingDeprecationWarning)
         # symbolically derive the radial PML functions
-        s, t, R0, R1 = sm.symbols('s t R_0 R_1')
-        nr = sm.integrate((s - R0)**2 * (s - R1)**2, (s, R0, t)).factor()
-        dr = nr.subs(t, R1).factor()
+        s, t, r0, r1 = sm.symbols('s t R_0 R_1')
+        nr = sm.integrate((s - r0)**2 * (s - r1)**2, (s, r0, t)).factor()
+        dr = nr.subs(t, r1).factor()
         phi = alpha * nr / dr  # called α * φ in the docstring
-        phi = phi.subs(R0, pmlbegin).subs(R1, pmlend)
+        phi = phi.subs(r0, pmlbegin).subs(r1, pmlend)
+        # Remaining terms
         sigma = sm.diff(t * phi, t).factor()
         tau = 1 + 1j * sigma
-        taut = 1 + 1j * phi
-        mappedt = t * taut
-        G = (tau / taut).factor()  # this is what appears in the mapped system
-        return G, mappedt, tau, taut
+        taut = 1 + 1j * phi  # called μ in the docstring
+        mappedt = t * taut  # called η in the docstring
+        g = (tau / taut).factor()  # this is what appears in the mapped system
+        return g, mappedt, tau, taut
 
-    def smooth_pml_symb(self, alpha, pmlbegin, pmlend, deg=2):
+    def symb_to_cf(self, symb, r=None):
         """
-        Symbolic pml useful for debugging/visualization of pml.
-        Derives the radial PML functions.
-        INPUTS:
-        * alpha: PML strength
-        * pmlbegin: radius where PML begins
-        * pmlend: radius where PML ends
-        * deg: degree of the PML polynomial
-        OUTPUTS:
-        * mu_sym: mu(r) is such that mapped_x = mu * x
-        * eta_sym: eta(r) = mapped_r is such that eta = mu * r
-        * mu_dt: mu'(r)
-        * eta_dt: eta'(r)
-        Compare with smoothpmlsymb.
+        Convert a symbolic expression to an ngsolve coefficient function.
+        If r is None, then the symbolic expression is assumed to be the radius.
+        Otherwise, r is assumed to be a valid ngsolve coefficient function.
+        Assumes that the symbolic expression is a function of t, and that
+        the imaginary unit is I.
         """
-        print('ModeSolver.smooth_pml_symb called...\n')
-        # symbolically derive the radial PML functions
-        s, t, R0, R1 = sm.symbols('s t R_0 R_1')
-        nr = sm.integrate((s - R0)**deg * (s - R1)**deg, (s, R0, t)).factor()
-        dr = nr.subs(t, R1).factor()
-        phi = alpha * nr / dr  # called α * φ in the docstring
-        phi = phi.subs(R0, pmlbegin).subs(R1, pmlend)
+        x = ng.x
+        y = ng.y
+        if r is None:
+            r = ng.sqrt(x * x + y * y)
+        # TODO How to assert r is a valid ngsolve coefficient function?
+        strng = str(symb).replace('I', '1j').replace('t', 'r')
+        cf = eval(strng)
+        return cf
 
-        mu_sym = 1 + 1j * phi
-        eta_sym = t * mu_sym
-        mu_sym.factor()
-        eta_sym.factor()
-
-        mu_dt = sm.diff(mu_sym, t).factor()
+    def set_vecpml_coeff(self, alpha, pmlbegin, pmlend, **kwargs):
+        """
+        Set the PML coefficients. Function defined to reduce redundancy
+        and improve readability.
+        Adds the following attributes to the class:
+        * self.detj
+        * self.detj_conj
+        * self.kappa
+        * self.kappa_conj
+        * self.gamma
+        * self.gamma_conj
+        Check documentation of CF.Compile for kwargs.
+        Recommended realcompile=True and wait=True.
+        """
+        # Standard ngsolve imports
+        x = ng.x
+        y = ng.y
+        r = ng.sqrt(x * x + y * y)
+        # Get symbolic functions
+        _, eta_sym, _, mu_sym = self.smoothpmlsymb(
+                alpha, pmlbegin, pmlend)
+        t = sm.symbols('t')
         eta_dt = sm.diff(eta_sym, t).factor()
+        mu_dt = sm.diff(mu_sym, t).factor()
+        # mu_dt = sm.diff(t * mu_sym, t).factor()
+        # Make coefficient functions
+        mu_ = self.symb_to_cf(mu_sym)
+        eta_ = self.symb_to_cf(eta_sym)
+        mu_dr_ = self.symb_to_cf(mu_dt)
+        eta_dr_ = self.symb_to_cf(eta_dt)
+        # Main terms, after truncating at pmlbegin
+        mu = ng.IfPos(r - pmlbegin, mu_, 1)
+        eta = ng.IfPos(r - pmlbegin, eta_, r)
+        mu_dr = ng.IfPos(r - pmlbegin, mu_dr_, 0)
+        eta_dr = ng.IfPos(r - pmlbegin, eta_dr_, 1)
+        # Determinant of Jacobian
+        detj = mu * eta_dr
+        # Jacobian, left as a reminder
+        # # j00 = mu + (mu_dr / r) * x * x
+        # # j01 = - (mu_dr / r) * x * y
+        # # j11 = mu + (mu_dr / r) * y * y
+        # Inverse of Jacobian
+        jinv00 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * y * y
+        jinv01 = - (mu_dr / (eta_dr * eta)) * x * y
+        jinv11 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * x * x
+        # Conjugate the main terms
+        mu_conj = ng.Conj(mu)
+        eta_conj = ng.Conj(eta)
+        mu_dr_conj = ng.Conj(mu_dr)
+        eta_dr_conj = ng.Conj(eta_dr)
+        detj_conj = ng.Conj(detj)
+        jinv00_conj = ng.Conj(jinv00)
+        jinv01_conj = ng.Conj(jinv01)
+        jinv11_conj = ng.Conj(jinv11)
+        # Compile into coefficient functions
+        # Only compile the main terms
+        jinv00.Compile(**kwargs)
+        jinv01.Compile(**kwargs)
+        jinv11.Compile(**kwargs)
+        detj.Compile(**kwargs)
+        detj_conj.Compile(**kwargs)
+        jinv00_conj.Compile(**kwargs)
+        jinv01_conj.Compile(**kwargs)
+        jinv11_conj.Compile(**kwargs)
+        # Construct jacobians
+        # jac = ng.CoefficientFunction((j00, j01, j01, j11), dims=(2, 2))
+        jacinv = ng.CoefficientFunction(
+                (jinv00, jinv01, jinv01, jinv11),
+                dims=(2, 2))
+        jacinv_conj = ng.CoefficientFunction(
+                (jinv00_conj, jinv01_conj, jinv01_conj, jinv11_conj),
+                dims=(2, 2))
+        # Construct gamma, gamma_conj, kappa, kappa_conj
+        gamma = detj * (jacinv * jacinv)
+        gamma_conj = detj_conj * (jacinv_conj * jacinv_conj)
+        kappa = (mu / eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2
+        kappa_conj = (mu_conj / eta_dr_conj**3) * \
+            (1 + (mu_dr_conj * r**2) / eta_conj)**2
 
-        return mu_sym, eta_sym, mu_dt, eta_dt
+        # Adding  terms to the class as needed
+        if self.gamma is not None:
+            raise RuntimeError('PML coefficients already set.'
+                               ' Check code logic.')
+        gamma.Compile(**kwargs)
+        gamma_conj.Compile(**kwargs)
+        kappa.Compile(**kwargs)
+        kappa_conj.Compile(**kwargs)
+        # Set the coefficients
+        setattr(self, 'detj', detj)
+        setattr(self, 'detj_conj', detj_conj)
+        setattr(self, 'kappa', kappa)
+        setattr(self, 'kappa_conj', kappa_conj)
+        setattr(self, 'gamma', gamma)
+        setattr(self, 'gamma_conj', gamma_conj)
 
     def make_resolvent_maxwell(
             self, m, a, b, c, d, X, Y,
@@ -850,14 +938,9 @@ class ModeSolver:
                     if qAq is not None:
                         Aqr[:] = a.mat * qr._mv
                         for i in range(qr.m):
+                            # TODO: Static condensation caused issues when
+                            #       not using TaskManager
                             selfr.tmpY1.vec.data = b.mat * qr._mv[i]
-
-# TODO
-# Here: If I use static condensation, I get issues with the matrix,
-# If I don't use static condensation, I get issues with this product.
-# Not using static condensation implies the need of redesigning the
-# resolvent class to use the full system matrix
-
                             selfr.tmpY1.vec.data += \
                                 d.harmonic_extension_trans * selfr.tmpY1.vec
                             selfr.tmpY2.vec.data = dinv * selfr.tmpY1.vec
@@ -911,94 +994,6 @@ class ModeSolver:
         # end of class ResolventVectorMode --------------------------------
 
         return ResolventVectorMode, dinv
-
-    def symb_to_cf(self, symb, r=None):
-        """
-        Convert a symbolic expression to an ngsolve coefficient function.
-        If r is None, then the symbolic expression is assumed to be the radius.
-        Otherwise, r is assumed to be a valid ngsolve coefficient function.
-        Assumes that the symbolic expression is a function of t, and that
-        the imaginary unit is I.
-        """
-        x = ng.x
-        y = ng.y
-        if r is None:
-            r = ng.sqrt(x * x + y * y)
-        # TODO How to assert r is a valid ngsolve coefficient function?
-        strng = str(symb).replace('I', '1j').replace('t', 'r')
-        cf = eval(strng)
-        return cf
-
-    def visualize_pml(self, alpha, pmlbegin, pmlend, deg=2):
-        """
-        Visualize the radial PML functions.
-        """
-        print('ModeSolver.visualize_pml called...\n')
-        mu_sym, eta_sym, mu_dt, eta_dt = self.smooth_pml_symb(
-                alpha, pmlbegin, pmlend, deg=deg)
-
-        # Transform to ngsolve coefficient functions
-        x = ng.x
-        y = ng.y
-        r = ng.sqrt(x * x + y * y)
-
-        # Convert from symbolic to ngsolve coefficient functions
-        mu_ = self.symb_to_cf(mu_sym, r=r)
-        eta_ = self.symb_to_cf(eta_sym, r=r)
-        mu_dr_ = self.symb_to_cf(mu_dt, r=r)
-        eta_dr_ = self.symb_to_cf(eta_dt, r=r)
-
-        # Main terms
-        mu = ng.IfPos(r - pmlbegin, mu_, 1)
-        eta = ng.IfPos(r - pmlbegin, eta_, r)
-        mu_dr = ng.IfPos(r - pmlbegin, mu_dr_, 0)
-        eta_dr = ng.IfPos(r - pmlbegin, eta_dr_, 1)
-        # Jacobian
-        j00 = mu + (mu_dr / r) * x * x
-        j01 = - (mu_dr / r) * x * y
-        j11 = mu + (mu_dr / r) * y * y
-        # Inverse of Jacobian
-        jinv00 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * y * y
-        jinv01 = - (mu_dr / (eta_dr * eta)) * x * y
-        jinv11 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * x * x
-
-        # Determinant of Jacobian
-        detj = mu * eta_dr
-
-        # Compile into coefficient functions
-        mu.Compile()
-        eta.Compile()
-        mu_dr.Compile()
-        eta_dr.Compile()
-        j00.Compile()
-        j01.Compile()
-        j11.Compile()
-        jinv00.Compile()
-        jinv01.Compile()
-        jinv11.Compile()
-        detj.Compile()
-
-        # Make matrix coefficient functions
-        # jac = ng.CoefficientFunction(
-        #         (j00, j01, j01, j11), dims=(2, 2))
-        # jacinv = ng.CoefficientFunction(
-        #         (jinv00, jinv01, jinv01, jinv11), dims=(2, 2))
-
-        # Draw the PML functions
-        print('Drawing (the norm of) PML functions...\n')
-        ng.Draw(ng.Norm(mu), self.mesh, name='mu')
-        ng.Draw(ng.Norm(eta), self.mesh, name='eta')
-        ng.Draw(ng.Norm(mu_dr), self.mesh, name='mu_dr')
-        ng.Draw(ng.Norm(eta_dr), self.mesh, name='eta_dr')
-        # ng.Draw(jac, self.mesh, name='jac')
-        ng.Draw(ng.Norm(j00), self.mesh, name='j00')
-        ng.Draw(ng.Norm(j01), self.mesh, name='j01')
-        ng.Draw(ng.Norm(j11), self.mesh, name='j11')
-        # ng.Draw(jacinv, self.mesh, name='jacinv')
-        ng.Draw(ng.Norm(jinv00), self.mesh, name='jinv00')
-        ng.Draw(ng.Norm(jinv01), self.mesh, name='jinv01')
-        ng.Draw(ng.Norm(jinv11), self.mesh, name='jinv11')
-        ng.Draw(ng.Norm(detj), self.mesh, name='detj')
 
     # ###################################################################
     # # PML SYSTEMS #####################################################
@@ -1114,65 +1109,13 @@ class ModeSolver:
             pmlbegin = self.R
         if pmlend is None:
             pmlend = self.Rout
+        if self.gamma is None:
+            self.set_vecpml_coeff(alpha, pmlbegin, pmlend, maxderiv=3)
 
         # Get symbolic functions
-        mu_sym, eta_sym, mu_dt, eta_dt = self.smooth_pml_symb(
-                alpha, pmlbegin, pmlend, deg=deg)
-
-        # Transform to ngsolve coefficient functions
-        x = ng.x
-        y = ng.y
-        r = ng.sqrt(x * x + y * y)
-
-        mu_ = self.symb_to_cf(mu_sym)
-        eta_ = self.symb_to_cf(eta_sym)
-        mu_dr_ = self.symb_to_cf(mu_dt)
-        eta_dr_ = self.symb_to_cf(eta_dt)
-
-        mu = ng.IfPos(r - pmlbegin, mu_, 1)
-        eta = ng.IfPos(r - pmlbegin, eta_, r)
-        mu_dr = ng.IfPos(r - pmlbegin, mu_dr_, 0)
-        eta_dr = ng.IfPos(r - pmlbegin, eta_dr_, 1)
-
-        # Jacobian, left as a reminder
-        # j00 = mu + (mu_dr / r) * x * x
-        # j01 = - (mu_dr / r) * x * y
-        # j11 = mu + (mu_dr / r) * y * y
-
-        # Inverse of Jacobian
-        jinv00 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * y * y
-        jinv01 = - (mu_dr / (eta_dr * eta)) * x * y
-        jinv11 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * x * x
-
-        # Determinant of Jacobian
-        detj = mu * eta_dr
-
-        # Compile into coefficient functions
-        mu.Compile()
-        eta.Compile()
-        mu_dr.Compile()
-        eta_dr.Compile()
-        # j00.Compile()
-        # j01.Compile()
-        # j11.Compile()
-        jinv00.Compile()
-        jinv01.Compile()
-        jinv11.Compile()
-        detj.Compile()
-
-        # Make coefficient functions
-        # jac = ng.CoefficientFunction((j00, j01, j01, j11), dims=(2, 2))
-        jacinv = ng.CoefficientFunction((jinv00, jinv01, jinv01, jinv11),
-                                        dims=(2, 2))
-
-        # Adding  terms to the class as needed
-        self.mu = mu
-        self.eta = eta
-        self.mu_dr = mu_dr
-        self.eta_dr = eta_dr
-        # self.jac = jac
-        self.jacinv = jacinv
-        self.detj = detj
+        detj = self.detj
+        kappa = self.kappa
+        gamma = self.gamma
 
         # Make linear eigensystem, cf. self.vecmodesystem
         n2 = self.index * self.index
@@ -1196,13 +1139,12 @@ class ModeSolver:
         aa = ng.BilinearForm(Z)
         mm = ng.BilinearForm(Z)
 
-        aa += ((mu / eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2 *
-               curl(E) * curl(F) +
-               self.V * detj * (jacinv * E) * (jacinv * F) +
-               detj * (jacinv * grad(phi)) * (jacinv * F) +
-               n2 * detj * phi * psi -
-               n2 * detj * (jacinv * E) * (jacinv * grad(psi))) * dx
-        mm += detj * (jacinv * E) * (jacinv * F) * dx
+        aa += ((kappa * curl(E)) * curl(F) +
+               self.V * (gamma * E) * F +
+               n2 * (gamma * E) * grad(psi) +
+               (gamma * grad(phi)) * F -
+               n2 * detj * phi * psi) * dx
+        mm += (gamma * E) * F * dx
 
         with ng.TaskManager():
             try:
@@ -1256,64 +1198,13 @@ class ModeSolver:
         if pmlend is None:
             pmlend = self.Rout
 
+        if self.gamma is None:
+            self.set_vecpml_coeff(alpha, pmlbegin, pmlend, maxderiv=3)
+
         # Get symbolic functions
-        mu_sym, eta_sym, mu_dt, eta_dt = self.smooth_pml_symb(
-                alpha, pmlbegin, pmlend, deg=deg)
-
-        # Transform to ngsolve coefficient functions
-        x = ng.x
-        y = ng.y
-        r = ng.sqrt(x * x + y * y)
-
-        mu_ = self.symb_to_cf(mu_sym)
-        eta_ = self.symb_to_cf(eta_sym)
-        mu_dr_ = self.symb_to_cf(mu_dt)
-        eta_dr_ = self.symb_to_cf(eta_dt)
-
-        mu = ng.IfPos(r - pmlbegin, mu_, 1)
-        eta = ng.IfPos(r - pmlbegin, eta_, r)
-        mu_dr = ng.IfPos(r - pmlbegin, mu_dr_, 0)
-        eta_dr = ng.IfPos(r - pmlbegin, eta_dr_, 1)
-
-        # Jacobian, left as a reminder
-        # j00 = mu + (mu_dr / r) * x * x
-        # j01 = - (mu_dr / r) * x * y
-        # j11 = mu + (mu_dr / r) * y * y
-
-        # Inverse of Jacobian
-        jinv00 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * y * y
-        jinv01 = - (mu_dr / (eta_dr * eta)) * x * y
-        jinv11 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * x * x
-
-        # Determinant of Jacobian
-        detj = mu * eta_dr
-
-        # Compile into coefficient functions
-        mu.Compile()
-        eta.Compile()
-        mu_dr.Compile()
-        eta_dr.Compile()
-        # j00.Compile()
-        # j01.Compile()
-        # j11.Compile()
-        jinv00.Compile()
-        jinv01.Compile()
-        jinv11.Compile()
-        detj.Compile()
-
-        # Make coefficient functions
-        # jac = ng.CoefficientFunction((j00, j01, j01, j11), dims=(2, 2))
-        jacinv = ng.CoefficientFunction((jinv00, jinv01, jinv01, jinv11),
-                                        dims=(2, 2))
-
-        # Adding  terms to the class as needed
-        self.mu = mu
-        self.eta = eta
-        self.mu_dr = mu_dr
-        self.eta_dr = eta_dr
-        # self.jac = jac
-        self.jacinv = jacinv
-        self.detj = detj
+        detj = self.detj
+        kappa = self.kappa
+        gamma = self.gamma
 
         # Make linear eigensystem, cf. self.vecmodesystem
         n2 = self.index * self.index
@@ -1341,12 +1232,11 @@ class ModeSolver:
         # d = ng.BilinearForm(Y)
         d = ng.BilinearForm(Y, condense=True)
 
-        m += detj * (jacinv * E) * (jacinv * F) * dx
-        a += ((mu / eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2 *
-              curl(E) * curl(F)) * dx
-        a += self.V * detj * (jacinv * E) * (jacinv * F) * dx
-        c += detj * (jacinv * grad(phi)) * (jacinv * F) * dx
-        b += n2 * detj * (jacinv * E) * (jacinv * grad(psi)) * dx
+        m += (gamma * E) * F * dx
+        a += ((kappa * curl(E)) * curl(F) +
+              self.V * (gamma * E) * F) * dx
+        c += (gamma * grad(phi)) * F * dx
+        b += n2 * (gamma * E) * grad(psi) * dx
         d += - n2 * detj * phi * psi * dx
 
         with ng.TaskManager():
@@ -1662,9 +1552,13 @@ class ModeSolver:
         Return a grid function that takes the average of the components
         of the (multi-component) grid function gf, provided in NGvecs
         format.
+        OBS: This function might be redundant, as we are not implementing
+        the averaged error estimator, but a list of error estimators.
         INPUT:
         * gf: NGvecs object
         * name: name of the new grid function
+        OUTPUT:
+        * new_gf: GridFunction object
         """
         new_gf = ng.GridFunction(
                 gf.fes,
@@ -1743,32 +1637,33 @@ class ModeSolver:
 
     def eestimator_maxwell_compound(self, rgt, lft, lam):
         """
-        DWR error estimator for eigenvalues
-        Maxwell eigenproblem for compound form
+        DWR error estimator for eigenvalues Maxwell eigenproblem for compound
+        form. We write eta = eta_1 + eta_2 + eta_3, where
+            eta_i = sqrt(Omega_i_R * Rho_i_R) + sqrt(Omega_i_L * Rho_i_L)
         INPUT:
         * lft: left eigenfunction as NGvecs object for the compound form
         * rgt: right eigenfunction as NGvecs object for the compound form
         * lam: eigenvalue
         OUTPUT:
-        * ee: element-wise error estimator
+        * Eta: element-wise error estimator
+        * Etas: dictionary with three tuples of error estimators and
+                    their maximum component
         """
         assert rgt.m == lft.m, 'Check FEAST output:\n' + \
             f'rgt.m {rgt.m} != lft.m {lft.m}'
         if rgt.m > 1 or lft.m > 1:
             print('Taking average of multiple eigenfunctions')
 
+        if self.gamma is None:
+            raise ValueError('PML coefficients not set. Use set_vecpml_coeff.'
+                             ' Check code logic.')
         # Extract coefficient functions
-        mu = self.mu
-        eta = self.eta
-        mu_dr = self.mu_dr
-        eta_dr = self.eta_dr
-        # jac = self.jac
-        jacinv = self.jacinv
+        kappa = self.kappa
+        # kappa_conj = self.kappa_conj
+        gamma = self.gamma
+        # gamma_conj = self.gamma_conj
         detj = self.detj
-
-        x = ng.x
-        y = ng.y
-        r = ng.sqrt(x * x + y * y)
+        detj_conj = self.detj_conj
 
         h = ng.specialcf.mesh_size
         n = ng.specialcf.normal(self.mesh.dim)
@@ -1777,118 +1672,182 @@ class ModeSolver:
         # Extract grid functions and its components
         rgt_avg = self.__compute_avr_ngvecs(rgt, name='rgt')
         lft_avg = self.__compute_avr_ngvecs(lft, name='lft')
-        # E_r = rgt.gridfun('E_r', i=0).components[0]
-        # E_l = lft.gridfun('E_l', i=0).components[0]
-        # phi_r = rgt.gridfun('phi_r', i=0).components[1]
-        # phi_l = lft.gridfun('phi_l', i=0).components[1]
         E_r = rgt_avg.components[0]
         E_l = lft_avg.components[0]
         phi_r = rgt_avg.components[1]
         phi_l = lft_avg.components[1]
 
-        # Compute coefficients
-        # # Mapped fields
-        JE_r = detj * jacinv * jacinv * E_r
-        JE_l = detj * jacinv * jacinv * E_l
-        # # First order derivatives
-        gradE_r = grad(E_r)
-        gradphi_r = grad(phi_r)
-        gradE_l = grad(E_l)
-        gradphi_l = grad(phi_l)
-        # # PML First order derivatives
-        Jgradphi_r = detj * jacinv * jacinv * gradphi_r
-        Jgradphi_l = detj * jacinv * jacinv * gradphi_l
-        # # Remaining terms
-        curlE_r = (mu * eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2 * curl(E_r)
-        rotcurlE_r_x = curlE_r.Diff(y)
-        rotcurlE_r_y = -curlE_r.Diff(x)
+        # Compute derivatives for residuals and weights
+        V = self.V
+        # gamma.E -> divfree, n2.gamma.E
+        gE_r = gamma * E_r
+        # gE_l = gamma_conj * E_l
+        gE_l = gamma * ng.Conj(E_l)
+        # curl.E -> kappa.curl.E, w1
+        curlE_r = curl(E_r)
+        curlE_l = curl(E_l)
+        # kappa.curl.E -> rot.kappa.curl.E, jump.kappa.curl.E
+        kcurlE_r = kappa * curlE_r
+        # kcurlE_l = kappa_conj * curlE_l
+        kcurlE_l = kappa * ng.Conj(curlE_l)
+        # rot.kappa.curl.E.xy -> r1
+        rotkcurlE_r_x = kcurlE_r.Diff(ng.y)
+        rotkcurlE_r_y = -kcurlE_r.Diff(ng.x)
+        # rotkcurlE_l_x = kcurlE_l.Diff(ng.y)
+        # rotkcurlE_l_y = -kcurlE_l.Diff(ng.x)
+        rotkcurlE_l_x = ng.Conj(kcurlE_l.Diff(ng.y))
+        rotkcurlE_l_y = ng.Conj(-kcurlE_l.Diff(ng.x))
+        # jump.kappa.curl.E -> r1
+        j_kcurlE_r = kcurlE_r - kcurlE_r.Other()
+        j_kcurlE_l = kcurlE_l - kcurlE_l.Other()
+        # gamma.grad(phi) -> gamma.grad.phi, w3
+        gphi_r = grad(phi_r)
+        gphi_l = grad(phi_l)
+        # gamma.grad.phi -> divfree
+        ggphi_r = gamma * gphi_r
+        # ggphi_l = n2 * gamma_conj * gphi_l
+        ggphi_l = n2 * gamma * ng.Conj(gphi_l)
+        # divfree -> r1, div, jump.divfree
+        divfree_r = ggphi_r + (V - lam) * gE_r
+        # divfree_l = ggphi_l + (V - np.conj(lam)) * gE_l
+        divfree_l = ggphi_l + (V - lam) * gE_l
+        # div -> r2
+        div_r = divfree_r[0].Diff(ng.x) + divfree_r[1].Diff(ng.y)
+        # div_l = divfree_l.Diff(ng.x) + divfree_l.Diff(ng.y)
+        div_l = ng.Conj(divfree_l[0].Diff(ng.x) + divfree_l[1].Diff(ng.y))
+        # jump.divfree -> r2
+        j_divfree_r = n * (divfree_r - divfree_r.Other())
+        j_divfree_l = n * (divfree_l - divfree_l.Other())
+        # n2.gamma.E -> div.E, jump.n2.gamma.E
+        nE_r = n2 * gE_r
+        nE_l = gE_l
+        # jump.n2.gamma.E -> r3
+        j_nE_r = n * (nE_r - nE_r.Other())
+        j_nE_l = n * (nE_l - nE_l.Other())
+        # n2.detj.phi -> r3
+        nphi_r = n2 * detj * phi_r
+        nphi_l = n2 * detj_conj * phi_l
+        # div.E -> r3
+        divE_r = nE_r[0].Diff(ng.x) + nE_r[1].Diff(ng.y)
+        divE_l = nE_l[0].Diff(ng.x) + nE_l[1].Diff(ng.y)
 
-        curlE_l = (mu * eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2 * curl(E_l)
-        rotcurlE_l_x = curlE_l.Diff(y)
-        rotcurlE_l_y = -curlE_l.Diff(x)
+        # Residuals and weights (as integrands)
+        # # Residuals
+        rho1_r_x = h * (rotkcurlE_r_x + divfree_r[0])
+        rho1_r_y = h * (rotkcurlE_r_y + divfree_r[1])
+        rho1_r_j = ng.sqrt(0.5 * h) * j_kcurlE_r
 
-        div_E_r = JE_r[0].Diff(x) + JE_r[1].Diff(y)
-        div_E_l = JE_l[0].Diff(x) + JE_l[1].Diff(y)
+        rho1_l_x = h * (rotkcurlE_l_x + divfree_l[0])
+        rho1_l_y = h * (rotkcurlE_l_y + divfree_l[1])
+        rho1_l_j = ng.sqrt(0.5 * h) * j_kcurlE_l
 
-        # Residual integrals
-        # j is for jump, r is for right, l is for left
-        # t is for transversal, z is for longitudinal
-        r_t_x = h * (rotcurlE_r_x + self.V * JE_r[0] + Jgradphi_r[0] -
-                     lam * JE_r[0])
-        r_t_y = h * (rotcurlE_r_y + self.V * JE_r[1] + Jgradphi_r[1] -
-                     lam * JE_r[1])
-        jr_t = curlE_r - curlE_r.Other()
+        rho2_r = h * div_r
+        rho2_r_j = ng.sqrt(0.5 * h) * j_divfree_r
+        rho2_l = h * div_l
+        rho2_l_j = ng.sqrt(0.5 * h) * j_divfree_l
 
-        r_z = h * (n2 * div_E_r + n2 * detj * phi_r)
-        jr_z = n2 * n * (JE_r - JE_r.Other())
+        rho3_r = h * (divE_r + nphi_r)
+        rho3_l = h * (divE_l + nphi_l)
+        rho3_r_j = ng.sqrt(0.5 * h) * j_nE_r
+        rho3_l_j = ng.sqrt(0.5 * h) * j_nE_l
 
-        l_t_x = h * (rotcurlE_l_x + self.V * JE_l[0] + n2 * Jgradphi_l[0] -
-                     np.conj(lam) * JE_l[0])
-        l_t_y = h * (rotcurlE_l_y + self.V * JE_l[1] + n2 * Jgradphi_l[1] -
-                     np.conj(lam) * JE_l[1])
-        jl_t = curlE_l - curlE_l.Other()
+        # # Weights
+        omega1_r = curlE_l
+        omega1_l = curlE_r
 
-        l_z = h * (div_E_l + n2 * detj * phi_l)
-        jl_z = n2 * n * (JE_l - JE_l.Other())
+        omega2_r = E_l
+        omega2_l = E_r
 
-        rho_r = Integrate(
-                InnerProduct(r_t_x, r_t_x) * dx, self.mesh, element_wise=True)
-        rho_r += Integrate(
-                InnerProduct(r_t_y, r_t_y) * dx, self.mesh, element_wise=True)
-        rho_r += Integrate(
-                0.5 * h * InnerProduct(jr_t, jr_t) * dx(element_boundary=True),
-                self.mesh, element_wise=True)
-        rho_r += Integrate(
-                InnerProduct(r_z, r_z) * dx, self.mesh, element_wise=True)
-        rho_r += Integrate(
-                0.5 * h * InnerProduct(jr_z, jr_z) * dx(element_boundary=True),
-                self.mesh, element_wise=True)
+        omega3_r = gphi_l
+        omega3_l = gphi_r
 
-        rho_l = Integrate(
-                InnerProduct(l_t_x, l_t_x) * dx, self.mesh, element_wise=True)
-        rho_l += Integrate(
-                InnerProduct(l_t_y, l_t_y) * dx, self.mesh, element_wise=True)
-        rho_l += Integrate(
-                0.5 * h * InnerProduct(jl_t, jl_t) * dx(element_boundary=True),
-                self.mesh, element_wise=True)
-        rho_l += Integrate(
-                InnerProduct(l_z, l_z) * dx, self.mesh, element_wise=True)
-        rho_l += Integrate(
-                0.5 * h * InnerProduct(jl_z, jl_z) * dx(element_boundary=True),
-                self.mesh, element_wise=True)
-
-        # def hess(gf):
-        #     return gf.Operator("hesse")
-
-        # omegaR = Integrate(h * h * InnerProduct(hess(R), hess(R)),
-        #                    self.mesh,
-        #                    element_wise=True)
-        # omegaL = Integrate(h * h * InnerProduct(hess(L), hess(L)),
-        #                    self.mesh,
-        #                    element_wise=True)
-
-        omega_r = Integrate(
-                InnerProduct(gradE_r, gradE_r),
-                self.mesh,
-                element_wise=True)
-        omega_r += Integrate(
-                InnerProduct(gradphi_r, gradphi_r),
-                self.mesh,
-                element_wise=True)
-
-        omega_l = Integrate(
-                InnerProduct(gradE_l, gradE_l),
-                self.mesh,
-                element_wise=True)
-        omega_l += Integrate(
-                InnerProduct(gradphi_l, gradphi_l),
+        # Residuals and weights (as numpy arrays)
+        Rho1_r = Integrate(
+                (InnerProduct(rho1_r_x, rho1_r_x) +
+                 InnerProduct(rho1_r_y, rho1_r_y)) * dx +
+                InnerProduct(rho1_r_j, rho1_r_j) * dx(element_boundary=True),
                 self.mesh,
                 element_wise=True)
 
-        ee = np.sqrt(omega_r.real.NumPy() * rho_r.real.NumPy())
-        ee += np.sqrt(omega_l.real.NumPy() * rho_l.real.NumPy())
+        Rho2_r = Integrate(
+                InnerProduct(rho2_r, rho2_r) * dx +
+                InnerProduct(rho2_r_j, rho2_r_j) * dx(element_boundary=True),
+                self.mesh,
+                element_wise=True)
 
-        return ee
+        Rho3_r = Integrate(
+                InnerProduct(rho3_r, rho3_r) * dx +
+                InnerProduct(rho3_r_j, rho3_r_j) * dx(element_boundary=True),
+                self.mesh,
+                element_wise=True)
+
+        Rho1_l = Integrate(
+                (InnerProduct(rho1_l_x, rho1_l_x) +
+                 InnerProduct(rho1_l_y, rho1_l_y)) * dx +
+                InnerProduct(rho1_l_j, rho1_l_j) * dx(element_boundary=True),
+                self.mesh,
+                element_wise=True)
+
+        Rho2_l = Integrate(
+                InnerProduct(rho2_l, rho2_l) * dx +
+                InnerProduct(rho2_l_j, rho2_l_j) * dx(element_boundary=True),
+                self.mesh,
+                element_wise=True)
+
+        Rho3_l = Integrate(
+                InnerProduct(rho3_l, rho3_l) * dx +
+                InnerProduct(rho3_l_j, rho3_l_j) * dx(element_boundary=True),
+                self.mesh,
+                element_wise=True)
+
+        Omega1_r = Integrate(
+                InnerProduct(omega1_r, omega1_r) * dx,
+                self.mesh,
+                element_wise=True)
+
+        Omega2_r = Integrate(
+                InnerProduct(omega2_r, omega2_r) * dx,
+                self.mesh,
+                element_wise=True)
+
+        Omega3_r = Integrate(
+                InnerProduct(omega3_r, omega3_r) * dx,
+                self.mesh,
+                element_wise=True)
+
+        Omega1_l = Integrate(
+                InnerProduct(omega1_l, omega1_l) * dx,
+                self.mesh,
+                element_wise=True)
+
+        Omega2_l = Integrate(
+                InnerProduct(omega2_l, omega2_l) * dx,
+                self.mesh,
+                element_wise=True)
+
+        Omega3_l = Integrate(
+                InnerProduct(omega3_l, omega3_l) * dx,
+                self.mesh,
+                element_wise=True)
+
+        Eta1 = np.sqrt(Omega1_r.real.NumPy() * Rho1_r.real.NumPy())
+        Eta1 += np.sqrt(Omega1_l.real.NumPy() * Rho1_l.real.NumPy())
+
+        Eta2 = np.sqrt(Omega2_r.real.NumPy() * Rho2_r.real.NumPy())
+        Eta2 += np.sqrt(Omega2_l.real.NumPy() * Rho2_l.real.NumPy())
+
+        Eta3 = np.sqrt(Omega3_r.real.NumPy() * Rho3_r.real.NumPy())
+        Eta3 += np.sqrt(Omega3_l.real.NumPy() * Rho3_l.real.NumPy())
+
+        Eta = Eta1 + Eta2 + Eta3
+
+        Etas = {
+            'Eta1': (Eta1, np.max(Eta1)),
+            'Eta2': (Eta2, np.max(Eta2)),
+            'Eta3': (Eta3, np.max(Eta3)),
+        }
+
+        return Eta, Etas
 
     def eestimator_maxwell_resolvent(self, Er, El, phir, phil, lam):
         """
@@ -1903,6 +1862,7 @@ class ModeSolver:
         OUTPUT:
         * ee: element-wise error estimator
         """
+        raise NotImplementedError('Not working yet. Need to be adapted.')
         assert Er.m == El.m and phir.m == phil.m, 'Check FEAST output:\n' + \
             f'Er.m {Er.m} != El.m {El.m} or phir.m {phir.m} != phil.m {phil.m}'
         if Er.m > 1 or El.m > 1 or phir.m > 1 or phil.m > 1:
@@ -1924,6 +1884,7 @@ class ModeSolver:
         h = ng.specialcf.mesh_size
         n = ng.specialcf.normal(self.mesh.dim)
         n2 = self.index * self.index
+        kappa = (mu / eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2
 
         # Extract grid functions and its components
         E_r = self.__compute_avr_ngvecs(Er, name='E_r')
@@ -1944,11 +1905,11 @@ class ModeSolver:
         Jgradphi_r = detj * jacinv * jacinv * gradphi_r
         Jgradphi_l = detj * jacinv * jacinv * gradphi_l
         # # Remaining terms
-        curlE_r = (mu * eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2 * curl(E_r)
+        curlE_r = kappa * curl(E_r)
         rotcurlE_r_x = curlE_r.Diff(y)
         rotcurlE_r_y = -curlE_r.Diff(x)
 
-        curlE_l = (mu * eta_dr**3) * (1 + (mu_dr * r**2) / eta)**2 * curl(E_l)
+        curlE_l = kappa * curl(E_l)
         rotcurlE_l_x = curlE_l.Diff(y)
         rotcurlE_l_y = -curlE_l.Diff(x)
 
@@ -2001,16 +1962,6 @@ class ModeSolver:
         rho_l += Integrate(
                 0.5 * h * InnerProduct(jl_z, jl_z) * dx(element_boundary=True),
                 self.mesh, element_wise=True)
-
-        # def hess(gf):
-        #     return gf.Operator("hesse")
-
-        # omegaR = Integrate(h * h * InnerProduct(hess(R), hess(R)),
-        #                    self.mesh,
-        #                    element_wise=True)
-        # omegaL = Integrate(h * h * InnerProduct(hess(L), hess(L)),
-        #                    self.mesh,
-        #                    element_wise=True)
 
         omega_r = Integrate(
                 InnerProduct(gradE_r, gradE_r),
@@ -2301,7 +2252,7 @@ class ModeSolver:
                       f'Zsqr = {Zsqrs[-1][0]:+10.8f}')
 
             # 2. ESTIMATE
-            ee = self.eestimator_maxwell_compound(
+            ee, test = self.eestimator_maxwell_compound(
                     E_phi_r, E_phi_l, avr_zsqr)
 
             if visualize:
@@ -2316,6 +2267,11 @@ class ModeSolver:
                         name="E_l"+str(i), i=i).components[0])
                     ng.Draw(E_phi_l.gridfun(
                         name="phi_l"+str(i), i=i).components[1])
+                print(f'Maximum component of error estimator: {np.max(ee)}')
+                print('* Maximum component per estimator *')
+                print(f'\n\tEta1: {test["Eta1"][1]}' +
+                      f'\n\tEta2: {test["Eta2"][1]}' +
+                      f'\n\tEta3: {test["Eta3"][1]}')
                 input('* Pausing for visualization. Enter any key to continue')
 
             if ndofs[-1] > maxndofs:
@@ -2547,6 +2503,27 @@ class ModeSolver:
         phi_l._mv[:] += d.harmonic_extension.H * phi_l._mv
 
         return phi_r, phi_l
+
+    def get_intensity(self, E, phi, betas):
+        """
+        Compute the intensity of the modes E = (E, -i/β phi L).
+        Intensity = |E|^2 + |phi|^2 / |β|^2 L
+        INPUTS:
+        E: Transverse electric field
+        phi: Longitudinal electric field
+        zsqr: Non-dimensional Z² value of the mode
+        OUTPUT:
+        intensity: Intensity of the mode (as a list of CFs)
+        """
+        assert E.m == phi.m, f'E.m = {E.m} != phi.m = {phi.m}'
+        assert len(betas) == E.m, f'len(betas) = {len(betas)} != E.m = {E.m}'
+        intensity = []
+        for i, beta in enumerate(betas):
+            intensity.append(
+                    CF(InnerProduct(E[i], E[i]) +
+                       InnerProduct(phi[i], phi[i]) /
+                       (abs(beta)**2 * self.L)))
+        return intensity
 
     # ###################################################################
     # GUIDED LP MODES FROM SELFADJOINT EIGENPROBLEM #####################
