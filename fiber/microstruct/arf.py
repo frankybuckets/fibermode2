@@ -232,6 +232,13 @@ class ARF(ModeSolver):
         if os.path.isdir(self.outfolder) is not True:
             os.mkdir(self.outfolder)
 
+    @classmethod
+    def from_dict(cls, d):
+        """
+        Create an ARF object from a dictionary.
+        """
+        return cls(**d)
+
     @property
     def wavelength(self):
         return self._wavelength
