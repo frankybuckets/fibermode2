@@ -3,7 +3,7 @@ Definition of ModeSolver class and its methods for computing
 modes of various fibers.
 """
 from warnings import warn
-from ngsolve import curl, grad, dx, Conj, Integrate, InnerProduct, CF
+from ngsolve import curl, grad, dx, Conj, Integrate, InnerProduct, CF, Grad
 from numpy import conj
 from pyeigfeast import NGvecs, SpectralProjNG
 from pyeigfeast import SpectralProjNGR, SpectralProjNGPoly
@@ -247,9 +247,8 @@ class ModeSolver:
         # beta_s * conj(beta_s)) * \
         #     (Conj(grad(phi)) + conj(beta_s)**2 * Conj(Etv))
 
-        Stv = -1j * (J_Etv * Conj(curl(Etv)) +
-                     np.abs(beta_s)**-2 * phi * Conj(grad(phi)) +
-                     conj(beta_s) / beta_s * phi * Conj(Etv))
+        Stv = -1j * (J_Etv * Conj(curl(Etv)) + np.abs(beta_s)**-2 * phi *
+                     Conj(grad(phi)) + conj(beta_s) / beta_s * phi * Conj(Etv))
 
         Sz = 1 / (k_s * conj(beta_s)) * \
             (Etv * Conj(grad(phi)) + conj(beta_s)**2 * Etv.Norm()**2)
@@ -622,10 +621,7 @@ class ModeSolver:
         Yl = Y.create()
         Y.setrandom(seed=seed)
         Yl.setrandom(seed=seed)
-        zsqr, Y, _, Yl = P.feast(Y,
-                                 Yl=Yl,
-                                 hermitian=False,
-                                 **feastkwargs)
+        zsqr, Y, _, Yl = P.feast(Y, Yl=Yl, hermitian=False, **feastkwargs)
         beta = self.betafrom(zsqr)
         print('Results:\n Z²:', zsqr)
         print(' beta:', beta)
@@ -704,8 +700,7 @@ class ModeSolver:
         y = ng.y
         r = ng.sqrt(x * x + y * y)
         # Get symbolic functions
-        _, eta_sym, _, mu_sym = self.smoothpmlsymb(
-                alpha, pmlbegin, pmlend)
+        _, eta_sym, _, mu_sym = self.smoothpmlsymb(alpha, pmlbegin, pmlend)
         t = sm.symbols('t')
         eta_dt = sm.diff(eta_sym, t).factor()
         mu_dt = sm.diff(mu_sym, t).factor()
@@ -728,7 +723,7 @@ class ModeSolver:
         # # j11 = mu + (mu_dr / r) * y * y
         # Inverse of Jacobian
         jinv00 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * y * y
-        jinv01 = - (mu_dr / (eta_dr * eta)) * x * y
+        jinv01 = -(mu_dr / (eta_dr * eta)) * x * y
         jinv11 = 1 / eta_dr + (mu_dr / (eta_dr * eta)) * x * x
         # Conjugate the main terms
         mu_conj = ng.Conj(mu)
@@ -751,12 +746,10 @@ class ModeSolver:
         jinv11_conj.Compile(**kwargs)
         # Construct jacobians
         # jac = ng.CoefficientFunction((j00, j01, j01, j11), dims=(2, 2))
-        jacinv = ng.CoefficientFunction(
-                (jinv00, jinv01, jinv01, jinv11),
-                dims=(2, 2))
+        jacinv = ng.CoefficientFunction((jinv00, jinv01, jinv01, jinv11),
+                                        dims=(2, 2))
         jacinv_conj = ng.CoefficientFunction(
-                (jinv00_conj, jinv01_conj, jinv01_conj, jinv11_conj),
-                dims=(2, 2))
+            (jinv00_conj, jinv01_conj, jinv01_conj, jinv11_conj), dims=(2, 2))
         # Construct gamma, gamma_conj, kappa, kappa_conj
         gamma = detj * (jacinv * jacinv)
         gamma_conj = detj_conj * (jacinv_conj * jacinv_conj)
@@ -780,10 +773,16 @@ class ModeSolver:
         setattr(self, 'gamma', gamma)
         setattr(self, 'gamma_conj', gamma_conj)
 
-    def make_resolvent_maxwell(
-            self, m, a, b, c, d, X, Y,
-            inverse='umfpack',
-            autoupdate=True):
+    def make_resolvent_maxwell(self,
+                               m,
+                               a,
+                               b,
+                               c,
+                               d,
+                               X,
+                               Y,
+                               inverse='umfpack',
+                               autoupdate=True):
         """
         Create resolvent for Maxwell's equations.
         INPUTS:
@@ -815,16 +814,26 @@ class ModeSolver:
         class ResolventVectorMode():
             # static resolvent class attributes, same for all class objects
             XY = ng.FESpace([X, Y])
-            wrk1 = ng.GridFunction(
-                    XY, name='wrk1', autoupdate=autoupdate, nested=autoupdate)
-            wrk2 = ng.GridFunction(
-                    XY, name='wrk2', autoupdate=autoupdate, nested=autoupdate)
-            tmpY1 = ng.GridFunction(
-                    Y, name='tmpY1', autoupdate=autoupdate, nested=autoupdate)
-            tmpY2 = ng.GridFunction(
-                    Y, name='tmpY2', autoupdate=autoupdate, nested=autoupdate)
-            tmpX1 = ng.GridFunction(
-                    X, name='tmpX1', autoupdate=autoupdate, nested=autoupdate)
+            wrk1 = ng.GridFunction(XY,
+                                   name='wrk1',
+                                   autoupdate=autoupdate,
+                                   nested=autoupdate)
+            wrk2 = ng.GridFunction(XY,
+                                   name='wrk2',
+                                   autoupdate=autoupdate,
+                                   nested=autoupdate)
+            tmpY1 = ng.GridFunction(Y,
+                                    name='tmpY1',
+                                    autoupdate=autoupdate,
+                                    nested=autoupdate)
+            tmpY2 = ng.GridFunction(Y,
+                                    name='tmpY2',
+                                    autoupdate=autoupdate,
+                                    nested=autoupdate)
+            tmpX1 = ng.GridFunction(X,
+                                    name='tmpX1',
+                                    autoupdate=autoupdate,
+                                    nested=autoupdate)
 
             def __init__(selfr, z, V, n, inverse=None):
                 n2 = n * n
@@ -838,23 +847,20 @@ class ModeSolver:
                 # m - a - c - b + (-d)
                 selfr.Z += (z * detj * (jacinv * E) * (jacinv * F) -
                             (mu / eta_dr**3) *
-                            (1 + (mu_dr * r**2) / eta)**2 *
-                            curl(E) * curl(F) -
-                            V * detj * (jacinv * E) * (jacinv * F) -
-                            detj * (jacinv * grad(phi)) * (jacinv * F) -
-                            n2 * detj *
-                            (jacinv * E) * (jacinv * grad(psi)) +
-                            n2 * detj * phi * psi) * dx
-                selfr.ZH += (np.conjugate(z) * detj *
-                             (jacinv * F) * (jacinv * E) -
-                             (mu / eta_dr**3) *
-                             (1 + (mu_dr * r**2) / eta)**2 *
-                             curl(F) * curl(E) -
-                             V * detj * (jacinv * F) * (jacinv * E) -
-                             n2 * detj *
-                             (jacinv * F) * (jacinv * grad(phi)) -
-                             detj * (jacinv * grad(psi)) * (jacinv * E) +
-                             n2 * detj * phi * psi) * dx
+                            (1 + (mu_dr * r**2) / eta)**2 * curl(E) * curl(F) -
+                            V * detj * (jacinv * E) * (jacinv * F) - detj *
+                            (jacinv * grad(phi)) * (jacinv * F) - n2 * detj *
+                            (jacinv * E) *
+                            (jacinv * grad(psi)) + n2 * detj * phi * psi) * dx
+                selfr.ZH += (np.conjugate(z) * detj * (jacinv * F) *
+                             (jacinv * E) - (mu / eta_dr**3) *
+                             (1 +
+                              (mu_dr * r**2) / eta)**2 * curl(F) * curl(E) -
+                             V * detj * (jacinv * F) *
+                             (jacinv * E) - n2 * detj * (jacinv * F) *
+                             (jacinv * grad(phi)) - detj *
+                             (jacinv * grad(psi)) *
+                             (jacinv * E) + n2 * detj * phi * psi) * dx
 
                 with ng.TaskManager():
                     try:
@@ -866,8 +872,7 @@ class ModeSolver:
                         selfr.Z.Assemble()
                         selfr.ZH.Assemble()
                     selfr.R_I = selfr.Z.mat.Inverse(
-                            selfr.XY.FreeDofs(coupling=True),
-                            inverse=inverse)
+                        selfr.XY.FreeDofs(coupling=True), inverse=inverse)
 
             def act(selfr, v, Rv, workspace=None):
                 if workspace is None:
@@ -972,10 +977,11 @@ class ModeSolver:
                 object should not be necessary.
                 Consider removing this method and simplyfing __init__.
                 """
-                warn('This should be redundant with the autoupdate feature of'
-                     ' the GridFunction objects and recreating the resolvent'
-                     ' object should not be necessary.',
-                     PendingDeprecationWarning)
+                warn(
+                    'This should be redundant with the autoupdate feature of'
+                    ' the GridFunction objects and recreating the resolvent'
+                    ' object should not be necessary.',
+                    PendingDeprecationWarning)
                 if verbose:
                     print('Updating system matrices...\n')
                 with ng.TaskManager():
@@ -989,8 +995,9 @@ class ModeSolver:
                         selfr.Z.Assemble()
                         selfr.ZH.Assemble()
                     selfr.R_I = selfr.Z.mat.Inverse(
-                            selfr.XY.FreeDofs(coupling=True),
-                            inverse=selfr.inverse)
+                        selfr.XY.FreeDofs(coupling=True),
+                        inverse=selfr.inverse)
+
         # end of class ResolventVectorMode --------------------------------
 
         return ResolventVectorMode, dinv
@@ -1074,14 +1081,13 @@ class ModeSolver:
 
         return a, b, X
 
-    def smoothvecpmlsystem_compound(
-            self,
-            p,
-            alpha=1,
-            pmlbegin=None,
-            pmlend=None,
-            deg=2,
-            autoupdate=True):
+    def smoothvecpmlsystem_compound(self,
+                                    p,
+                                    alpha=1,
+                                    pmlbegin=None,
+                                    pmlend=None,
+                                    deg=2,
+                                    autoupdate=True):
         """
         Make the matrices needed for formulating the vector
         leaky mode eigensystem with frequency-independent
@@ -1100,9 +1106,9 @@ class ModeSolver:
         * mm: bilinear form for the RHS
         * Z: finite element space
         """
-        print('ModeSolver.smoothvecpmlsystem_compound called...\n')
         if self.ngspmlset:
-            raise RuntimeError('NGSolve pml set. Cannot combine with smooth.')
+            raise RuntimeError(
+                'NGSolve PML set. Cannot combine with smooth PML.')
         if abs(alpha.imag) > 0 or alpha < 0:
             raise ValueError('Expecting PML strength alpha > 0')
         if pmlbegin is None:
@@ -1111,6 +1117,7 @@ class ModeSolver:
             pmlend = self.Rout
         if self.gamma is None:
             self.set_vecpml_coeff(alpha, pmlbegin, pmlend, maxderiv=3)
+        self.p = p
 
         # Get symbolic functions
         detj = self.detj
@@ -1119,31 +1126,27 @@ class ModeSolver:
 
         # Make linear eigensystem, cf. self.vecmodesystem
         n2 = self.index * self.index
-        X = ng.HCurl(
-                self.mesh,
-                order=p + 1 - max(1 - p, 0),
-                type1=True,
-                dirichlet='OuterCircle',
-                complex=True,
-                autoupdate=autoupdate)
-        Y = ng.H1(
-                self.mesh,
-                order=p + 1,
-                dirichlet='OuterCircle',
-                complex=True,
-                autoupdate=autoupdate)
+        X = ng.HCurl(self.mesh,
+                     order=p + 1 - max(1 - p, 0),
+                     type1=True,
+                     dirichlet='OuterCircle',
+                     complex=True,
+                     autoupdate=autoupdate)
+        Y = ng.H1(self.mesh,
+                  order=p + 1,
+                  dirichlet='OuterCircle',
+                  complex=True,
+                  autoupdate=autoupdate)
 
-        Z = X*Y
+        Z = X * Y
         (E, phi), (F, psi) = Z.TnT()
 
         aa = ng.BilinearForm(Z)
         mm = ng.BilinearForm(Z)
 
-        aa += ((kappa * curl(E)) * curl(F) +
-               self.V * (gamma * E) * F +
-               n2 * (gamma * E) * grad(psi) +
-               (gamma * grad(phi)) * F -
-               n2 * detj * phi * psi) * dx
+        aa += ((kappa * curl(E)) * curl(F) + self.V * (gamma * E) * F + n2 *
+               (gamma * E) * grad(psi) +
+               (gamma * grad(phi)) * F - n2 * detj * phi * psi) * dx
         mm += (gamma * E) * F * dx
 
         with ng.TaskManager():
@@ -1158,15 +1161,14 @@ class ModeSolver:
 
         return aa, mm, Z
 
-    def smoothvecpmlsystem_resolvent(
-            self,
-            p,
-            alpha=1,
-            pmlbegin=None,
-            pmlend=None,
-            deg=2,
-            inverse='umfpack',
-            autoupdate=True):
+    def smoothvecpmlsystem_resolvent(self,
+                                     p,
+                                     alpha=1,
+                                     pmlbegin=None,
+                                     pmlend=None,
+                                     deg=2,
+                                     inverse='umfpack',
+                                     autoupdate=True):
         """
         Make the matrices needed for formulating the vector
         leaky mode eigensystem with frequency-independent
@@ -1208,19 +1210,17 @@ class ModeSolver:
 
         # Make linear eigensystem, cf. self.vecmodesystem
         n2 = self.index * self.index
-        X = ng.HCurl(
-                self.mesh,
-                order=p + 1 - max(1 - p, 0),
-                type1=True,
-                dirichlet='OuterCircle',
-                complex=True,
-                autoupdate=autoupdate)
-        Y = ng.H1(
-                self.mesh,
-                order=p + 1,
-                dirichlet='OuterCircle',
-                complex=True,
-                autoupdate=autoupdate)
+        X = ng.HCurl(self.mesh,
+                     order=p + 1 - max(1 - p, 0),
+                     type1=True,
+                     dirichlet='OuterCircle',
+                     complex=True,
+                     autoupdate=autoupdate)
+        Y = ng.H1(self.mesh,
+                  order=p + 1,
+                  dirichlet='OuterCircle',
+                  complex=True,
+                  autoupdate=autoupdate)
 
         E, F = X.TnT()
         phi, psi = Y.TnT()
@@ -1233,11 +1233,10 @@ class ModeSolver:
         d = ng.BilinearForm(Y, condense=True)
 
         m += (gamma * E) * F * dx
-        a += ((kappa * curl(E)) * curl(F) +
-              self.V * (gamma * E) * F) * dx
+        a += ((kappa * curl(E)) * curl(F) + self.V * (gamma * E) * F) * dx
         c += (gamma * grad(phi)) * F * dx
         b += n2 * (gamma * E) * grad(psi) * dx
-        d += - n2 * detj * phi * psi * dx
+        d += -n2 * detj * phi * psi * dx
 
         with ng.TaskManager():
             try:
@@ -1254,10 +1253,15 @@ class ModeSolver:
                 c.Assemble()
                 b.Assemble()
                 d.Assemble()
-            res, dinv = self.make_resolvent_maxwell(
-                    m, a, b, c, d, X, Y,
-                    inverse=inverse,
-                    autoupdate=autoupdate)
+            res, dinv = self.make_resolvent_maxwell(m,
+                                                    a,
+                                                    b,
+                                                    c,
+                                                    d,
+                                                    X,
+                                                    Y,
+                                                    inverse=inverse,
+                                                    autoupdate=autoupdate)
 
         return res, m, a, b, c, d, dinv
 
@@ -1339,23 +1343,22 @@ class ModeSolver:
 
         return zsqr, Y, Yl, beta, P, moreoutputs
 
-    def leakyvecmodes_smooth_compound(
-            self,
-            p=None,
-            radius=None,
-            center=None,
-            pmlbegin=None,
-            pmlend=None,
-            alpha=None,
-            npts=None,
-            nspan=None,
-            seed=1,
-            within=None,
-            rhoinv=0.0,
-            quadrule='circ_trapez_shift',
-            inverse='umfpack',
-            verbose=True,
-            **feastkwargs):
+    def leakyvecmodes_smooth_compound(self,
+                                      p=None,
+                                      radius=None,
+                                      center=None,
+                                      pmlbegin=None,
+                                      pmlend=None,
+                                      alpha=None,
+                                      npts=None,
+                                      nspan=None,
+                                      seed=1,
+                                      within=None,
+                                      rhoinv=0.0,
+                                      quadrule='circ_trapez_shift',
+                                      inverse='umfpack',
+                                      verbose=True,
+                                      **feastkwargs):
         """
         Compute vector leaky modes by solving a linear eigenproblem using
         the frequency-independent C²  PML map
@@ -1374,27 +1377,25 @@ class ModeSolver:
         if p is None or radius is None or center is None:
             raise ValueError('Missing input(s)')
         # Get compound system
-        aa, mm, Z = self.smoothvecpmlsystem_compound(
-                p,
-                alpha=alpha,
-                pmlbegin=pmlbegin,
-                pmlend=pmlend,
-                deg=2,
-                autoupdate=True)
+        aa, mm, Z = self.smoothvecpmlsystem_compound(p,
+                                                     alpha=alpha,
+                                                     pmlbegin=pmlbegin,
+                                                     pmlend=pmlend,
+                                                     deg=2,
+                                                     autoupdate=True)
         # Create spectral projector
-        P = SpectralProjNG(
-                Z,
-                aa.mat,
-                mm.mat,
-                radius=radius,
-                center=center,
-                npts=npts,
-                checks=False,
-                within=within,
-                rhoinv=rhoinv,
-                quadrule=quadrule,
-                verbose=verbose,
-                inverse=inverse)
+        P = SpectralProjNG(Z,
+                           aa.mat,
+                           mm.mat,
+                           radius=radius,
+                           center=center,
+                           npts=npts,
+                           checks=False,
+                           within=within,
+                           rhoinv=rhoinv,
+                           quadrule=quadrule,
+                           verbose=verbose,
+                           inverse=inverse)
 
         # Set up NGvecs
         E_phi_r = NGvecs(Z, nspan)
@@ -1403,11 +1404,10 @@ class ModeSolver:
         E_phi_l.setrandom(seed=seed)
 
         # Use FEAST
-        zsqr, E_phi_r, history, E_phi_l = P.feast(
-                E_phi_r,
-                Yl=E_phi_l,
-                hermitian=False,
-                **feastkwargs)
+        zsqr, E_phi_r, history, E_phi_l = P.feast(E_phi_r,
+                                                  Yl=E_phi_l,
+                                                  hermitian=False,
+                                                  **feastkwargs)
 
         # Compute betas, extract relevant variables
         ewhist, cgd = history[-2], history[-1]
@@ -1444,23 +1444,22 @@ class ModeSolver:
 
         return zsqr, E_r, E_l, phi_r, phi_l, beta, P, moreoutputs
 
-    def leakyvecmodes_smooth_resolvent(
-            self,
-            p=None,
-            radius=None,
-            center=None,
-            pmlbegin=None,
-            pmlend=None,
-            alpha=None,
-            npts=None,
-            nspan=None,
-            seed=1,
-            within=None,
-            rhoinv=0.0,
-            quadrule='circ_trapez_shift',
-            inverse='umfpack',
-            verbose=True,
-            **feastkwargs):
+    def leakyvecmodes_smooth_resolvent(self,
+                                       p=None,
+                                       radius=None,
+                                       center=None,
+                                       pmlbegin=None,
+                                       pmlend=None,
+                                       alpha=None,
+                                       npts=None,
+                                       nspan=None,
+                                       seed=1,
+                                       within=None,
+                                       rhoinv=0.0,
+                                       quadrule='circ_trapez_shift',
+                                       inverse='umfpack',
+                                       verbose=True,
+                                       **feastkwargs):
         """
         Compute vector leaky modes by solving a linear eigenproblem using
         the frequency-independent C²  PML map
@@ -1489,16 +1488,16 @@ class ModeSolver:
 
         # Create spectral projector
         P = SpectralProjNGR(
-                lambda z: res(z, self.V, self.index, inverse=inverse),
-                radius=radius,
-                center=center,
-                npts=npts,
-                checks=False,
-                within=within,
-                rhoinv=rhoinv,
-                quadrule=quadrule,
-                verbose=verbose,
-                inverse=inverse)
+            lambda z: res(z, self.V, self.index, inverse=inverse),
+            radius=radius,
+            center=center,
+            npts=npts,
+            checks=False,
+            within=within,
+            rhoinv=rhoinv,
+            quadrule=quadrule,
+            verbose=verbose,
+            inverse=inverse)
 
         # Unpack spaces from resolvent
         X, Y = res.XY.components
@@ -1514,11 +1513,10 @@ class ModeSolver:
         print(f'System size: {E_r.n} x {E_r.n}  Inverse type: {inverse}')
 
         # Use FEAST
-        zsqr, E_r, history, E_l = P.feast(
-                E_r,
-                Yl=E_l,
-                hermitian=False,
-                **feastkwargs)
+        zsqr, E_r, history, E_l = P.feast(E_r,
+                                          Yl=E_l,
+                                          hermitian=False,
+                                          **feastkwargs)
 
         # Compute betas, extract relevant variables
         ewhist, cgd = history[-2], history[-1]
@@ -1547,6 +1545,180 @@ class ModeSolver:
     # ###################################################################
     # ERROR ESTIMATORS FOR ADAPTIVITY ###################################
 
+    def eestimator_maxwell(self, rgt, lft, lam):
+        """
+        DWR error estimator for Maxwell eigenproblem in compound
+        form. We write eta = eta_1 + eta_2 + eta_3, where
+            eta_i = sqrt(Omega_i_R * Rho_i_R) + sqrt(Omega_i_L * Rho_i_L)
+        INPUT:
+        * lft: left eigenfunction as NGvecs object for the compound form
+        * rgt: right eigenfunction as NGvecs object for the compound form
+        * lam: eigenvalue
+        OUTPUT:
+        * Eta: element-wise error estimator
+        * Etas: dictionary with more info (see code)
+        """
+
+        assert rgt.m == lft.m and len(lam) == rgt.m, \
+            'Check FEAST output:\n' + f'rgt.m {rgt.m} != lft.m {lft.m}'
+
+        if self.gamma is None:
+            raise ValueError('PML coefficients not set. Use set_vecpml_coeff.')
+
+        eta1s = []
+        eta2s = []
+        eta3s = []
+        kappa = self.kappa
+        gamma = self.gamma
+        detj = self.detj
+
+        h = ng.specialcf.mesh_size
+        n = ng.specialcf.normal(self.mesh.dim)
+        n2 = self.index * self.index
+        W = ng.L2(self.mesh, order=self.p, complex=True)
+        kcurlE = ng.GridFunction(W)
+        W2 = ng.VectorL2(self.mesh, order=self.p + 1, complex=True)
+        flux = ng.GridFunction(W2)
+
+        for i in range(rgt.m):
+
+            R = rgt.gridfun('R', i=i)
+            L = lft.gridfun('L', i=i)
+            Z2 = lam[i]
+            ER = R.components[0]
+            EL = L.components[0]
+            phiR = R.components[1]
+            phiL = L.components[1]
+            V = self.V
+
+            with ng.TaskManager():
+
+                kcurlE.Set(kappa * curl(ER))
+                gradkcurlER = grad(kcurlE)
+                rotkcurlER = CF((gradkcurlER[1], -gradkcurlER[0]))
+                ggphiR = gamma * grad(phiR)
+                rho1Ri = rotkcurlER + ggphiR + (V - Z2) * gamma * ER
+                rho1Rj = kcurlE - kcurlE.Other()
+                rho1Rint = h * h * InnerProduct(rho1Ri, rho1Ri)
+                rho1Rjmp = 0.5 * h * rho1Rj * Conj(rho1Rj)
+                Rho1R = Integrate(rho1Rint * dx +
+                                  rho1Rjmp * dx(element_boundary=True),
+                                  self.mesh,
+                                  element_wise=True)
+
+                flux.Set(ggphiR + (V - Z2) * gamma * ER)
+                gradEphiR = Grad(flux)
+                divEphiR = gradEphiR[0, 0] + gradEphiR[1, 1]
+                rho2Rj = (flux - flux.Other()) * n
+                rho2Rint = h * h * divEphiR * Conj(divEphiR)
+                rho2Rjmp = 0.5 * h * rho2Rj * Conj(rho2Rj)
+                Rho2R = Integrate(rho2Rint * dx +
+                                  rho2Rjmp * dx(element_boundary=True),
+                                  self.mesh,
+                                  element_wise=True)
+
+                flux.Set(n2 * gamma * ER)
+                gradngER = Grad(flux)
+                divngER = gradngER[0, 0] + gradngER[1, 1]
+                rho3Ri = n2 * detj * phiR + divngER
+                rho3Rj = (flux - flux.Other()) * n
+                rho3Rint = h * h * rho3Ri * Conj(rho3Ri)
+                rho3Rjmp = 0.5 * h * rho3Rj * Conj(rho3Rj)
+                Rho3R = Integrate(rho3Rint * dx +
+                                  rho3Rjmp * dx(element_boundary=True),
+                                  self.mesh,
+                                  element_wise=True)
+
+                Omega1R = Integrate(InnerProduct(curl(ER), curl(ER)) * dx,
+                                    self.mesh,
+                                    element_wise=True)
+                Omega2R = Integrate(InnerProduct(ER, ER) * dx,
+                                    self.mesh,
+                                    element_wise=True)
+                Omega3R = Integrate(InnerProduct(grad(phiR), grad(phiR)) * dx,
+                                    self.mesh,
+                                    element_wise=True)
+
+                kcurlE.Set(Conj(kappa) * curl(EL))
+                gradkcurlEL = grad(kcurlE)
+                rotkcurlEL = CF((gradkcurlEL[1], -gradkcurlEL[0]))
+                rho1Li = rotkcurlEL + n2 * Conj(gamma) * grad(phiL) + \
+                    Conj((V - Z2) * gamma) * EL
+                rho1Lj = kcurlE - kcurlE.Other()
+                rho1Lint = h * h * InnerProduct(rho1Li, rho1Li)
+                rho1Ljmp = 0.5 * h * rho1Lj * Conj(rho1Lj)
+                Rho1L = Integrate(rho1Lint * dx +
+                                  rho1Ljmp * dx(element_boundary=True),
+                                  self.mesh,
+                                  element_wise=True)
+
+                flux.Set(n2 * Conj(gamma) * grad(phiL) +
+                         Conj((V - Z2) * gamma) * EL)
+                gradEphiL = Grad(flux)
+                divEphiL = gradEphiL[0, 0] + gradEphiL[1, 1]
+                rho2Lj = (flux - flux.Other()) * n
+                rho2Lint = h * h * divEphiL * Conj(divEphiL)
+                rho2Ljmp = 0.5 * h * rho2Lj * Conj(rho2Lj)
+                Rho2L = Integrate(rho2Lint * dx +
+                                  rho2Ljmp * dx(element_boundary=True),
+                                  self.mesh,
+                                  element_wise=True)
+
+                flux.Set(Conj(gamma) * EL)
+                gradgEL = Grad(flux)
+                divgEL = gradgEL[0, 0] + gradgEL[1, 1]
+                rho3Li = n2 * Conj(detj) * phiL + divgEL
+                rho3Lj = (flux - flux.Other()) * n
+                rho3Lint = h * h * rho3Li * Conj(rho3Li)
+                rho3Ljmp = 0.5 * h * rho3Lj * Conj(rho3Lj)
+                Rho3L = Integrate(rho3Lint * dx +
+                                  rho3Ljmp * dx(element_boundary=True),
+                                  self.mesh,
+                                  element_wise=True)
+
+                Omega1L = Integrate(InnerProduct(curl(EL), curl(EL)) * dx,
+                                    self.mesh,
+                                    element_wise=True)
+                Omega2L = Integrate(InnerProduct(EL, EL) * dx,
+                                    self.mesh,
+                                    element_wise=True)
+                Omega3L = Integrate(InnerProduct(grad(phiL), grad(phiL)) * dx,
+                                    self.mesh,
+                                    element_wise=True)
+
+                Eta1 = np.sqrt(Omega1L.real.NumPy() * Rho1R.real.NumPy())
+                Eta1 += np.sqrt(Omega1R.real.NumPy() * Rho1L.real.NumPy())
+                eta1s.append(Eta1)
+
+                Eta2 = np.sqrt(Omega2L.real.NumPy() * Rho2R.real.NumPy())
+                Eta2 += np.sqrt(Omega2R.real.NumPy() * Rho2L.real.NumPy())
+                eta2s.append(Eta2)
+
+                Eta3 = np.sqrt(Omega3L.real.NumPy() * Rho3R.real.NumPy())
+                Eta3 += np.sqrt(Omega3R.real.NumPy() * Rho3L.real.NumPy())
+                eta3s.append(Eta3)
+
+        Eta = np.zeros_like(eta1s[0])
+        Eta1 = np.zeros_like(Eta)
+        Eta2 = np.zeros_like(Eta)
+        Eta3 = np.zeros_like(Eta)
+        for i in range(rgt.m):
+            Eta1 += eta1s[i]
+            Eta2 += eta2s[i]
+            Eta3 += eta3s[i]
+        Eta = Eta1 + Eta2 + Eta3
+
+        Etas = {
+            'eta1s': eta1s,
+            'eta2s': eta2s,
+            'eta3s': eta3s,
+            'Eta1': (Eta1, np.max(Eta1)),
+            'Eta2': (Eta2, np.max(Eta2)),
+            'Eta3': (Eta3, np.max(Eta3)),
+        }
+
+        return Eta, Etas
+
     def __compute_avr_ngvecs(self, gf, name=None):
         """
         Return a grid function that takes the average of the components
@@ -1560,10 +1732,10 @@ class ModeSolver:
         OUTPUT:
         * new_gf: GridFunction object
         """
-        new_gf = ng.GridFunction(
-                gf.fes,
-                name=name+' avr' if name is not None else 'avr',
-                autoupdate=gf.fes.autoupdate)
+        new_gf = ng.GridFunction(gf.fes,
+                                 name=name +
+                                 ' avr' if name is not None else 'avr',
+                                 autoupdate=gf.fes.autoupdate)
         for i in range(gf.m):
             new_gf.vec.data += gf[i].vec.data
         new_gf.vec.data /= gf.m
@@ -1763,72 +1935,66 @@ class ModeSolver:
 
         # Residuals and weights (as numpy arrays)
         Rho1_r = Integrate(
-                (InnerProduct(rho1_r_x, rho1_r_x) +
-                 InnerProduct(rho1_r_y, rho1_r_y)) * dx +
-                InnerProduct(rho1_r_j, rho1_r_j) * dx(element_boundary=True),
-                self.mesh,
-                element_wise=True)
+            (InnerProduct(rho1_r_x, rho1_r_x) +
+             InnerProduct(rho1_r_y, rho1_r_y)) * dx +
+            InnerProduct(rho1_r_j, rho1_r_j) * dx(element_boundary=True),
+            self.mesh,
+            element_wise=True)
 
         Rho2_r = Integrate(
-                InnerProduct(rho2_r, rho2_r) * dx +
-                InnerProduct(rho2_r_j, rho2_r_j) * dx(element_boundary=True),
-                self.mesh,
-                element_wise=True)
+            InnerProduct(rho2_r, rho2_r) * dx +
+            InnerProduct(rho2_r_j, rho2_r_j) * dx(element_boundary=True),
+            self.mesh,
+            element_wise=True)
 
         Rho3_r = Integrate(
-                InnerProduct(rho3_r, rho3_r) * dx +
-                InnerProduct(rho3_r_j, rho3_r_j) * dx(element_boundary=True),
-                self.mesh,
-                element_wise=True)
+            InnerProduct(rho3_r, rho3_r) * dx +
+            InnerProduct(rho3_r_j, rho3_r_j) * dx(element_boundary=True),
+            self.mesh,
+            element_wise=True)
 
         Rho1_l = Integrate(
-                (InnerProduct(rho1_l_x, rho1_l_x) +
-                 InnerProduct(rho1_l_y, rho1_l_y)) * dx +
-                InnerProduct(rho1_l_j, rho1_l_j) * dx(element_boundary=True),
-                self.mesh,
-                element_wise=True)
+            (InnerProduct(rho1_l_x, rho1_l_x) +
+             InnerProduct(rho1_l_y, rho1_l_y)) * dx +
+            InnerProduct(rho1_l_j, rho1_l_j) * dx(element_boundary=True),
+            self.mesh,
+            element_wise=True)
 
         Rho2_l = Integrate(
-                InnerProduct(rho2_l, rho2_l) * dx +
-                InnerProduct(rho2_l_j, rho2_l_j) * dx(element_boundary=True),
-                self.mesh,
-                element_wise=True)
+            InnerProduct(rho2_l, rho2_l) * dx +
+            InnerProduct(rho2_l_j, rho2_l_j) * dx(element_boundary=True),
+            self.mesh,
+            element_wise=True)
 
         Rho3_l = Integrate(
-                InnerProduct(rho3_l, rho3_l) * dx +
-                InnerProduct(rho3_l_j, rho3_l_j) * dx(element_boundary=True),
-                self.mesh,
-                element_wise=True)
+            InnerProduct(rho3_l, rho3_l) * dx +
+            InnerProduct(rho3_l_j, rho3_l_j) * dx(element_boundary=True),
+            self.mesh,
+            element_wise=True)
 
-        Omega1_r = Integrate(
-                InnerProduct(omega1_r, omega1_r) * dx,
-                self.mesh,
-                element_wise=True)
+        Omega1_r = Integrate(InnerProduct(omega1_r, omega1_r) * dx,
+                             self.mesh,
+                             element_wise=True)
 
-        Omega2_r = Integrate(
-                InnerProduct(omega2_r, omega2_r) * dx,
-                self.mesh,
-                element_wise=True)
+        Omega2_r = Integrate(InnerProduct(omega2_r, omega2_r) * dx,
+                             self.mesh,
+                             element_wise=True)
 
-        Omega3_r = Integrate(
-                InnerProduct(omega3_r, omega3_r) * dx,
-                self.mesh,
-                element_wise=True)
+        Omega3_r = Integrate(InnerProduct(omega3_r, omega3_r) * dx,
+                             self.mesh,
+                             element_wise=True)
 
-        Omega1_l = Integrate(
-                InnerProduct(omega1_l, omega1_l) * dx,
-                self.mesh,
-                element_wise=True)
+        Omega1_l = Integrate(InnerProduct(omega1_l, omega1_l) * dx,
+                             self.mesh,
+                             element_wise=True)
 
-        Omega2_l = Integrate(
-                InnerProduct(omega2_l, omega2_l) * dx,
-                self.mesh,
-                element_wise=True)
+        Omega2_l = Integrate(InnerProduct(omega2_l, omega2_l) * dx,
+                             self.mesh,
+                             element_wise=True)
 
-        Omega3_l = Integrate(
-                InnerProduct(omega3_l, omega3_l) * dx,
-                self.mesh,
-                element_wise=True)
+        Omega3_l = Integrate(InnerProduct(omega3_l, omega3_l) * dx,
+                             self.mesh,
+                             element_wise=True)
 
         Eta1 = np.sqrt(Omega1_r.real.NumPy() * Rho1_r.real.NumPy())
         Eta1 += np.sqrt(Omega1_l.real.NumPy() * Rho1_l.real.NumPy())
@@ -1937,49 +2103,55 @@ class ModeSolver:
         l_z = h * (div_E_l + n2 * detj * phi_l)
         jl_z = n2 * n * (JE_l - JE_l.Other())
 
-        rho_r = Integrate(
-                InnerProduct(r_t_x, r_t_x) * dx, self.mesh, element_wise=True)
-        rho_r += Integrate(
-                InnerProduct(r_t_y, r_t_y) * dx, self.mesh, element_wise=True)
-        rho_r += Integrate(
-                0.5 * h * InnerProduct(jr_t, jr_t) * dx(element_boundary=True),
-                self.mesh, element_wise=True)
-        rho_r += Integrate(
-                InnerProduct(r_z, r_z) * dx, self.mesh, element_wise=True)
-        rho_r += Integrate(
-                0.5 * h * InnerProduct(jr_z, jr_z) * dx(element_boundary=True),
-                self.mesh, element_wise=True)
+        rho_r = Integrate(InnerProduct(r_t_x, r_t_x) * dx,
+                          self.mesh,
+                          element_wise=True)
+        rho_r += Integrate(InnerProduct(r_t_y, r_t_y) * dx,
+                           self.mesh,
+                           element_wise=True)
+        rho_r += Integrate(0.5 * h * InnerProduct(jr_t, jr_t) *
+                           dx(element_boundary=True),
+                           self.mesh,
+                           element_wise=True)
+        rho_r += Integrate(InnerProduct(r_z, r_z) * dx,
+                           self.mesh,
+                           element_wise=True)
+        rho_r += Integrate(0.5 * h * InnerProduct(jr_z, jr_z) *
+                           dx(element_boundary=True),
+                           self.mesh,
+                           element_wise=True)
 
-        rho_l = Integrate(
-                InnerProduct(l_t_x, l_t_x) * dx, self.mesh, element_wise=True)
-        rho_l += Integrate(
-                InnerProduct(l_t_y, l_t_y) * dx, self.mesh, element_wise=True)
-        rho_l += Integrate(
-                0.5 * h * InnerProduct(jl_t, jl_t) * dx(element_boundary=True),
-                self.mesh, element_wise=True)
-        rho_l += Integrate(
-                InnerProduct(l_z, l_z) * dx, self.mesh, element_wise=True)
-        rho_l += Integrate(
-                0.5 * h * InnerProduct(jl_z, jl_z) * dx(element_boundary=True),
-                self.mesh, element_wise=True)
+        rho_l = Integrate(InnerProduct(l_t_x, l_t_x) * dx,
+                          self.mesh,
+                          element_wise=True)
+        rho_l += Integrate(InnerProduct(l_t_y, l_t_y) * dx,
+                           self.mesh,
+                           element_wise=True)
+        rho_l += Integrate(0.5 * h * InnerProduct(jl_t, jl_t) *
+                           dx(element_boundary=True),
+                           self.mesh,
+                           element_wise=True)
+        rho_l += Integrate(InnerProduct(l_z, l_z) * dx,
+                           self.mesh,
+                           element_wise=True)
+        rho_l += Integrate(0.5 * h * InnerProduct(jl_z, jl_z) *
+                           dx(element_boundary=True),
+                           self.mesh,
+                           element_wise=True)
 
-        omega_r = Integrate(
-                InnerProduct(gradE_r, gradE_r),
-                self.mesh,
-                element_wise=True)
-        omega_r += Integrate(
-                InnerProduct(gradphi_r, gradphi_r),
-                self.mesh,
-                element_wise=True)
+        omega_r = Integrate(InnerProduct(gradE_r, gradE_r),
+                            self.mesh,
+                            element_wise=True)
+        omega_r += Integrate(InnerProduct(gradphi_r, gradphi_r),
+                             self.mesh,
+                             element_wise=True)
 
-        omega_l = Integrate(
-                InnerProduct(gradE_l, gradE_l),
-                self.mesh,
-                element_wise=True)
-        omega_l += Integrate(
-                InnerProduct(gradphi_l, gradphi_l),
-                self.mesh,
-                element_wise=True)
+        omega_l = Integrate(InnerProduct(gradE_l, gradE_l),
+                            self.mesh,
+                            element_wise=True)
+        omega_l += Integrate(InnerProduct(gradphi_l, gradphi_l),
+                             self.mesh,
+                             element_wise=True)
 
         ee = np.sqrt(omega_r.real.NumPy() * rho_r.real.NumPy())
         ee += np.sqrt(omega_l.real.NumPy() * rho_l.real.NumPy())
@@ -2042,12 +2214,11 @@ class ModeSolver:
             ng.Draw(eevis)
 
         while ndofs[-1] < maxndofs:  # ADAPTIVITY LOOP ------------------
-            a, b, X = self.smoothpmlsystem(
-                    p,
-                    alpha=alpha,
-                    autoupdate=True,
-                    pmlbegin=pmlbegin,
-                    pmlend=pmlend)
+            a, b, X = self.smoothpmlsystem(p,
+                                           alpha=alpha,
+                                           autoupdate=True,
+                                           pmlbegin=pmlbegin,
+                                           pmlend=pmlend)
 
             Yr = NGvecs(X, nspan)
             Yl = NGvecs(X, nspan)
@@ -2134,27 +2305,27 @@ class ModeSolver:
 
         return Zsqrs, ndofs, Yr, Yl, beta, P
 
-    def leakyvecmodes_adapt(
-            self,
-            p=None,
-            radius=None,
-            center=None,
-            alpha=None,
-            pmlbegin=None,
-            pmlend=None,
-            maxndofs=200000,  # Stop if ndofs become larger than this
-            visualize=True,  # Pause adaptive loop to see iterate
-            npts=4,
-            nspan=5,
-            seed=1,
-            within=None,
-            rhoinv=0.0,
-            quadrule='circ_trapez_shift',
-            inverse='umfpack',
-            autoupdate=True,
-            trustme=False,
-            verbose=True,
-            **feastkwargs):
+    def leakyvecmodes_adapt(self,
+                            p,
+                            radius,
+                            center,
+                            alpha=None,
+                            pmlbegin=None,
+                            pmlend=None,
+                            maxndofs=200000,
+                            visualize=True,
+                            markfraction=0.1,
+                            autoupdate=False,
+                            trustme=True,
+                            npts=4,
+                            nspan=5,
+                            seed=1,
+                            within=None,
+                            rhoinv=0.0,
+                            quadrule='circ_trapez_shift',
+                            inverse='umfpack',
+                            verbose=True,
+                            **feastkwargs):
         """
         Compute vector leaky modes by DWR adaptivity, solving in each
         iteration a linear eigenproblem obtained using the
@@ -2170,42 +2341,48 @@ class ModeSolver:
             is such that Z*Z is contained within the circular contour
             centered at "centerZ2" of radius "radiusZ2" in the complex
             plane.
+        * markfraction: if eta_T > markfraction * max_T eta_T,
+            then mark element T for refinement. Here eta_T is the DWR
+            error estimator.
         * maxndofs: Stop adaptive loop if number of dofs exceed this.
-        * trustme: If True, modify the new center to be the average
-            of the Z² values of the modes found in the previous iteration.
         * visualize: If true, then pause adaptivity loop to see each iterate.
+        * autoupdate: If True, use NGSolve's autoupdate-on-refinement feature
+            for meshes, spaces, and gridfunctions. (Unfortunately, as of
+            May 2024, random segfaults are created by ngsolve autoupdate).
+            If False, then after each adaptive refinement, copy the mesh,
+            create new gridfunctions, new spaces, etc., in each iteration.
+        * trustme: If True, then abandon contour checking, lock nspan to
+            first converged dimension, and just do shifted inverse interation
+            with shift set to mean of prior converged eigenvalue iterates.
         * Remaining inputs are as documented in leakymode(..).
 
-        OUTPUT:   zsqr, E_r, E_l, phi_r, phi_l, P
+        OUTPUT:   zsqr, eestimates, ER, EL, phiR, phiL, beta, P
         """
-        # Check validity of inputs
-        if p is None or radius is None or center is None:
-            raise ValueError('Missing input(s)')
 
         ndofs = [0]
         Zsqrs = []
-
-        if visualize:
-            eevis = ng.GridFunction(ng.L2(self.mesh, order=0, autoupdate=True),
+        errestimates = []
+        checkcontour = 3
+        if autoupdate and visualize:
+            E = ng.L2(self.mesh, order=0, autoupdate=True)
+            eevis = ng.GridFunction(E,
                                     name='estimator',
                                     autoupdate=True,
                                     nested=True)
-            ng.Draw(eevis)
 
         while ndofs[-1] < maxndofs:  # ADAPTIVITY LOOP ------------------
 
-            aa, mm, Z = self.smoothvecpmlsystem_compound(
-                    p,
-                    alpha=alpha,
-                    pmlbegin=pmlbegin,
-                    pmlend=pmlend,
-                    deg=2,
-                    autoupdate=autoupdate)
-
-            E_phi_r = NGvecs(Z, nspan)
-            E_phi_l = NGvecs(Z, nspan)
-            E_phi_r.setrandom(seed=seed)
-            E_phi_l.setrandom(seed=seed)
+            aa, mm, Z = self.smoothvecpmlsystem_compound(p,
+                                                         alpha=alpha,
+                                                         pmlbegin=pmlbegin,
+                                                         pmlend=pmlend,
+                                                         autoupdate=autoupdate)
+            uR = NGvecs(Z, nspan)
+            uL = NGvecs(Z, nspan)
+            uR.setrandom(seed=seed)
+            uL.setrandom(seed=seed)
+            print('ADAPTIVITY at ', uR.fes.ndof, ' ndofs:')
+            print('  Assembling system...')
 
             # 1. SOLVE
 
@@ -2214,84 +2391,75 @@ class ModeSolver:
                     aa.Assemble()
                     mm.Assemble()
                 except Exception:
-                    print('*** Trying again with larger heap')
+                    print('   *** Trying again with larger heap')
                     ng.SetHeapSize(int(1e9))
                     aa.Assemble()
                     mm.Assemble()
 
-            P = SpectralProjNG(
-                    Z,
-                    aa.mat,
-                    mm.mat,
-                    radius=radius,
-                    center=center,
-                    npts=npts,
-                    within=within,
-                    rhoinv=rhoinv,
-                    checks=False,
-                    quadrule=quadrule,
-                    verbose=verbose,
-                    inverse=inverse)
-
-            zsqr, E_phi_r, history, E_phi_l = P.feast(
-                    E_phi_r, Yl=E_phi_l, hermitian=False, **feastkwargs)
-
+            P = SpectralProjNG(Z,
+                               aa.mat,
+                               mm.mat,
+                               radius=radius,
+                               center=center,
+                               npts=npts,
+                               within=within,
+                               rhoinv=rhoinv,
+                               checks=False,
+                               quadrule=quadrule,
+                               verbose=verbose,
+                               inverse=inverse)
+            zsqr, uR, history, uL = P.feast(uR,
+                                            Yl=uL,
+                                            hermitian=False,
+                                            check_contour=checkcontour,
+                                            **feastkwargs)
             _, cgd = history[-2], history[-1]
-
             if not cgd:
-                raise NotImplementedError('What to do when FEAST fails?')
-            # Implement average of multiple eigenfunctions
-            avr_zsqr = np.average(zsqr)
-            ndofs.append(E_phi_r.fes.ndof)
+                raise ValueError('FEAST failed. Try another region')
+            ndofs.append(uR.fes.ndof)
             Zsqrs.append(zsqr)
-            if E_phi_r.m > 1:
-                print(f'ADAPTIVITY at {ndofs[-1]:7d} ndofs: ' +
-                      f'avg_zsqr = {avr_zsqr:+10.8f}')
-            else:
-                print(f'ADAPTIVITY at {ndofs[-1]:7d} ndofs: ' +
-                      f'Zsqr = {Zsqrs[-1][0]:+10.8f}')
+            print('  Computed eigenvalues:', zsqr)
+
+            center = np.average(zsqr)
+            if trustme:
+                npts = 1
+                nspan = len(zsqr)
+                checkcontour = 0  # with this, radius is irrelevant
 
             # 2. ESTIMATE
-            ee, test = self.eestimator_maxwell_compound(
-                    E_phi_r, E_phi_l, avr_zsqr)
+            ee, more = self.eestimator_maxwell(uR, uL, zsqr)
+            errestimates.append((sum(ee), more))
+            print('  Error estimator:', errestimates[-1][0])
 
             if visualize:
-                eevis.vec.FV().NumPy()[:] = ee
+                if autoupdate:
+                    eevis.vec.FV().NumPy()[:] = ee
+                else:
+                    E = ng.L2(self.mesh, order=0)
+                    eevis = ng.GridFunction(E, name='estimator')
+                    eevis.vec.FV().NumPy()[:] = ee
                 ng.Draw(eevis)
-                for i in range(E_phi_r.m):
-                    ng.Draw(E_phi_r.gridfun(
-                        name="E_r"+str(i), i=i).components[0])
-                    ng.Draw(E_phi_r.gridfun(
-                        name="phi_r"+str(i), i=i).components[1])
-                    ng.Draw(E_phi_l.gridfun(
-                        name="E_l"+str(i), i=i).components[0])
-                    ng.Draw(E_phi_l.gridfun(
-                        name="phi_l"+str(i), i=i).components[1])
-                print(f'Maximum component of error estimator: {np.max(ee)}')
-                print('* Maximum component per estimator *')
-                print(f'\n\tEta1: {test["Eta1"][1]}' +
-                      f'\n\tEta2: {test["Eta2"][1]}' +
-                      f'\n\tEta3: {test["Eta3"][1]}')
+                ng.Draw(uR.gridfun(name="ER").components[0])
+                ng.Draw(uR.gridfun(name="phiR").components[1])
                 input('* Pausing for visualization. Enter any key to continue')
 
             if ndofs[-1] > maxndofs:
                 break
 
             # 3. MARK
-
-            strat = AdaptivityStrategy(Strategy.AVG)
-            strat.apply(self.mesh, ee)
+            maxee = np.max(ee)
+            self.mesh.ngmesh.Elements2D().NumPy()["refine"] = \
+                ee > markfraction * maxee
+            nummarked = sum(self.mesh.ngmesh.Elements2D().NumPy()["refine"])
+            print('  Marked ', nummarked, ' elements for refinement')
 
             # 4. REFINE
 
             self.mesh.Refine()
-            ngmesh = self.mesh.ngmesh.Copy()
-            self.mesh = ng.Mesh(ngmesh)
-            self.mesh.Curve(8)
-            if trustme:
-                center = avr_zsqr
-                npts = 1
-                nspan = 1
+            if not autoupdate:
+                ngmesh = self.mesh.ngmesh.Copy()
+                self.mesh = ng.Mesh(ngmesh)
+                self.mesh.Curve(8)
 
         # Adaptivity loop done ------------------------------------------
 
@@ -2300,26 +2468,26 @@ class ModeSolver:
         print(' beta:', beta)
         print(' CL dB/m:', 20 * beta.imag / np.log(10))
 
-        # Unpack E_phi_r, E_phi_l into E_r, E_l, phi_r, phi_l
+        # Unpack uR, uL into ER, EL, phiR, phiL
         X, Y = Z.components
-        E_r = NGvecs(X, E_phi_r.m)
-        E_l = NGvecs(X, E_phi_l.m)
-        phi_r = NGvecs(Y, E_phi_r.m)
-        phi_l = NGvecs(Y, E_phi_l.m)
+        ER = NGvecs(X, uR.m)
+        EL = NGvecs(X, uL.m)
+        phiR = NGvecs(Y, uR.m)
+        phiL = NGvecs(Y, uL.m)
 
-        for i in range(E_phi_r.m):
-            E_r._mv[i].data = E_phi_r[i].components[0].vec.data
-            E_l._mv[i].data = E_phi_l[i].components[0].vec.data
-            phi_r._mv[i].data = E_phi_r[i].components[1].vec.data
-            phi_l._mv[i].data = E_phi_l[i].components[1].vec.data
+        for i in range(uR.m):
+            ER._mv[i].data = uR[i].components[0].vec.data
+            EL._mv[i].data = uL[i].components[0].vec.data
+            phiR._mv[i].data = uR[i].components[1].vec.data
+            phiL._mv[i].data = uL[i].components[1].vec.data
 
-        maxbdrnrm_r = np.max(self.boundarynorm(E_r))
-        maxbdrnrm_l = np.max(self.boundarynorm(E_l))
+        maxbdrnrm_r = np.max(self.boundarynorm(ER))
+        maxbdrnrm_l = np.max(self.boundarynorm(EL))
         maxbdrnrm = max(maxbdrnrm_r, maxbdrnrm_l)
         if maxbdrnrm > 1e-6:
             print('*** Mode boundary L2 norm > 1e-6!')
 
-        return Zsqrs, ndofs, E_r, E_l, phi_r, phi_l, beta, P
+        return Zsqrs, errestimates, ndofs, ER, EL, phiR, phiL, beta, P
 
     def leakyvecmodes_adapt_resolvent(
             self,
@@ -2385,13 +2553,13 @@ class ModeSolver:
         while ndofs[-1] < maxndofs:  # ADAPTIVITY LOOP ------------------
 
             res, m, a, b, c, d, dinv = self.smoothvecpmlsystem_resolvent(
-                    p,
-                    alpha=alpha,
-                    pmlbegin=pmlbegin,
-                    pmlend=pmlend,
-                    deg=2,
-                    inverse=inverse,
-                    autoupdate=autoupdate)
+                p,
+                alpha=alpha,
+                pmlbegin=pmlbegin,
+                pmlend=pmlend,
+                deg=2,
+                inverse=inverse,
+                autoupdate=autoupdate)
             X, Y = res.XY.components
 
             E_r = NGvecs(X, nspan, M=m.mat)
@@ -2404,18 +2572,20 @@ class ModeSolver:
             # The assembling occurs in smoothvecpmlsystem_resolvent
 
             P = SpectralProjNGR(
-                    lambda z: res(z, self.V, self.index, inverse=inverse),
-                    radius=radius,
-                    center=center,
-                    npts=npts,
-                    within=within,
-                    rhoinv=rhoinv,
-                    quadrule=quadrule,
-                    verbose=verbose,
-                    inverse=inverse)
+                lambda z: res(z, self.V, self.index, inverse=inverse),
+                radius=radius,
+                center=center,
+                npts=npts,
+                within=within,
+                rhoinv=rhoinv,
+                quadrule=quadrule,
+                verbose=verbose,
+                inverse=inverse)
 
-            zsqr, E_r, history, E_l = P.feast(
-                    E_r, Yl=E_l, hermitian=False, **feastkwargs)
+            zsqr, E_r, history, E_l = P.feast(E_r,
+                                              Yl=E_l,
+                                              hermitian=False,
+                                              **feastkwargs)
 
             cgd = history[-1]
             if not cgd:
@@ -2435,17 +2605,17 @@ class ModeSolver:
             phi_r, phi_l = self.__get_phi_from_E(E_r, E_l, b, c, d, dinv, Y)
 
             # 2. ESTIMATE
-            ee = self.eestimator_maxwell_resolvent(
-                    E_r, E_l, phi_r, phi_l, avr_zsqr)
+            ee = self.eestimator_maxwell_resolvent(E_r, E_l, phi_r, phi_l,
+                                                   avr_zsqr)
 
             if visualize:
                 eevis.vec.FV().NumPy()[:] = ee
                 ng.Draw(eevis)
                 for i in range(E_r.m):
-                    E_r.draw(name="E_r"+str(i))
-                    phi_r.draw(name="phi_r"+str(i))
-                    E_l.draw(name="E_l"+str(i))
-                    phi_l.draw(name="phi_l"+str(i))
+                    E_r.draw(name="E_r" + str(i))
+                    phi_r.draw(name="phi_r" + str(i))
+                    E_l.draw(name="E_l" + str(i))
+                    phi_l.draw(name="phi_l" + str(i))
                     input('* Pausing for visualization.'
                           'Enter any key to continue')
 
@@ -2520,9 +2690,9 @@ class ModeSolver:
         intensity = []
         for i, beta in enumerate(betas):
             intensity.append(
-                    CF(InnerProduct(E[i], E[i]) +
-                       InnerProduct(phi[i], phi[i]) /
-                       (abs(beta)**2 * self.L)))
+                CF(
+                    InnerProduct(E[i], E[i]) + InnerProduct(phi[i], phi[i]) /
+                    (abs(beta)**2 * self.L)))
         return intensity
 
     # ###################################################################
