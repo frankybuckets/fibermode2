@@ -2294,7 +2294,7 @@ class ModeSolver:
             if not autoupdate:
                 ngmesh = self.mesh.ngmesh.Copy()
                 self.mesh = ng.Mesh(ngmesh)
-                self.mesh.Curve(8)
+            self.mesh.Curve(8)
 
         # Adaptivity loop done ------------------------------------------
 
