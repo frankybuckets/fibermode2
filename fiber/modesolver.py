@@ -1719,28 +1719,6 @@ class ModeSolver:
 
         return Eta, Etas
 
-    def __compute_avr_ngvecs(self, gf, name=None):
-        """
-        Return a grid function that takes the average of the components
-        of the (multi-component) grid function gf, provided in NGvecs
-        format.
-        OBS: This function might be redundant, as we are not implementing
-        the averaged error estimator, but a list of error estimators.
-        INPUT:
-        * gf: NGvecs object
-        * name: name of the new grid function
-        OUTPUT:
-        * new_gf: GridFunction object
-        """
-        new_gf = ng.GridFunction(gf.fes,
-                                 name=name +
-                                 ' avr' if name is not None else 'avr',
-                                 autoupdate=gf.fes.autoupdate)
-        for i in range(gf.m):
-            new_gf.vec.data += gf[i].vec.data
-        new_gf.vec.data /= gf.m
-        return new_gf
-
     def eestimator_helmholtz(self, rgt, lft, lam, A, B, V):
         """
         DWR error estimator for eigenvalues
@@ -1758,10 +1736,10 @@ class ModeSolver:
         assert rgt.m == lft.m, 'Check FEAST output:\n' + \
             f'rgt.m {rgt.m} != lft.m {lft.m}'
         if rgt.m > 1 or lft.m > 1:
-            print('Taking average of multiple eigenfunctions')
+            raise NotImplementedError()
 
-        R = self.__compute_avr_ngvecs(rgt)  # rgt.gridfun('R', i=0)
-        L = self.__compute_avr_ngvecs(lft)  # lft.gridfun('L', i=0)
+        R = rgt.gridfun('R', i=0)
+        L = lft.gridfun('L', i=0)
         h = ng.specialcf.mesh_size
         n = ng.specialcf.normal(self.mesh.dim)
 
@@ -2287,7 +2265,7 @@ class ModeSolver:
             self.mesh.Refine()
             ngmesh = self.mesh.ngmesh.Copy()
             self.mesh = ng.Mesh(ngmesh)
-            self.mesh.Curve(8)
+            self.mesh.Curve(2)
             if trustme:
                 centerZ2 = avr_zsqr
                 npts = 1
