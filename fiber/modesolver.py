@@ -3,7 +3,7 @@ Definition of ModeSolver class and its methods for computing
 modes of various fibers.
 """
 from warnings import warn
-from ngsolve import curl, grad, dx, Conj, Integrate, InnerProduct, CF, Grad
+from ngsolve import curl, div, grad, dx, Conj, Integrate, InnerProduct, CF
 from numpy import conj
 from pyeigfeast import NGvecs, SpectralProjNG
 from pyeigfeast import SpectralProjNGR, SpectralProjNGPoly
@@ -85,12 +85,8 @@ class ModeSolver:
         self.mesh = mesh
         self.L = L
         self.n0 = n0
-        self.ngspmlset = False
-        # Set gamma to None, so that it can be set later *once*
-        # These coefficients will be members, and will be set by
-        # set_vecpml_coeff.  Gabriel
-        self.gamma = None
-
+        self.ngspmlset = False  # changes to True when NGSolve pml set
+        self.gamma = None  # set in set_vecpml_coeff if using smooth vec pml
         print('ModeSolver: Checking if mesh has required regions')
         print('Mesh has ', mesh.ne, ' elements, ', mesh.nv, ' points, '
               ' and ', mesh.nedge, ' edges.')
@@ -1571,13 +1567,19 @@ class ModeSolver:
         kappa = self.kappa
         gamma = self.gamma
         detj = self.detj
+        kappabar = self.kappa_conj
+        gammabar = self.gamma_conj
+        detjbar = self.detj_conj
 
         h = ng.specialcf.mesh_size
         n = ng.specialcf.normal(self.mesh.dim)
         n2 = self.index * self.index
         W = ng.L2(self.mesh, order=self.p, complex=True)
         kcurlE = ng.GridFunction(W)
-        W2 = ng.VectorL2(self.mesh, order=self.p + 1, complex=True)
+        W2 = ng.HDiv(self.mesh,
+                     order=self.p + 1,
+                     complex=True,
+                     discontinuous=True)
         flux = ng.GridFunction(W2)
 
         for i in range(rgt.m):
@@ -1607,8 +1609,7 @@ class ModeSolver:
                                   element_wise=True)
 
                 flux.Set(ggphiR + (V - Z2) * gamma * ER)
-                gradEphiR = Grad(flux)
-                divEphiR = gradEphiR[0, 0] + gradEphiR[1, 1]
+                divEphiR = div(flux)
                 rho2Rj = (flux - flux.Other()) * n
                 rho2Rint = h * h * divEphiR * Conj(divEphiR)
                 rho2Rjmp = 0.5 * h * rho2Rj * Conj(rho2Rj)
@@ -1618,8 +1619,7 @@ class ModeSolver:
                                   element_wise=True)
 
                 flux.Set(n2 * gamma * ER)
-                gradngER = Grad(flux)
-                divngER = gradngER[0, 0] + gradngER[1, 1]
+                divngER = div(flux)
                 rho3Ri = n2 * detj * phiR + divngER
                 rho3Rj = (flux - flux.Other()) * n
                 rho3Rint = h * h * rho3Ri * Conj(rho3Ri)
@@ -1639,11 +1639,11 @@ class ModeSolver:
                                     self.mesh,
                                     element_wise=True)
 
-                kcurlE.Set(Conj(kappa) * curl(EL))
+                kcurlE.Set(kappabar * curl(EL))
                 gradkcurlEL = grad(kcurlE)
                 rotkcurlEL = CF((gradkcurlEL[1], -gradkcurlEL[0]))
-                rho1Li = rotkcurlEL + n2 * Conj(gamma) * grad(phiL) + \
-                    Conj((V - Z2) * gamma) * EL
+                rho1Li = rotkcurlEL + n2 * gammabar * grad(phiL) + \
+                    (V - Z2.conjugate()) * gammabar * EL
                 rho1Lj = kcurlE - kcurlE.Other()
                 rho1Lint = h * h * InnerProduct(rho1Li, rho1Li)
                 rho1Ljmp = 0.5 * h * rho1Lj * Conj(rho1Lj)
@@ -1652,10 +1652,9 @@ class ModeSolver:
                                   self.mesh,
                                   element_wise=True)
 
-                flux.Set(n2 * Conj(gamma) * grad(phiL) +
-                         Conj((V - Z2) * gamma) * EL)
-                gradEphiL = Grad(flux)
-                divEphiL = gradEphiL[0, 0] + gradEphiL[1, 1]
+                flux.Set(n2 * gammabar * grad(phiL) +
+                         (V - Z2.conjugate()) * gammabar * EL)
+                divEphiL = div(flux)
                 rho2Lj = (flux - flux.Other()) * n
                 rho2Lint = h * h * divEphiL * Conj(divEphiL)
                 rho2Ljmp = 0.5 * h * rho2Lj * Conj(rho2Lj)
@@ -1664,10 +1663,9 @@ class ModeSolver:
                                   self.mesh,
                                   element_wise=True)
 
-                flux.Set(Conj(gamma) * EL)
-                gradgEL = Grad(flux)
-                divgEL = gradgEL[0, 0] + gradgEL[1, 1]
-                rho3Li = n2 * Conj(detj) * phiL + divgEL
+                flux.Set(gammabar * EL)
+                divgEL = div(flux)
+                rho3Li = n2 * detjbar * phiL + divgEL
                 rho3Lj = (flux - flux.Other()) * n
                 rho3Lint = h * h * rho3Li * Conj(rho3Li)
                 rho3Ljmp = 0.5 * h * rho3Lj * Conj(rho3Lj)
