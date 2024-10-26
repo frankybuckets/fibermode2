@@ -7,10 +7,10 @@ Created on Wed Nov 17 19:35:05 2021
 """
 import numpy as np
 import matplotlib.pyplot as plt
-from ngsolve.special_functions import jv as ng_jv
-from ngsolve.special_functions import hankel1 as ng_hankel1
-from ngsolve.special_functions import hankel2 as ng_hankel2
-from ngsolve.special_functions import kv as ng_kv
+from ngsolve_special_functions import jv as ng_jv
+from ngsolve_special_functions import hankel1 as ng_hankel1
+from ngsolve_special_functions import hankel2 as ng_hankel2
+from ngsolve_special_functions import kv as ng_kv
 
 from ngsolve import x, y, log, sqrt
 

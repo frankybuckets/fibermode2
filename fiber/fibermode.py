@@ -2,7 +2,7 @@ import ngsolve as ng
 import numpy as np
 from netgen.geom2d import SplineGeometry
 from ngsolve import H1, CF, IfPos
-from ngsolve.special_functions import jv, kv
+from ngsolve_special_functions import jv, kv
 from fiberamp.fiber import Fiber
 import fiberamp
 from pyeigfeast.spectralproj.ngs import NGvecs

@@ -60,6 +60,19 @@ class Bragg(ModeSolver):
 
         super(Bragg, self).__init__(self.mesh, self.L, self.n0)
 
+    @classmethod
+    def from_dict(cls, d):
+        """
+        Create Bragg object from dictionary.
+        """
+        new_dict = {}
+        list_of_keys = ['scale', 'ts', 'mats', 'ns', 'maxhs', 'bcs', 'wl',
+                        'ref', 'curve', 'fan', 'beta_sq_plane']
+        for key in list_of_keys:
+            if key in d:
+                new_dict[key] = d[key]
+        return cls(**new_dict)
+
     def check_parameters(self, ts, ns, mats, maxhs, bcs):
 
         # Check that all relevant inputs have same length

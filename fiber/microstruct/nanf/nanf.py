@@ -131,6 +131,22 @@ class NANF(ModeSolver):
 
         super().__init__(self.mesh, self.scale, self.n0)
 
+    @classmethod
+    def from_dict(cls, d):
+        """
+        Create NANF from dictionary.
+        """
+        new_dict = {}
+        list_of_keys = ['r_core', 'capillary_info', 'scale', 't_cladding',
+                        't_buffer', 't_outer', 'glass_maxh', 'air _maxh',
+                        'core_maxh', 'buffer_maxh', 'pml_maxh', 'wl',
+                        'refine', 'curve', 'poly_core', 'core_factor',
+                        'outer_materials']
+        for key in list_of_keys:
+            if key in d:
+                new_dict[key] = d[key]
+        return cls(**d)
+
     def check_parameters(self):
         """Check to ensure given parameters give valid geometry."""
         es = np.array(self.es)

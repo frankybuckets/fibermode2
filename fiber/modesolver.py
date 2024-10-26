@@ -1892,6 +1892,9 @@ class ModeSolver:
 
             # 2. ESTIMATE
 
+            Yr.normalize()
+            Yl.normalize()
+
             avr_zsqr = np.average(zsqr)
             ee = self.eestimator_helmholtz(Yr, Yl, avr_zsqr, self.pml_A,
                                            self.pml_B, self.V)
@@ -2054,6 +2057,10 @@ class ModeSolver:
                 checkcontour = 0  # with this, radius is irrelevant
 
             # 2. ESTIMATE
+
+            uR.normalize()
+            uL.normalize()
+
             ee, more = self.eestimator_maxwell(uR, uL, zsqr)
             errestimates.append((sum(ee), more))
             print('  Error estimator:', errestimates[-1][0])
@@ -2086,7 +2093,7 @@ class ModeSolver:
             if not autoupdate:
                 ngmesh = self.mesh.ngmesh.Copy()
                 self.mesh = ng.Mesh(ngmesh)
-                self.mesh.Curve(8)
+            self.mesh.Curve(8)
 
         # Adaptivity loop done ------------------------------------------
 
@@ -2232,6 +2239,12 @@ class ModeSolver:
             phi_r, phi_l = self.__get_phi_from_E(E_r, E_l, b, c, d, dinv, Y)
 
             # 2. ESTIMATE
+
+            E_r.normalize()
+            E_l.normalize()
+            phi_r.normalize()
+            phi_l.normalize()
+
             ee = self.eestimator_maxwell_resolvent(E_r, E_l, phi_r, phi_l,
                                                    avr_zsqr)
 
