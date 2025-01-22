@@ -18,7 +18,9 @@ import logging
 
 
 class StepIndexExact:
-    """ A class of step-index cylindrical fibers """
+    """ A class representing step-index cylindrical fibers, with methods to
+    compute propagation constants, (scalar and vector) guided modes
+    and leaky modes (semi)analytically. """
 
     def __init__(self,
                  name=None,
@@ -30,14 +32,18 @@ class StepIndexExact:
                  ks=None,
                  wavelen=None):
         """
-        A step-index fiber object can be made using a preprogrammed fiber name:
-           F = Fiber('Nufern_Yb')
-        Known names include 'Nufern_Yb', 'liekki_1', 'corning_smf_28_1', etc.,
-        listed in fibermode.named_stepindex_fibers.
+        A step-index fiber object can be made either by giving the name of
+        a preprogrammed fiber, or by specifying individual properties.
 
-        Alternately, a fiber object can be made by providing other arguments.
-        Minimal information needed to know the geometry and material property
-        must be given through a subset of these possible keyword arguments:
+        To initialize by name, give the name as argument:
+           F = StepIndexExact('Nufern_Yb')
+        Known names include 'Nufern_Yb' (ytterbium-doped fibers which were sold
+        by Nufern), 'liekki_1', 'corning_smf_28_1', etc. All preprogrammed
+        names are listed in fibermode.named_stepindex_fibers.
+
+        To initialize by other arguments, provide the minimal information
+        needed to know the geometry and material property by giving a
+        subset of these possible keyword arguments:
 
             * Both these arguments are required:
               rcore:   core cross-section radius [meters]
@@ -60,7 +66,7 @@ class StepIndexExact:
         else:
 
             args_to_provide = """Recall from constructor doc:
-            
+
             * Both these arguments are required:
               rcore:   core cross-section radius [meters]
               rclad:   cladding cross-section radius [meters]
@@ -150,9 +156,10 @@ class StepIndexExact:
         self._ks = 2 * pi / wavelen
 
     def __repr__(self):
-        lines = ['FIBER PARAMETERS: ' + '-' * 54]
-        lines += ['ks:         %20g' % self.ks + \
-                  '{:>40}'.format('signal wavenumber')]
+        lines = ['STEP INDEX FIBER ATTRIBUTES: ' + '-' * 43]
+        lines += [
+            'ks:         %20g' % self.ks + '{:>40}'.format('signal wavenumber')
+        ]
         lines += [
             'wavelength: %20g' % (2 * pi / self.ks) +
             '{:>40}'.format('signal wavelength')
@@ -218,34 +225,34 @@ class StepIndexExact:
         ks = V / (self._NA * a)
         return np.sqrt((ks * self.nclad)**2 - (Z / a)**2)
 
-    def visualize_mode(self, ll, m):
+    def visualize_mode(self, ell, m):
         """
-        Plot the LP(ll,m) mode. Also return the mode as a function of
+        Plot the LP(ell,m) mode. Also return the mode as a function of
         scalar coordinates x and y. Note that l and m are both indexed
         to start from 0, so for example, the traditional LP_01 and LP_11
         modes are obtained by calling LP(0, 0) and LP(1, 0), respectively.
         """
 
-        X = self.propagation_constants(ll)
+        X = self.propagation_constants(ell)
         if len(X) < m:
-            raise ValueError('For ll=%d, only %d fiber modes computed' %
-                             (ll, len(X)))
+            raise ValueError('For ell=%d, only %d fiber modes computed' %
+                             (ell, len(X)))
         kappa = X[m] / self.rcore
         k0 = self.ks
         beta = sqrt(self.ncore * self.ncore * k0 * k0 - kappa * kappa)
         gamma = sqrt(beta * beta - self.nclad * self.nclad * k0 * k0)
-        Jkrcr = jv(ll, kappa * self.rcore)
-        Kgrcr = kv(ll, gamma * self.rcore)
+        Jkrcr = jv(ell, kappa * self.rcore)
+        Kgrcr = kv(ell, gamma * self.rcore)
 
         def mode(x, y):
             r = sqrt(x * x + y * y)
             theta = atan2(y, x)
             if r < self.rcore:
-                u = Kgrcr * jv(ll, kappa * r)
+                u = Kgrcr * jv(ell, kappa * r)
             else:
-                u = Jkrcr * kv(ll, gamma * r)
+                u = Jkrcr * kv(ell, gamma * r)
 
-            u = u * np.cos(ll * theta)
+            u = u * np.cos(ell * theta)
             return u
 
         fig = plt.figure()
@@ -265,17 +272,17 @@ class StepIndexExact:
                         antialiased=False)
         plt.show(block=False)
 
-        return mode
+        return ax, mode
 
     def propagation_constants(self,
-                              ll,
+                              ell,
                               maxnroots=50,
                               v=None,
                               level=logging.WARNING):
         """
-        Given mode index "ll", attempt to find all propagation constants by
+        Given mode index "ell", attempt to find all propagation constants by
         bisection or other nonlinear root finders. (Circularly
-        symmetric modes are obtained with ll=0.  Modes with higher ll
+        symmetric modes are obtained with ell=0.  Modes with higher ell
         have angular variations.) When level=logging.INFO, verbose
         outputs are logged.
         """
@@ -298,7 +305,7 @@ class StepIndexExact:
             # where jz are roots of l-th Bessel function. Below we reverse
             # engineer X so that this beta is produced by later formulae.
 
-            jz = jn_zeros(ll, maxnroots)
+            jz = jn_zeros(ell, maxnroots)
             jz = jz[np.where(jz < ks * self.rclad)[0]]
             if len(jz) == 0:
                 logging.info(
@@ -313,11 +320,11 @@ class StepIndexExact:
 
         # Case of non-empty fibers (V>0):
 
-        _, f1, f2, g1, g2, f, g = self.VJKfun(ll, v=V)
+        _, f1, f2, g1, g2, f, g = self.VJKfun(ell, v=V)
 
         # Collect Bessel roots appended with 0 and V:
 
-        jz = jn_zeros(ll, maxnroots)
+        jz = jn_zeros(ell, maxnroots)
         jz = jz[np.where(jz < V)[0]]
         jz = np.insert(jz, 0, 0)
         jz = np.append(jz, V)
@@ -391,19 +398,19 @@ class StepIndexExact:
         logging.info(' ROOTS FOUND: ' + ' '.join(map(str, X)))
         return X
 
-    def visualize_roots(self, ll):
+    def visualize_roots(self, ell):
         """
         Visualize two different functions f = f1 - f2 and g = g1 - g2
         whose roots are used to compute propagation constants for
         each mode index "l".
         """
 
-        V, f1, f2, g1, g2, f, g = self.VJKfun(ll)
+        V, f1, f2, g1, g2, f, g = self.VJKfun(ell)
 
         fig, axes = plt.subplots(nrows=2, ncols=2)
         plt.grid(True)
         plt.rc('text', usetex=True)
-        fig.suptitle(r'Mode index $ll=$%1d:' % ll +
+        fig.suptitle(r'Mode index $ell=$%1d:' % ell +
                      r'$\beta$ found by roots of $f$ or $g$',
                      fontsize=14)
         xx = np.arange(0, V, V / 500.0)
@@ -436,9 +443,9 @@ class StepIndexExact:
         plt.show()
         plt.show(block=False)
 
-    def VJKfun(self, ll, v=None):
+    def VJKfun(self, ell, v=None):
         """
-        For the "ll"-th mode index of the fiber, return the nonlinear
+        For the "ell"-th mode index of the fiber, return the nonlinear
         functions whose roots give propagation constants.
         v: V-number of the fiber
         """
@@ -448,7 +455,7 @@ class StepIndexExact:
         K = kv
 
         def jl(X):
-            Jlx = J(ll, X)
+            Jlx = J(ell, X)
             if abs(Jlx) < 1.e-15:
                 if Jlx < 0:
                     Jlx = Jlx - 1e-15
@@ -458,7 +465,7 @@ class StepIndexExact:
 
         def f1(X):
             JlX = jl(X)
-            return J(ll + 1, X) * X / JlX
+            return J(ell + 1, X) * X / JlX
 
         def y(X):
             if X > V:
@@ -469,7 +476,7 @@ class StepIndexExact:
 
         def f2(X):
             Y = y(X)
-            return K(ll + 1, Y) * Y / K(ll, Y)
+            return K(ell + 1, Y) * Y / K(ell, Y)
 
         def f(X):  # Propagation constant is a root of f(X)
             return f1(X) - f2(X)
@@ -477,7 +484,7 @@ class StepIndexExact:
         def g1(X):
             JlX = jl(X)
             Y = y(X)
-            return J(ll + 1, X) * K(ll, Y) / (JlX * K(ll + 1, Y))
+            return J(ell + 1, X) * K(ell, Y) / (JlX * K(ell + 1, Y))
 
         def g2(X):
             return y(X) / max(X, 1e-15)
@@ -487,9 +494,9 @@ class StepIndexExact:
 
         return V, f1, f2, g1, g2, f, g
 
-    def VJHfuns(self, ll):
+    def VJHfuns(self, ell):
         """
-        For the "ll"-th mode index, return a nonlinear function of a
+        For the "ell"-th mode index, return a nonlinear function of a
         nondimensional variable Z whose nondimensionalized roots give
         leaky modes.  The function is returned as a string (with letter Z)
         which can be evaluated for specific Z values later.
@@ -497,24 +504,24 @@ class StepIndexExact:
         z, nu = sm.symbols('z nu')
         V = self.fiberV()
         x = sm.sqrt(V * V + z * z)
-        g = z*sm.besselj(ll, x)*sm.hankel1(ll+1, z) - \
-            x*sm.besselj(ll+1, x)*sm.hankel1(ll, z)
+        g = z*sm.besselj(ell, x)*sm.hankel1(ell+1, z) - \
+            x*sm.besselj(ell+1, x)*sm.hankel1(ell, z)
         dg = g.diff(z).expand()
 
         dgstr = str(dg).replace('z', 'Z').     \
             replace('besselj', 'jv').          \
-            replace('nu', 'll').               \
+            replace('nu', 'ell').               \
             replace('sqrt', 'np.sqrt')
         gstr = str(g).replace('z', 'Z').       \
             replace('besselj', 'jv').          \
-            replace('nu', 'll').               \
+            replace('nu', 'ell').               \
             replace('sqrt', 'np.sqrt')
         return gstr, dgstr
 
-    def leaky_propagation_constants(self, ll, xran=None, yran=None):
+    def leaky_propagation_constants(self, ell, xran=None, yran=None):
         """
-        Given a mode index "ll" indicating angular variation (the
-        radially symmetric case being ll=0), search the following
+        Given a mode index "ell" indicating angular variation (the
+        radially symmetric case being ell=0), search the following
         rectangular region (given by tuples xran, yran)
               [xran[0], xran[1]]  x  [yran[0], yran[1]]
         of the complex plane for roots that yield leaky outgoing modes.
@@ -528,7 +535,7 @@ class StepIndexExact:
             yran = (-2, 0)
         print('Searching region (%g, %g) x (%g, %g) in complex plane' %
               (xran[0], xran[1], yran[0], yran[1]))
-        gstr, dgstr = self.VJHfuns(ll)
+        gstr, dgstr = self.VJHfuns(ell)
         try:
             rect = Rectangle(xran, yran)
             r = rect.roots(lambda Z: eval(gstr),
@@ -543,13 +550,13 @@ class StepIndexExact:
             yran2 = (yran[0] + 0.01 * dy, yran[1] - 0.01 * dy)
             print('Retrying in adjusted search region (%g, %g) x (%g, %g)' %
                   (xran2[0], xran2[1], yran2[0], yran2[1]))
-            r = self.leaky_propagation_constants(ll, xran=xran2, yran=yran2)
+            r = self.leaky_propagation_constants(ell, xran=xran2, yran=yran2)
         return r.roots
 
-    def visualize_leaky_mode(self, Z, ll, corelim=2):
+    def visualize_leaky_mode(self, Z, ell, corelim=2):
         """
         Given a complex propagation constant Z obtained from
-        self.leaky_propagation_constants(ll),  compute the corresponding
+        self.leaky_propagation_constants(ell),  compute the corresponding
         leaky mode. Return its values F at a meshgrid of points (X, Y) and
         plot it. If "corelim" is given, this grid discretizes the xy region
         [-lim, lim] x [-lim, lim] where lim is corelim x core radius.
@@ -560,17 +567,17 @@ class StepIndexExact:
         a = self.rcore
         alpha0 = Z / a
         alpha1 = X / a
-        B = jv(ll, X)
-        A = hankel1(ll, Z)
+        B = jv(ell, X)
+        A = hankel1(ell, Z)
 
         def modefun(x, y):
             r = np.sqrt(x * x + y * y)
             theta = atan2(y, x)
             if r < a:
-                u = A * jv(ll, alpha1 * r)
+                u = A * jv(ell, alpha1 * r)
             else:
-                u = B * hankel1(ll, alpha0 * r)
-            u = u * np.cos(ll * theta)
+                u = B * hankel1(ell, alpha0 * r)
+            u = u * np.cos(ell * theta)
             return u
 
         lim = a * corelim
