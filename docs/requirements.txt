@@ -1,0 +1,8 @@
+celluloid==0.2.0
+cxroots==3.0.2
+matplotlib==3.10.0
+netgen_mesher==6.2.2303.post2.dev0
+ngsolve==6.2.2406
+numpy==1.24.4
+scipy==1.15.1
+sympy==1.13.3
