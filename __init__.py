@@ -1,5 +1,7 @@
-__all__ = ['StepIndexExact', 'named_stepindex_fibers', 'StepIndex']
+__all__ = [
+    'StepIndexExact', 'named_stepindex_fibers', 'StepIndex', 'ModeSolver'
+]
 
-from .stepindex.stepindex_exact import StepIndexExact
-from .stepindex.stepindex import StepIndex
-from .utilities.namedstepindex import named_stepindex_fibers
+from .stepindex import StepIndexExact, StepIndex
+from .utilities import named_stepindex_fibers
+from .solvers import ModeSolver
