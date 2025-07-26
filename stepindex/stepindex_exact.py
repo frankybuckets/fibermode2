@@ -227,11 +227,19 @@ class StepIndexExact:
         return np.sqrt((ks * self.nclad)**2 - (Z / a)**2)
 
     def visualize_mode(self, ell, m):
-        """
-        Plot the LP(ell,m) mode. Also return the mode as a function of
-        scalar coordinates x and y. Note that l and m are both indexed
-        to start from 0, so for example, the traditional LP_01 and LP_11
-        modes are obtained by calling LP(0, 0) and LP(1, 0), respectively.
+        """X, Y, Z, LPmode = StepIndexExact.visualize_mode(ell, m)
+
+        returns a plot data set X, Y, Z to visualize the LP mode (ell,m),
+        as well as a function LPmode(x, y) representing the mode.
+        Note that ell and m are both indexed to start from 0, so for
+        example, the traditional LP_01 and LP_11 modes are obtained by
+        calling LPmode(0, 0) and LPmode(1, 0), respectively.
+
+        To plot the mode (Z) values using matplotlib:
+
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots(subplot_kw={'projection': '3d'})
+            ax.plot_surface(X, Y, Z)
         """
 
         X = self.propagation_constants(ell)
@@ -256,22 +264,12 @@ class StepIndexExact:
             u = u * np.cos(ell * theta)
             return u
 
-        fig = plt.figure()
-        ax = Axes3D(fig)
         lim = self.rcore * 1.5
         X = np.arange(-lim, lim, 2 * lim / 100)
         Y = np.arange(-lim, lim, 2 * lim / 100)
         X, Y = np.meshgrid(X, Y)
         vmode = np.vectorize(mode)
         Z = vmode(X, Y)
-
-        ax.plot_surface(X,
-                        Y,
-                        Z,
-                        cmap=cm.coolwarm,
-                        linewidth=0,
-                        antialiased=False)
-        plt.show(block=False)
 
         return X, Y, Z, vmode
 
