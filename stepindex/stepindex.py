@@ -3,11 +3,11 @@ import numpy as np
 from netgen.geom2d import SplineGeometry
 from ngsolve import H1, CF, IfPos
 from ngsolve_special_functions import jv, kv
-from fibermode.stepindex import StepIndexExact
 import fibermode
+from fibermode.stepindex import StepIndexExact
+from fibermode.solvers import ModeSolver
 from pyeigfeast.spectralproj.ngs import NGvecs
 from pyeigfeast.spectralproj import splitzoom
-from fiberamp.fiber.modesolver import ModeSolver
 import os
 from scipy.sparse import coo_matrix
 import scipy.special as scf
