@@ -438,8 +438,10 @@ class StepIndex(ModeSolver):
                     ind = np.argmin(abs(LPl[m] - ctrs[activemultiple]))
                     i2beta_a = ml['index'][activemultiple[ind]][0]
                     i2beta_b = ml['index'][activemultiple[ind]][1]
-                    name2ind['LP' + str(ll) + str(m + 1) + '_a'] = i2beta_a
-                    name2ind['LP' + str(ll) + str(m + 1) + '_b'] = i2beta_b
+                    name2ind['LP' + str(ll) + str(m + 1) +
+                             '_a'] = int(i2beta_a)
+                    name2ind['LP' + str(ll) + str(m + 1) +
+                             '_b'] = int(i2beta_b)
                     exact[i2beta_a] = LPl[m]
                     exact[i2beta_b] = LPl[m]
                     activemultiple = np.delete(activemultiple, ind)
@@ -450,18 +452,6 @@ class StepIndex(ModeSolver):
         V = self.fiber.fiberV()
         name2ind, exact = construct_names(V, betas)
         return name2ind, exact
-
-    # # MESH REFINEMENT AND CURVING ###########################################
-
-    # def Refine(self, curveorder=3):
-    #     ngmesh = self.mesh.ngmesh
-    #     ngmesh.Refine()
-    #     ngmesh.SetGeometry(self.geo)
-    #     self.mesh = ng.Mesh(ngmesh.Copy())
-    #     self.Curve(curveorder=curveorder)
-
-    # def Curve(self, curveorder=3):
-    #     self.mesh.Curve(curveorder)
 
     # INTERPOLATED MODES ####################################################
 
