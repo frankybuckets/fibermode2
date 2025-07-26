@@ -3,8 +3,8 @@ import numpy as np
 from netgen.geom2d import SplineGeometry
 from ngsolve import H1, CF, IfPos
 from ngsolve_special_functions import jv, kv
-from fiberamp.fiber import Fiber
-import fiberamp
+from fibermode.stepindex import StepIndexExact
+import fibermode
 from pyeigfeast.spectralproj.ngs import NGvecs
 from pyeigfeast.spectralproj import splitzoom
 from fiberamp.fiber.modesolver import ModeSolver
@@ -13,7 +13,7 @@ from scipy.sparse import coo_matrix
 import scipy.special as scf
 
 
-class FiberMode(ModeSolver):
+class StepIndex(ModeSolver):
     """Class with facilities to numerically approximate transverse modes
     of a RADIALLY SYMMETRIC STEP-INDEX fiber using a nondimensional
     eigenproblem and FEAST. Guided modes and leaky modes can be computed.
@@ -34,7 +34,7 @@ class FiberMode(ModeSolver):
         """
         EITHER provide a prefix "filename" of a collection of files, e.g.,
 
-            FiberMode(fromfile="filename")
+            StepIndex(fromfile="filename")
 
         to reconstruct a previously saved object (ignoring other arguments),
 
@@ -44,9 +44,9 @@ class FiberMode(ModeSolver):
           * region 1 < r < R   is called "clad",
           * region R < r < Rout   is called "pml",
           * when "R" is None, it is set to R = (Rout+1)/2,
-          * index of refraction is set using Fiber("fibername")
+          * index of refraction is set using StepIndexExact("fibername")
           * when "Rout" is unspecified, it is taken to match the ratio
-            of cladding radius to core radius from Fiber("fibername"),
+            of cladding radius to core radius from StepIndexExact("fibername"),
           * cladding and pml meshsize is "h", while core mesh size
             is "hcore" (set to a default of hcore = h/10),
           * degree "p" finite element space is set on the mesh.
@@ -59,7 +59,7 @@ class FiberMode(ModeSolver):
         is length in meters.)
         """
 
-        self.outfolder = os.path.abspath(fiberamp.__path__[0] + '/outputs/')
+        self.outfolder = os.path.abspath(fibermode.__path__[0] + '/outputs/')
 
         if fromfile is None:
             if fibername is None and fiber is None:
@@ -113,7 +113,7 @@ class FiberMode(ModeSolver):
 
     def __str__(self):
 
-        s = '\nFiberMode Object: Nondimensional Computational Parameters:'
+        s = '\nStepIndex Object: Nondimensional Computational Parameters:'
         s += '\n  Geometry consists of circular core (radius = 1), an annular'
         s += '\n  layer 1<r<R=%g, and another layer R<r<Rout=%g.'\
             % (self.R, self.Rout)
@@ -124,7 +124,7 @@ class FiberMode(ModeSolver):
         s += '\n  Refractive indices: %g (cladding), %g (core)' % \
             (self.fiber.nclad, self.fiber.ncore)
         if self.curvature is not None:
-            s += '\n  Fiber bending curvature = %g' % self.curvature
+            s += '\n  StepIndexExact bending curvature = %g' % self.curvature
         return s
 
     # FURTHER INITIALIZATIONS & SETTERS #####################################
@@ -140,7 +140,7 @@ class FiberMode(ModeSolver):
 
         if fibername is not None:
             self.fibername = fibername
-            self.fiber = Fiber(fibername)
+            self.fiber = StepIndexExact(fibername)
         elif fiber is not None:
             self.fiber = fiber
         else:
@@ -173,7 +173,7 @@ class FiberMode(ModeSolver):
         self.mesh = mesh
 
     def loadfibermode(self, fbmfilename):
-        print('Loading FiberMode object from file ', fbmfilename)
+        print('Loading StepIndex object from file ', fbmfilename)
         f = np.load(fbmfilename)
         self.fibername = str(f['fibername'])
         self.hcore = float(f['hcore'])
@@ -182,7 +182,7 @@ class FiberMode(ModeSolver):
         self.R = float(f['R'])
         self.Rout = float(f['Rout'])
 
-        self.fiber = Fiber(self.fibername)
+        self.fiber = StepIndexExact(self.fibername)
         self.setstepindexgeom()  # sets self.geo
 
     def loadmesh(self, meshfname, curveorder=3):
@@ -290,7 +290,7 @@ class FiberMode(ModeSolver):
 
         V = self.fiber.fiberV() if v is None else v
         a = self.fiber.rcore
-        ks = V / (self.fiber.numerical_aperture() * a)
+        ks = V / (self.fiber.NA * a)
         Xsqr = np.array(X2)
 
         return np.sqrt((ks * self.fiber.ncore)**2 - Xsqr / a**2)
@@ -308,16 +308,12 @@ class FiberMode(ModeSolver):
                     seed=1,
                     nspan=15,
                     verbose=True,
-                    tone=False,
-                    bent=False,
                     **feastkwargs):
         """
         Search for guided modes in interval=(left, right). If interval is None,
         then an automatic choice will be made to include all guided modes.
 
-        A toned fiber computation is specified using the boolean "tone" and
-        a self-adjoint bent mode computation is specified using the boolean
-        "bent". The computation is done using Lagrangre finite elements of
+        The computation is done using Lagrangre finite elements of
         degree "p", with no PML, using selfadjoint FEAST with a random span
         of "nspan" vectors, (and using the remaining parameters, which are
         simply passed to feast).
@@ -329,18 +325,11 @@ class FiberMode(ModeSolver):
         Z² value in "interval". The corresponding eigenmode is i-th component
         of the span object Y.
 
-        In case of multitone, data for each tone wavelength is stored as
-        nested lists in the order specified in 'self.fibername'.
-        As an example, betas[k][i] give the i-th real-valued
-        propagation constant for k-th tone wavelength.
         """
 
-        V = self.fiber.fiberV(tone=tone)
-        if tone:
-            k = [self.fiber.ks] + self.fiber.ke
-        else:
-            V = [V]
-            k = [self.fiber.ks]
+        V = self.fiber.fiberV()
+        V = [V]
+        k = [self.fiber.ks]
         betas = []
         Zsqrs = []
         Y = None
@@ -349,8 +338,7 @@ class FiberMode(ModeSolver):
 
         for vnum, kk in zip(V, k):
 
-            if not bent:
-                self.V = CF([0, 0, -vnum * vnum])
+            self.V = CF([0, 0, -vnum * vnum])
             self.k = kk
 
             if interval is None:
@@ -383,7 +371,7 @@ class FiberMode(ModeSolver):
 
         return betas, Zsqrs, Y
 
-    def name2indices(self, betas, maxl=9, delta=None, tone=False):
+    def name2indices(self, betas, maxl=9, delta=None):
         """Given a numpy 1D array "betas" of approximations to
         propagation constants, produce a dictionary of mode names and
         corresponding exact propagation constants.
@@ -395,6 +383,7 @@ class FiberMode(ModeSolver):
 
             * exact[i] = i-th exact propagation constant obtained
               semi-analytically, to which beta[i] is an approximation.
+              (We use from StepIndexExact for this.)
 
         OPTIONAL INPUTS:
 
@@ -458,52 +447,21 @@ class FiberMode(ModeSolver):
                         return name2ind, exact
             return name2ind, exact
 
-        V = self.fiber.fiberV(tone=tone)
-        if tone:
-            # in multitone, data will be stored in a list
-            name2ind, exact = [], []
-            for i, v in enumerate(V):
-                betaslice = betas[self.firstmodeindex[i]:self.
-                                  firstmodeindex[i + 1]]
-                n2i, ex = construct_names(v, betaslice)
-                name2ind.append(n2i)
-                exact.append(ex)
-        else:
-            name2ind, exact = construct_names(V, betas)
+        V = self.fiber.fiberV()
+        name2ind, exact = construct_names(V, betas)
         return name2ind, exact
 
-    # MESH REFINEMENT AND CURVING ###########################################
+    # # MESH REFINEMENT AND CURVING ###########################################
 
-    def Refine(self, curveorder=3):
-        ngmesh = self.mesh.ngmesh
-        ngmesh.Refine()
-        ngmesh.SetGeometry(self.geo)
-        self.mesh = ng.Mesh(ngmesh.Copy())
-        self.Curve(curveorder=curveorder)
+    # def Refine(self, curveorder=3):
+    #     ngmesh = self.mesh.ngmesh
+    #     ngmesh.Refine()
+    #     ngmesh.SetGeometry(self.geo)
+    #     self.mesh = ng.Mesh(ngmesh.Copy())
+    #     self.Curve(curveorder=curveorder)
 
-    def Curve(self, curveorder=3):
-        self.mesh.Curve(curveorder)
-
-    # BENT MODES ############################################################
-
-    def bentmode(self,
-                 curvature,
-                 radiusZ,
-                 centerZ,
-                 p,
-                 bendfactor=1.28,
-                 **kwargs):
-
-        self.setnondimmat(curvature=curvature, bendfactor=bendfactor)
-        z, y, _, betas, P, _ = self.leakymode(p=p,
-                                              ctr=centerZ,
-                                              rad=radiusZ,
-                                              **kwargs)
-
-        print('Nonlinear eigenvalues in nondimensional Z-plane:\n', z)
-        print('Physical propagation constants:\n', betas)
-
-        return betas, z, y, P
+    # def Curve(self, curveorder=3):
+    #     self.mesh.Curve(curveorder)
 
     # INTERPOLATED MODES ####################################################
 
@@ -592,7 +550,7 @@ class FiberMode(ModeSolver):
         example, the traditional LP_01 and LP_11 modes are obtained by
         calling LP(0, 0) and LP(1, 0), respectively.
 
-        See also Fiber.visualize_mode(l, m).
+        See also StepIndexExact.visualize_mode(l, m).
         """
 
         X = self.fiber.propagation_constants(ll)
@@ -615,7 +573,7 @@ class FiberMode(ModeSolver):
               '{:>39}'.format('exact propagation constant'))
 
         # If NA=0, then return the Bessel mode of an empty waveguide:
-        if abs(self.fiber.numerical_aperture()) < 1.e-15:
+        if abs(self.fiber.NA) < 1.e-15:
             print('  NA = 0, so further parameters are meaningless.\n')
             a0cf = jv(kappa * r * self.R, ll) * ng.cos(ll * theta)
 
@@ -643,8 +601,8 @@ class FiberMode(ModeSolver):
     # CONVENIENCE & DEBUGGING ###############################################
 
     def scipymats(self):
-        """ Return scipy versions of matrices FiberMode.a and FiberMode.b,
-        if these data members exist. (Also uses FiberMode.X freedofs.)"""
+        """ Return scipy versions of matrices StepIndex.a and StepIndex.b,
+        if these data members exist. (Also uses StepIndex.X freedofs.)"""
 
         if self.a is None or self.b is None or self.X is None:
             raise RuntimeError('Set a, b, and X before calling scipymats()')
@@ -665,7 +623,7 @@ class FiberMode(ModeSolver):
     #
     # File naming conventions:
     #  * File output sets are classified by a prefix name <prefix>
-    #  * FiberMode object saved in file: <prefix>_fbm.npz
+    #  * StepIndex object saved in file: <prefix>_fbm.npz
     #  * Mesh saved in file:             <prefix>_msh.vol.gz
     #  * Modes saved in file(s):         <prefix>_mde.npz for Feast modes
     #                       or           <prefix>_imde.npz for interp modes
@@ -677,7 +635,7 @@ class FiberMode(ModeSolver):
         if os.path.isdir(self.outfolder) is not True:
             os.mkdir(self.outfolder)
         fbmfilename = self.outfolder + '/' + fileprefix + '_fbm.npz'
-        print('Writing FiberMode object into:\n', fbmfilename)
+        print('Writing StepIndex object into:\n', fbmfilename)
         np.savez(fbmfilename,
                  fibername=self.fibername,
                  hcore=self.hcore,
@@ -699,8 +657,7 @@ class FiberMode(ModeSolver):
                   saveallagain=True,
                   name2ind=None,
                   exact=None,
-                  interp=False,
-                  tone=False):
+                  interp=False):
         """ Convert Y to numpy and save in npz format. """
 
         if saveallagain:
@@ -714,33 +671,18 @@ class FiberMode(ModeSolver):
         suffix = '_imde.npz' if interp else '_mde.npz'
         fullname = self.outfolder + '/' + fileprefix + suffix
         print('Writing modes into:\n', fullname)
-        if tone:
-            np.savez(fullname,
-                     fibername=self.fibername,
-                     hcore=self.hcore,
-                     hclad=self.hclad,
-                     hpml=self.hpml,
-                     p=self.p,
-                     R=self.R,
-                     Rout=self.Rout,
-                     betas=betas,
-                     y=y,
-                     exactbetas=exact,
-                     name2ind=name2ind,
-                     firstmodeindex=self.firstmodeindex)
-        else:
-            np.savez(fullname,
-                     fibername=self.fibername,
-                     hcore=self.hcore,
-                     hclad=self.hclad,
-                     hpml=self.hpml,
-                     p=self.p,
-                     R=self.R,
-                     Rout=self.Rout,
-                     betas=betas,
-                     y=y,
-                     exactbetas=exact,
-                     name2ind=name2ind)
+        np.savez(fullname,
+                 fibername=self.fibername,
+                 hcore=self.hcore,
+                 hclad=self.hclad,
+                 hpml=self.hpml,
+                 p=self.p,
+                 R=self.R,
+                 Rout=self.Rout,
+                 betas=betas,
+                 y=y,
+                 exactbetas=exact,
+                 name2ind=name2ind)
 
     def checkload(self, f):
         """Check if the loaded file has expected values of certain data"""
@@ -750,7 +692,7 @@ class FiberMode(ModeSolver):
             assert self.__dict__[member] == f[member], \
                 'Load error! Data member %s does not match!' % member
 
-    def loadmodes(self, modefile, tone=False):
+    def loadmodes(self, modefile):
         """Load modes from "outputs/modefile" (filename with extension)"""
 
         fname = self.outfolder + '/' + modefile
@@ -766,11 +708,7 @@ class FiberMode(ModeSolver):
                         complex=True)
             y = f['y']
             betas = f['betas']
-            if tone:
-                n2i = f['name2ind'].tolist()
-                self.firstmodeindex = f['firstmodeindex'].tolist()
-            else:
-                n2i = f['name2ind'].item()
+            n2i = f['name2ind'].item()
             m = y.shape[0]
             Y = NGvecs(self.X, m)
             Y.fromnumpy(y)
@@ -787,15 +725,14 @@ class FiberMode(ModeSolver):
                                exact=betas,
                                interp=True)
             else:
-                betas, zsqrs, Y = self.guidedmodes(p=p, nspan=50, tone=tone)
-                n2i, exbeta = self.name2indices(betas, maxl=9, tone=tone)
+                betas, zsqrs, Y = self.guidedmodes(p=p, nspan=50)
+                n2i, exbeta = self.name2indices(betas, maxl=9)
                 self.savemodes(fibername + '_p' + str(p),
                                betas,
                                Y,
                                saveallagain=False,
                                name2ind=n2i,
-                               exact=exbeta,
-                               tone=tone)
+                               exact=exbeta)
         return betas, Y, n2i
 
     def makeguidedmodelibrary(self,
@@ -803,8 +740,7 @@ class FiberMode(ModeSolver):
                               maxl=9,
                               delta=None,
                               nspan=15,
-                              interp=False,
-                              tone=False):
+                              interp=False):
         """Save full sets of guided modes computed using the same mesh, using
         polynomial degrees p from 1 to "maxp", together with their LP
         names. One modefile per p is written and all output filenames
@@ -813,7 +749,7 @@ class FiberMode(ModeSolver):
         """
 
         fprefix = self.fibername
-        self.savefbm(fprefix)  # save FiberMode object
+        self.savefbm(fprefix)  # save StepIndex object
         self.savemesh(fprefix)  # save mesh
 
         for p in range(1, maxp + 1):  # save modes, one file per degree
@@ -828,20 +764,16 @@ class FiberMode(ModeSolver):
                                exact=betas,
                                interp=True)
             else:
-                betas, zsqrs, Y = self.guidedmodes(p=p, nspan=nspan, tone=tone)
+                betas, zsqrs, Y = self.guidedmodes(p=p, nspan=nspan)
                 print('Physical propagation constants:\n', betas)
                 print('Computed non-dimensional Z-squared values:\n', zsqrs)
-                n2i, exbeta = self.name2indices(betas,
-                                                maxl=maxl,
-                                                delta=delta,
-                                                tone=tone)
+                n2i, exbeta = self.name2indices(betas, maxl=maxl, delta=delta)
                 self.savemodes(fprefix + '_p' + str(p),
                                betas,
                                Y,
                                saveallagain=False,
                                name2ind=n2i,
-                               exact=exbeta,
-                               tone=tone)
+                               exact=exbeta)
 
 
 # END OF CLASS DEFINITION ###################################################

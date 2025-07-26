@@ -353,7 +353,7 @@ class ModeSolver:
 
         print('ModeSolver.leakymode called on object with these settings:\n',
               self)
-
+        self.p = p
         AA, X = self.polypmlsystem(p=p, alpha=alpha)
         X3 = ng.FESpace([X, X, X])
         print('Set freq-dependent PML with p=', p, ' alpha=', alpha,
@@ -430,6 +430,7 @@ class ModeSolver:
         print('ModeSolver.leakymode_poly called on this object:\n', self)
         print('Set freq-dependent PML with p=', p, ' alpha=', alpha,
               'and thickness=%.3f' % (self.Rout - self.R))
+        self.p = p
         if self.ngspmlset:
             raise RuntimeError('NGSolve pml set. Cannot combine with poly.')
 
@@ -597,7 +598,7 @@ class ModeSolver:
 
         print('ModeSolver.leakymode called on object with these settings:\n',
               self)
-
+        self.p = p
         a, b, X = self.autopmlsystem(p, alpha=alpha)
 
         P = SpectralProjNG(X,

@@ -21,7 +21,7 @@ named_stepindex_fibers = {
         'rclad': 2e-4,
         'wavelen': 2.110e-6,
         'ncore': 1.439994,
-        'NA': 0.01
+        'NA': 0.1
     },
     'corning_smf_28_1': {
         # Single mode fiber from Schermer and Cole paper,

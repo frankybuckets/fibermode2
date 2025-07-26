@@ -195,7 +195,8 @@ class StepIndexExact:
 
     def fiberV(self):
         """
-        Returns the V number of the fiber.
+        Returns the nondimensional V number of the fiber.
+        (See e.g., [section 5.2.1, Rieder, Photonics: An introduction].)
         """
         V = self._NA * self._ks * self.rcore
         return V
@@ -217,7 +218,7 @@ class StepIndexExact:
 
     def ZtoBeta(self, Z, v=None):
         """
-        Convert nondimensional Z in the complex plan to complex propagation
+        Convert nondimensional Z in the complex plane to complex propagation
         constants Beta of leaky modes.
         """
         V = self.fiberV() if v is None else v
@@ -272,7 +273,7 @@ class StepIndexExact:
                         antialiased=False)
         plt.show(block=False)
 
-        return ax, mode
+        return X, Y, Z, vmode
 
     def propagation_constants(self,
                               ell,
