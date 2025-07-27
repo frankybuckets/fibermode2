@@ -16,7 +16,7 @@ p = 3  # polynomial degree
 # eigensolver as described in ["Computing leaky modes of optical
 # fibers using a FEAST algorithm for polynomial eigenproblems, by
 # Gopalakrishnan, Parker and Vandenberge,
-# https://doi.org/10.1016/j.wavemoti.2021.102826
+# https://doi.org/10.1016/j.wavemoti.2021.102826]
 
 print('POLY:' + 30 * '-')
 z, y, yl, beta, P, _ = fiber.leakymode(p,
@@ -26,11 +26,11 @@ z, y, yl, beta, P, _ = fiber.leakymode(p,
                                        verbose=False)
 y.draw('poly')
 
-exact_z = 1.957793326920255 - 0.18543240054910448j  # from fiber.ipynb
+exact_z = 1.957793326920255 - 0.18543240054910448j  # see docs/1.3
 print('Error in computed non-dimensional Z-resonance values:\n',
       abs(exact_z - z))
 
-fiber.savemodes('my_tmp_output', z, y)  # if you need to save
+fiber.savemodes('my_tmp_output', z, y)  # save & reload using loadmodes.py
 
 ################################################################
 # This uses a standard PML with smooth hand-made coefficients

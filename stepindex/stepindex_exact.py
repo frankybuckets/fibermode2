@@ -539,8 +539,8 @@ class StepIndexExact:
             rect = Rectangle(xran, yran)
             r = rect.roots(lambda Z: eval(gstr),
                            lambda Z: eval(dgstr),
-                           rootErrTol=1.e-13,
-                           newtonStepTol=1.e-15)
+                           root_err_tol=1.e-13,
+                           newton_step_tol=1.e-15)
         except RuntimeError as err:
             print('Root search failed:\n', err.__str__())
             dx = xran[1] - xran[0]
@@ -586,15 +586,7 @@ class StepIndexExact:
         vmode = np.vectorize(modefun)
         F = vmode(X, Y)
 
-        fig = plt.figure()
-        ax = Axes3D(fig)
-        ax.contour3D(X, Y, F.real, 30)
-        ax.set_xlabel('x')
-        ax.set_ylabel('y')
-        ax.set_title('Real part of the mode)')
-        plt.show(block=False)
-
-        return X, Y, F, modefun, ax
+        return X, Y, F, modefun
 
     def vec_propagation_constants(self,
                                   m,
