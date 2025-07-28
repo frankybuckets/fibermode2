@@ -1849,7 +1849,7 @@ class ModeSolver:
         left, right = interval
         print('Running selfadjoint FEAST to capture guided modes in ' +
               '({},{})'.format(left, right))
-        print('assuming not more than %d modes in this interval' % nspan)
+        print('assuming not more than nspan=%d modes in this interval' % nspan)
         ctr = (right + left) / 2
         rad = (right - left) / 2
         P = SpectralProjNG(X,

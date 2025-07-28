@@ -19,26 +19,26 @@ class StepIndex(ModeSolver):
     eigenproblem and FEAST. Guided modes and leaky modes can be computed.
     """
 
-    def __init__(self,
-                 fibername=None,
-                 fiber=None,
-                 fromfile=None,
-                 R=None,
-                 Rout=None,
-                 geom=None,
-                 curveorder=3,
-                 h=3,
-                 hcore=None,
-                 refine=0,
-                 dtemp=None):
-        """
-        EITHER provide a prefix "filename" of a collection of files, e.g.,
+    def __init__(
+            self,
+            fibername=None,
+            fiber=None,
+            fromfile=None,
+            R=None,  # nondimensional cladding radius
+            Rout=None,  # nondimensional outer radius
+            geom=None,
+            curveorder=3,
+            h=3,
+            hcore=None,
+            refine=0,
+            dtemp=None):
+        """Either provide a predefined fiber object with name "fibername",
+        or provide a StepIndexExact fiber object "fiber", or a file to load
+        saved object in order to construct a StepIndex object, e.g.,
 
-            StepIndex(fromfile="filename")
+           StepIndex(fibernameR='Nufern_Yb', Rout=10, R=2)
 
-        to reconstruct a previously saved object (ignoring other arguments),
-
-        OR construct a new fiber geometry and mesh so that
+        The geometry and mesh in StepIndex objects are such that
 
           * region r < 1, in polar coords, is called "core",
           * region 1 < r < R   is called "clad",
@@ -57,6 +57,7 @@ class StepIndex(ModeSolver):
         (Variables beginning with capital R such as "R", "Rout" are
         nondimensional lengths -- in contrast, "rout" found in other classes
         is length in meters.)
+
         """
 
         self.outfolder = os.path.abspath(fibermode.__path__[0] + '/outputs/')
@@ -65,7 +66,7 @@ class StepIndex(ModeSolver):
             if fibername is None and fiber is None:
                 raise ValueError('Need either a file or fiber or fibername')
 
-            self.makefibermode(fibername,
+            self.makestepindex(fibername,
                                fiber,
                                R=R,
                                Rout=Rout,
@@ -76,10 +77,10 @@ class StepIndex(ModeSolver):
         else:
             fbmfilename = self.outfolder + '/' + fromfile + '_fbm.npz'
             if os.path.isfile(fbmfilename):
-                self.loadfibermode(fbmfilename)
+                self.loadstepindex(fbmfilename)
             else:
                 print('Specified fibermode file not found -- creating it')
-                self.makefibermode(fromfile)
+                self.makestepindex(fromfile)
                 self.savefbm(fromfile)
 
             meshfname = self.outfolder + '/' + fromfile + '_msh.vol.gz'
@@ -101,35 +102,83 @@ class StepIndex(ModeSolver):
         self.V = None
         self.ngspmlset = None  # True if ngsolve pml set (then cant reuse mesh)
         self.X = None
-        self.curvature = None
+        self._curvature = None
+        self._bendfactor = None
 
-        self.dtemp = dtemp
+        self._dtemp = dtemp
         self.dndT = 1.285e-5
 
-        self.setnondimmat(curvature=0)  # sets self.k and self.V
+        self.setnondimmat()  # sets self.k and self.V
         L = self.fiber.rcore
         n0 = self.fiber.nclad
         super().__init__(self.mesh, L, n0)
 
-    def __str__(self):
+    def __repr__(self):
 
-        s = '\nStepIndex Object: Nondimensional Computational Parameters:'
+        s = '\nStepIndex (ModeSolver) Object:' + '-' * 42
+        s += '\nNondimensional Computational Parameters:'
         s += '\n  Geometry consists of circular core (radius = 1), an annular'
-        s += '\n  layer 1<r<R=%g, and another layer R<r<Rout=%g.'\
+        s += '\n  cladding layer 1<r<R=%g, and an outer layer R<r<Rout=%g.'\
             % (self.R, self.Rout)
-        s += '\n  Max mesh sizes: %g (core), %g (cladding), %g (pml)\n' \
+        s += '\n  Max mesh sizes: %g (core), %g (cladding), %g (outer)' \
             % (self.hcore, self.hclad, self.hpml)
-        s += 'Physical Parameters:' + \
+        s += '\n  Mesh curved by order %d' % self.curveorder
+        if self.ngspmlset:
+            s += '\n  Mesh has been deformed by ngsolve PML'
+        s += '\nPhysical Parameters:' + \
             '\n  Wavelength = %g meters' % (2*np.pi/self.fiber.ks)
         s += '\n  Refractive indices: %g (cladding), %g (core)' % \
             (self.fiber.nclad, self.fiber.ncore)
-        if self.curvature is not None:
-            s += '\n  StepIndexExact bending curvature = %g' % self.curvature
+        if self._curvature is not None:
+            s += '\n  StepIndexExact bending curvature = %g with ' % \
+                self._curvature
+            s += 'bend factor = %g' % self._bendfactor
+        else:
+            s += '\n  No curvature set'
+        if self._dtemp is not None:
+            s += '\n  Index modified by temperature differential %g and ' %\
+                self._dtemp
+            s += 'thermo-optic coefficient %g' % self.dndT
+        else:
+            s += '\n  No temperature set'
+
+        s += '\nIncluded fiber object:\n%s' % self.fiber.__repr__()
         return s
+
+    @property
+    def curvature(self):
+        return self._curvature
+
+    @curvature.setter
+    def curvature(self, curvature):
+        self._curvature = curvature
+        if self._bendfactor is None:
+            self._bendfactor = 1.28
+        self.setnondimmat()
+
+    @property
+    def bendfactor(self):
+        return self._bendfactor
+
+    @bendfactor.setter
+    def bendfactor(self, bendfactor):
+        self._bendfactor = bendfactor
+        if self._curvature is None:
+            self._curvature = 12
+        self.setnondimmat()
+
+    @property
+    def dtemp(self):
+        return self._dtemp
+
+    @dtemp.setter
+    def dtemp(self, dtemp):
+        self._dtemp = dtemp
+        self.setnondimmat()
 
     # FURTHER INITIALIZATIONS & SETTERS #####################################
 
-    def makefibermode(self,
+    def makestepindex(self,
                       fibername=None,
                       fiber=None,
                       R=None,
@@ -168,11 +217,12 @@ class StepIndex(ModeSolver):
             ngmesh.Refine()
         mesh = ng.Mesh(ngmesh.Copy())
         mesh.ngmesh.SetGeometry(self.geo)
+        self.curveorder = curveorder
         mesh.Curve(curveorder)
         ng.Draw(mesh)
         self.mesh = mesh
 
-    def loadfibermode(self, fbmfilename):
+    def loadstepindex(self, fbmfilename):
         print('Loading StepIndex object from file ', fbmfilename)
         f = np.load(fbmfilename)
         self.fibername = str(f['fibername'])
@@ -215,18 +265,7 @@ class StepIndex(ModeSolver):
 
         self.geo = geo
 
-    def updateindex(self, dtemp, curvature=12, bendfactor=1.28):
-        """
-        Sets the temperature change dtemp on which the index of refraction is
-        is dependent. This change then made within the method setnondimmat()
-        in order to update the potential function self.V(). Optional arguments
-        to update the curvature and bendfactor are also provided.
-        """
-
-        self.dtemp = dtemp
-        self.setnondimmat(curvature=curvature, bendfactor=bendfactor)
-
-    def setnondimmat(self, curvature=12, bendfactor=1.28):
+    def setnondimmat(self):  # curvature=12, bendfactor=1.28, dtemp=10.0):
         """
         When a fiber of refractive index n is bent to have the
         input "curvature" (curvature = reciprocal of bending radius,
@@ -235,40 +274,43 @@ class StepIndex(ModeSolver):
 
             nbent = n * (1 + (x * curvature/bendfactor))
 
-        with "bendfactor" as input. This dimensional formula is used
-        non-dimensionally below to set the internal data member "V",
-        the non-dimensional coefficient function for the eigenproblem.
+        with "bendfactor" as input - see [Schermer and Cole, 2007].
+        This dimensional formula is used non-dimensionally below to
+        set the internal data member "V", the non-dimensional
+        coefficient function for the eigenproblem.
+
         """
 
-        self.curvature = curvature
-        self.bendfactor = bendfactor
         fib = self.fiber
         self.k = fib.ks
 
-        if curvature == 0:
-            if self.dtemp is None:
+        if self._curvature is None:
+            if self._dtemp is None:
+
+                # the standard case with no curvature and no temperature
                 V = fib.fiberV()
                 self.V = CF([0, 0, -V * V])
                 self.index = CF([fib.nclad, fib.nclad, fib.ncore])
+
             else:
                 a = fib.rcore
                 n = CF([fib.nclad, fib.nclad, fib.ncore]) + \
-                    self.dndT * self.dtemp
+                    self.dndT * self._dtemp
 
                 self.V = (a * fib.ks)**2 * (fib.nclad**2 - n**2)
                 self.index = n
         else:
-            if self.dtemp is None:
+            if self._dtemp is None:
                 n = CF([fib.nclad, fib.nclad, fib.ncore])
             else:
                 n = CF([fib.nclad, fib.nclad, fib.ncore]) + \
-                    self.dndT * self.dtemp
+                    self.dndT * self._dtemp
 
             a = fib.rcore
             ka2 = (fib.ks * a)**2
             kan2 = ka2 * (fib.nclad**2)
 
-            nbent = n * (1 + (ng.x * a * curvature / bendfactor))
+            nbent = n * (1 + (ng.x * a * self._curvature / self._bendfactor))
             self.index = nbent
             m = kan2 - ka2 * nbent * nbent
             self.V = CF([0, m, m])
