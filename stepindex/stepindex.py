@@ -2,7 +2,6 @@ import ngsolve as ng
 import numpy as np
 from netgen.geom2d import SplineGeometry
 from ngsolve import H1, CF, IfPos
-from ngsolve_special_functions import jv, kv
 import fibermode
 from fibermode.stepindex import StepIndexExact
 from fibermode.solvers import ModeSolver
@@ -573,65 +572,6 @@ class StepIndex(ModeSolver):
         name2ind = dict(zip(names, range(len(names))))
         return modes, betas, name2ind
 
-    def interpmodeLP(self, ll, m):
-        """
-        Return un-normalized LP(ll,m) "mode" of the fiber as an NGSolve
-        CoefficientFunction and its corresponding propagation
-        constant "beta" when calling:
-
-           beta, mode = fbm.interpmodeLP(ll, m)
-
-        Note that l and m are both indexed to start from 0, so for
-        example, the traditional LP_01 and LP_11 modes are obtained by
-        calling LP(0, 0) and LP(1, 0), respectively.
-
-        See also StepIndexExact.visualize_mode(l, m).
-        """
-
-        X = self.fiber.propagation_constants(ll)
-
-        if len(X) <= m:
-            raise ValueError('For ll=%d, only %d fiber modes computed' %
-                             (ll, len(X)))
-
-        kappa = X[m] / self.fiber.rcore
-        ncore, nclad = self.fiber.ncore, self.fiber.nclad
-        k0 = self.fiber.ks
-        beta = ng.sqrt(ncore * ncore * k0 * k0 - kappa * kappa)
-        gamma = ng.sqrt(beta * beta - nclad * nclad * k0 * k0)
-
-        r = ng.sqrt(ng.x * ng.x + ng.y * ng.y)
-        theta = ng.atan2(ng.y, ng.x)
-
-        print('\nCOMPUTED LP(%1d,%d) MODE: ' % (ll, m) + '-' * 49)
-        print('  beta:      %20g' % (beta) +
-              '{:>39}'.format('exact propagation constant'))
-
-        # If NA=0, then return the Bessel mode of an empty waveguide:
-        if abs(self.fiber.NA) < 1.e-15:
-            print('  NA = 0, so further parameters are meaningless.\n')
-            a0cf = jv(kappa * r * self.R, ll) * ng.cos(ll * theta)
-
-            return beta, a0cf
-
-        # For NA>0, define the guided mode piecewise:
-        print('  variation: %20g' % (k0 * abs(nclad - ncore)) +
-              '{:>39}'.format('interval length of propagation consts'))
-        Jkrcr = scf.jv(ll, kappa * self.fiber.rcore)
-        Kgrcr = scf.kv(ll, gamma * self.fiber.rcore)
-        print('  edge value:%20g' %
-              (Jkrcr * scf.kv(ll, gamma * self.fiber.rclad)) +
-              '{:>39}'.format('mode size at outer cladding edge'))
-        print('  kappa:     %20g' % (kappa) +
-              '{:>39}'.format('coefficient in BesselJ core mode'))
-        print('  gamma:     %20g' % (gamma) +
-              '{:>39}'.format('coefficient in BesselK cladding mode'))
-
-        Jkr = jv(kappa * r * self.fiber.rcore, ll)
-        Kgr = kv(gamma * r * self.fiber.rcore, ll)
-
-        a0cf = IfPos(1 - r, Kgrcr * Jkr, Jkrcr * Kgr) * ng.cos(ll * theta)
-        return beta, a0cf
 
     # CONVENIENCE & DEBUGGING ###############################################
 
