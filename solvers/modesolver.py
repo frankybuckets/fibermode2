@@ -13,14 +13,14 @@ import sympy as sm
 
 
 class ModeSolver:
-    """This class contains algorithms to compute modes of various fibers,
-    (including microstructured fibers with or without radial symmetry).
-    The key inputs are a cross section mesh, a characteristic length L,
-    the constant refractive index n0 in the unbounded complement, the
-    refractive index and the nondimensional index well V (all
-    described below in more detail). The latter two (index & V) are
-    expected to be provided as attributes of derived classes
-    containing configuration details of specific fibers.
+    """Provides algorithms to compute modes of various fibers,
+    (including microstructured fibers with or without radial
+    symmetry).  The key inputs are a cross section mesh, a
+    characteristic length L, the constant refractive index n0 in the
+    unbounded complement, the refractive index and the nondimensional
+    index well V (all described below in more detail). The latter two
+    (index & V) are expected to be provided as attributes of derived
+    classes containing configuration details of specific fibers.
 
     HOW SCALAR MODES ARE COMPUTED:
 
@@ -30,7 +30,8 @@ class ModeSolver:
 
     The transverse refractive index n is a function implemented
     by a derived class, and it's assumed that it takes a
-    constant value n₀ outside a fixed radius.
+    constant value n₀ outside a fixed radius R₀ which bounds
+    all inhomogeneities.
 
     What's implemented are algorithms for a non-dimensional version
     of the above, obtained after fixing a characteristic length scale L,
@@ -50,33 +51,20 @@ class ModeSolver:
     Here R₀ is the nondimensional radius such that n is constant
     beyond LR₀ in the  physical domain.
 
+    HOW VECTOR MODES ARE COMPUTED:
+
+    See [Gopalakrishnan, Grosek, Pinochet-Soto, Vandenberge. Adaptive
+    resolution of fine scales in modes of microstructured optical
+    fibers, SISC 2025, https://doi.org/10.1137/24M1651605] for details.
+
     CLASS ATTRIBUTES:
 
-    * self.L, self.n0: represent L, n₀ as described above.
-    * self.mesh: input mesh of non-dimensionalized transverse domain.
-
-    Attributes assumed to be set by derived classes:
-
-    * self.R = radius marking the start of PML whenever PML is
-      used (for leaky modes). Note that R > R₀.
-
-    * self.Rout = final outer radius terminating the computational domain.
-      The circle r = Rout is assumed to be a boundary region
-      named 'OuterCircle' of  the given mesh.
-
-    * When PML is used, it is put in the region R < r < Rout.
-      The PML region R < r < Rout is assumed to be called 'Outer'
-      in the given mesh.
-
-    * self.V and self.index represent the L-nondimensionalized index
-      well function V, and the physical refractive index profile of
-      the fiber, both of which must be set by a derived class before
-      calling any of the implemented algorithms.
-
-    * self.k represents the wavenumber k in the definition of V, which
-      must be set by (and can be changed by) a derived class before calling
-      any of the implemented algorithms.
-
+    * L: the characteristic transverse length scale, described above.
+    * n0: constant refractive index in the unbounded r > R₀ region.
+    * mesh: input mesh of non-dimensionalized transverse domain.
+    * Further attributes assumed to be set by derived classes and used
+      by ModeSolver can be listed, together with descriptions, by calling
+      needs().
     """
 
     def __init__(self, mesh, L, n0):
@@ -84,16 +72,58 @@ class ModeSolver:
         self.mesh = mesh
         self.L = L
         self.n0 = n0
+
         self.ngspmlset = False  # changes to True when NGSolve pml set
         self.gamma = None  # set in set_vecpml_coeff if using smooth vec pml
+
         print('ModeSolver: Checking if mesh has required regions')
         print('Mesh has ', mesh.ne, ' elements, ', mesh.nv, ' points, '
               ' and ', mesh.nedge, ' edges.')
+
+        # When PML may be  used, it is put in the region R < r < Rout.
+        # The PML region R < r < Rout is assumed to be called 'Outer'
+        # in the given mesh.
+
         if sum(self.mesh.Materials('Outer').Mask()) == 0:
             raise ValueError('Input mesh must have a region called Outer')
+
+        # The final outer radius of a circle terminating the
+        # computational domain is assumed to be a boundary region
+        # named 'OuterCircle' of the given mesh. It is the circle of
+        # radius r = self.Rout, an attribute assumed to be set by a
+        # derived class. The presence of 'OuterCircle' and self.Rout
+        # are checked below.
+
         if sum(self.mesh.Boundaries('OuterCircle').Mask()) == 0:
-            raise ValueError('Input mesh must have a boundary ' +
+            raise ValueError('Input mesh must have a terminating boundary ' +
                              'called OuterCircle')
+
+        self.needs()
+
+    def needs(self):
+        """
+        Lists the attributes that must be set by a derived class
+        before calling any of the implemented algorithms.
+        """
+
+        allneeds = ['Rout', 'R', 'V', 'index', 'k', 'curveorder']
+        absent = []
+        for need in allneeds:
+            if not hasattr(self, need):
+                absent.append(need)
+
+        print('Derived class must set these attributes:')
+        print('  Rout = terminating radius of computational domain')
+        print('  R = radius where PML may start (R < Rout)')
+        print('  V = nondimensional index well function')
+        print('  index = physical refractive index function')
+        print('  k = wavenumber k')
+        print('  curveorder = order of geometry approximation')
+
+        for need in absent:
+            print('*** Attribute', need, 'not set yet!')
+        if len(absent):
+            raise ValueError('Ensure all expected attributes are set')
 
     def betafrom(self, Z2):
         """
@@ -142,19 +172,6 @@ class ModeSolver:
         of the two modes according to the orthogonality type relationship
         found in Marcuse, Light Transmission Optics 2nd edition, eq 8.5.12 (and
         also in Snyder's Optical Waveguide Theory equation 11-13).
-
-        Parameters
-        ----------
-        E : ngsolve coefficient function
-            Transverse electric field E = (Ex, Ey) (or (Er, Ey) for bent modes)
-        H : same type as E
-            Magnetic field of second mode (organized in same way).
-
-        Returns
-        -------
-        p : float or complex
-            Power through transverse plane (at z = 0).
-
         """
         Sz = self.S(Etv, phi, beta)[1]
         p = ng.Integrate(Sz, self.mesh)
@@ -672,7 +689,6 @@ class ModeSolver:
         y = ng.y
         if r is None:
             r = ng.sqrt(x * x + y * y)
-        # TODO How to assert r is a valid ngsolve coefficient function?
         strng = str(symb).replace('I', '1j').replace('t', 'r')
         cf = eval(strng)
         return cf
@@ -1790,6 +1806,7 @@ class ModeSolver:
 
         if self.ngspmlset:
             raise RuntimeError('NGSolve pml mesh trafo set.')
+
         X = ng.H1(self.mesh, order=p, dirichlet='OuterCircle', complex=True)
         u, v = X.TnT()
         A = ng.BilinearForm(X)
