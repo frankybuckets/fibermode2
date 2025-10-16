@@ -7,8 +7,6 @@ modes, and leaky modes/resonances using (semi)ANALYTIC calculations.
 from ..utilities import named_stepindex_fibers
 from math import pi, sqrt, atan2
 import matplotlib.pyplot as plt
-from matplotlib import cm
-from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 from scipy.optimize import fsolve, bisect
 from scipy.special import hankel1, jv, kv, jvp, kvp, jn_zeros

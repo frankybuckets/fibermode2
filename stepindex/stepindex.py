@@ -32,11 +32,14 @@ class StepIndex(ModeSolver):
             hcore=None,
             refine=0,
             dtemp=None):
-        """Either provide a predefined fiber object with name "fibername",
-        or provide a StepIndexExact fiber object "fiber", or a file to load
-        saved object in order to construct a StepIndex object, e.g.,
+        """
+        To construct a StepIndex object (for numerical mode computations
+        for a radially symmetric step-index fiber), either provide a
+        predefined fiber object with name "fibername", or provide a
+        StepIndexExact fiber object "fiber", or a file to load saved
+        object in order to construct a StepIndex object, e.g.,
 
-           StepIndex(fibernameR='Nufern_Yb', Rout=10, R=2)
+           StepIndex(fibername='Nufern_Yb', Rout=10, R=2)
 
         The geometry and mesh in StepIndex objects are such that
 
