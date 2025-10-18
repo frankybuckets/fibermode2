@@ -64,7 +64,7 @@ class ModeSolver:
     * mesh: input mesh of non-dimensionalized transverse domain.
     * Further attributes assumed to be set by derived classes and used
       by ModeSolver can be listed, together with descriptions, by calling
-      needs().
+      needs(printrequirements=True).
     """
 
     def __init__(self, mesh, L, n0):
@@ -98,9 +98,10 @@ class ModeSolver:
             raise ValueError('Input mesh must have a terminating boundary ' +
                              'called OuterCircle')
 
+        # Check if remaining required attributes are set
         self.needs()
 
-    def needs(self):
+    def needs(self, printrequirements=False):
         """
         Lists the attributes that must be set by a derived class
         before calling any of the implemented algorithms.
@@ -111,15 +112,14 @@ class ModeSolver:
         for need in allneeds:
             if not hasattr(self, need):
                 absent.append(need)
-
-        print('Derived class must set these attributes:')
-        print('  Rout = terminating radius of computational domain')
-        print('  R = radius where PML may start (R < Rout)')
-        print('  V = nondimensional index well function')
-        print('  index = physical refractive index function')
-        print('  k = wavenumber k')
-        print('  curveorder = order of geometry approximation')
-
+        if len(absent) or printrequirements:
+            print('Derived class must set these attributes:')
+            print('  Rout = terminating radius of computational domain')
+            print('  R = radius where PML may start (R < Rout)')
+            print('  V = nondimensional index well function')
+            print('  index = physical refractive index function')
+            print('  k = wavenumber k')
+            print('  curveorder = order of geometry approximation')
         for need in absent:
             print('*** Attribute', need, 'not set yet!')
         if len(absent):
