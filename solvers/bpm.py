@@ -1,85 +1,145 @@
 import ngsolve as ng
-from ngsolve import dx, grad
+from .modesolver import ModeSolver
 
 
 class BPM():
 
     def __init__(self, fiber):
         """
-        Beam Propagation Method (BPM) solver for propagation in the input
-        "fiber", which is any object of a derived class of ModeSolver.
+        Beam Propagation Method (BPM) for approximately propagating fields
+        in a given fiber. The constructor input "fiber" must be an object
+        of a derived class of class ModeSolver.
+
+        This class provides facilities for solving for the envelop
+        field u(x, y, z) such that
+
+              U(x, y, z) = u(x, y, z) exp(i kt z)
+
+        approximately solves the Helmholtz equation
+
+              ΔU + k² n² U = 0
+
+        in the fiber, for some effective longitudinal propagation constant kt.
+        Assuming that L² d²u/dz² can be neglected, we obtain the BPM equation
+
+              2i kt L² du/dz =  -Δu + Vu + L²(kt² - k²n₀²)u
+
+        where V, L, k, and n₀ are properties of the fiber (as described
+        in ModeSolver class). Facilities are provided for transverse
+        discretization of the right hand side above and to step in z.
         """
+
+        if not issubclass(type(fiber), ModeSolver):
+            raise ValueError('Input fiber must have attributes of ModeSolver')
         self._fiber = fiber
-        fiber.needs()
         self.propagator = None
 
     def resetPropagator(self, dz, p, kt):
+
         if self.propagator == 'Crank-Nicolson':
             self.setupCrankNicolson(dz, p, kt)
         elif self.propagator is None:
-            return
+            raise AttributeError('Set up a field propagator first')
         else:
-            raise AttributeError('Set up a propagator first')
+            raise AttributeError('What propagator?')
 
-    def setupCrankNicolson(self, dz, p, kt=None):
+    def kt_default(self):
+        """Return default value of longitudinal propagation constant,
+        kt = k * n₀, using the fiber properties."""
+
+        return self.fiber.fiber.ks * self.fiber.n0
+
+    def setupCrankNicolson(self, dz, p, kt=None, pml={}):
         """
         Set up data structures for solving the Crank-Nicolson scheme
+
            2i * kt * L² * B (u[n+1] - u[n])/dz = A (u[n+1] + u[n])/2
-        where B is the mass matrix and A the stiffness matrix of the
+
+        where B is the mass matrix and A is the stiffness matrix of the
         transverse operator A = -∇² + V + L² (kt² - (k n₀)²)
-        where V, L, k, n₀ are properties of the fiber. The spatial
-        discretization uses finite elements of order "p" on the mesh
-        from the fiber. The propagation step size is "dz".
+        where V, L, k, n₀ are properties of the fiber.
+
+        PARAMETERS:
+        dz:  The propagation step size in the z direction
+        p:   Degree of finite elements for the spatial discretization
+             on the mesh from the fiber.
+        kt:  The effective longitudinal propagation constant. If None,
+             the value kt = k * n₀ from the fiber is used.
+        pml: If pml is an empty dict, use no PML.
+             If pml['type']=='auto', use ngsolve PML on cross section
+                of strength pml['alpha'].
         """
         self.propagator = 'Crank-Nicolson'
         self._dz = dz
         if kt is None:
-            self._kt = self.fiber.fiber.ks * self.fiber.n0
+            self._kt = self.kt_default()
         else:
             self._kt = kt
         self._p = p
-        self._X = ng.H1(self.fiber.mesh, order=self.p,
-                        dirichlet='OuterCircle', complex=True)
-        u, v = self._X.TnT()
-        A = ng.BilinearForm(self._X)
-        A += grad(u) * grad(v) * dx + self.fiber.V * u * v * dx
-        A += self.fiber.L**2 * (self.kt**2 - (self.fiber.k*self.fiber.n0)**2) \
-            * u * v * dx
-        B = ng.BilinearForm(self._X)
-        B += u * v * dx
+        self._pml = pml
+
+        # Get matrices H of (grad u, grad v) + (V u, v) and B of (u, v):
+
+        if len(pml) == 0:
+            H, B, X = self._fiber.selfadjsystem(self._p)
+        elif pml['type'] == 'auto':
+            H, B, X = self._fiber.autopmlsystem(self._p, alpha=pml['alpha'])
+        else:
+            NotImplementedError('Asked for pml type not implemented')
+
         with ng.TaskManager():
-            A.Assemble()
-            B.Assemble()
-            # Make R = B + dz/(4i kt L²) A and
-            #      L = B - dz/(4i kt L²) A.
-            R = B.mat.CreateMatrix()
-            L = B.mat.CreateMatrix()
+            # Make cA = c * A, where A = H + a * B, with numbers c, a below:
+            cA = H.mat.CreateMatrix()
+            a = self.fiber.L**2*(self.kt**2 - (self.fiber.k*self.fiber.n0)**2)
             c = self.dz / (4j * self.kt * self.fiber.L**2)
-            R.AsVector().data = B.mat.AsVector() + c * A.mat.AsVector()
-            L.AsVector().data = B.mat.AsVector() - c * A.mat.AsVector()
-        Linv = R.Inverse(self._X.FreeDofs())
+            cA.AsVector().data = \
+                c * (H.mat.AsVector() + a * B.mat.AsVector())
+            R = cA.CreateMatrix()  # R = B + dz/(4i kt L²) A
+            L = cA.CreateMatrix()  # L = B - dz/(4i kt L²) A.
+            R.AsVector().data = B.mat.AsVector() + cA.AsVector()
+            L.AsVector().data = B.mat.AsVector() - cA.AsVector()
+        Linv = L.Inverse(X.FreeDofs())
 
+        self._X = X
         self._Linv = Linv  # store inverse of B - dz/(4i kt L²) A.
-        self._R = R        # store sparse matrix B + dz/(4i kt L²) A.
+        self._R = R        # store sparse mat B + dz/(4i kt L²) A.
 
-    def propagateCrankNicolson(self, u0, nsteps):
+    def propagateCrankNicolson(self, u0, nsteps, save_every=None):
         """
         Propagate input field given in GridFunction "u0" for "nsteps"
-        of size "dz" and return the output as another GridFunction.
+        of size "dz" and return the output field as another GridFunction.
+
+        If save_every=n, then at every n-th step the solution is saved
+        and combined into a multi-dimensional output GridFunction.
+        By default, save_every=None, and only the last step is output.
         """
 
         if self.propagator != 'Crank-Nicolson':
             raise ValueError('Crank-Nicolson propagator not set!')
-        u = ng.GridFunction(self._X)
         if self._X.ndof != len(u0.vec):
             raise ValueError('Input does not have the right size!')
 
+        u = ng.GridFunction(self._X)
         work = u.vec.CreateVector()
         u.vec.data = u0.vec
+        if save_every is not None:
+            u_samples = ng.GridFunction(self._X, multidim=0)
+            u_samples.AddMultiDimComponent(u0.vec)
+            z_samples = [0.0]
+
         for step in range(nsteps):
             work.data = self._R * u.vec
             u.vec.data = self._Linv * work
-        return u
+
+            if save_every is not None:
+                if (step+1) % save_every == 0:
+                    u_samples.AddMultiDimComponent(u.vec)
+                    z_samples.append(step*self._dz)
+
+        if save_every is not None:
+            return u, u_samples, z_samples
+        else:
+            return u
 
     @property
     def fiber(self):
@@ -112,3 +172,11 @@ class BPM():
     @kt.setter
     def kt(self, kt):
         self.resetPropagator(self.dz, self.p, kt)
+
+    @property
+    def X(self):
+        return self._X
+
+    @X.setter
+    def X(self, X):
+        raise AttributeError('Space can only be set by propagator')
