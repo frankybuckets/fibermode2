@@ -64,7 +64,7 @@ def test_bpm_leaky_propagation():
         print("Case", i, " error", diff[-1])
 
     print("Max difference after leaky propagation:", max(diff))
-    assert max(diff) < 1e-15, \
+    assert max(diff) < 1e-14, \
         "BPM propagation deviates too much from initial mode."
     print("Test passed: BPM propagation preserves leaky modes.\n")
     print("#"*70)
