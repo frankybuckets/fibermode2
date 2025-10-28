@@ -586,6 +586,10 @@ class StepIndexExact:
 
         return X, Y, F, modefun
 
+    def bendloss_Marcuse(self, rbend, ell, m):
+
+        pass
+
     def vec_propagation_constants(self,
                                   m,
                                   delta=0.01,
