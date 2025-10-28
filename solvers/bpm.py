@@ -127,14 +127,15 @@ class BPM():
             u_samples.AddMultiDimComponent(u0.vec)
             z_samples = [0.0]
 
-        for step in range(nsteps):
-            work.data = self._R * u.vec
-            u.vec.data = self._Linv * work
+        with ng.TaskManager():
+            for step in range(nsteps):
+                work.data = self._R * u.vec
+                u.vec.data = self._Linv * work
 
-            if save_every is not None:
-                if (step+1) % save_every == 0:
-                    u_samples.AddMultiDimComponent(u.vec)
-                    z_samples.append(step*self._dz)
+                if save_every is not None:
+                    if (step+1) % save_every == 0:
+                        u_samples.AddMultiDimComponent(u.vec)
+                        z_samples.append(step*self._dz)
 
         if save_every is not None:
             return u, u_samples, z_samples
