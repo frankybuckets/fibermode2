@@ -586,9 +586,52 @@ class StepIndexExact:
 
         return X, Y, F, modefun
 
-    def bendloss_Marcuse(self, rbend, ell, m):
+    def bendloss_Marcuse(self,
+                         rbend,
+                         ell,
+                         m):
+        """
+        Return bend-induced losses of LP_ell,m guided mode of step-index
+        fiber with bend radius R utilizing the curvature loss formula
+        for optical fiber described by Marcuse (1976)
 
-        pass
+        OUTPUT:
+
+        A float representing 2α, with α being the bend
+        loss coefficient (units: 1/m).
+
+        INPUTS:
+
+        rbend: circular bend radius from center of
+
+        ell: azimuthal mode index
+
+        m: radial mode index
+        """
+
+        ellbetas = self.XtoBeta(ell)
+        beta = ellbetas[m]
+
+        kappa = np.sqrt(self.ncore**2 * self.ks**2 - beta**2)
+        gamma = np.sqrt(beta**2 - self.nclad**2 * self.ks**2)
+
+        if ell == 0:
+            e_ell = 2
+        else:
+            e_ell = 1
+
+        V = self.fiberV()
+
+        alpha_num = (np.exp(-1 * (2/3) * (gamma**3 / beta**2) * rbend)
+                     * np.sqrt(np.pi) * kappa**2)
+
+        alpha_denom = (e_ell * kv(ell-1, gamma * self.rcore)
+                       * kv(ell+1, gamma * self.rcore)
+                       * gamma**(3/2) * np.sqrt(rbend) * V**2)
+
+        twoalpha = alpha_num / alpha_denom
+
+        return twoalpha
 
     def vec_propagation_constants(self,
                                   m,
