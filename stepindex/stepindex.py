@@ -1,7 +1,7 @@
 import ngsolve as ng
 import numpy as np
 from netgen.geom2d import SplineGeometry
-from ngsolve import H1, CF, IfPos
+from ngsolve import H1, CF
 import fibermode
 from fibermode.stepindex import StepIndexExact
 from fibermode.solvers import ModeSolver
@@ -9,7 +9,6 @@ from pyeigfeast.spectralproj.ngs import NGvecs
 from pyeigfeast.spectralproj import splitzoom
 import os
 from scipy.sparse import coo_matrix
-import scipy.special as scf
 
 
 class StepIndex(ModeSolver):
@@ -571,7 +570,6 @@ class StepIndex(ModeSolver):
         betas, modes, names = zip(*triples)  # lists ordered by betas
         name2ind = dict(zip(names, range(len(names))))
         return modes, betas, name2ind
-
 
     # CONVENIENCE & DEBUGGING ###############################################
 

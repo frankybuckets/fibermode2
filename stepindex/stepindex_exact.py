@@ -275,15 +275,16 @@ class StepIndexExact:
                               ell,
                               maxnroots=50,
                               v=None,
-                              level=logging.WARNING):
+                              loglevel=logging.WARNING):
         """
         Given mode index "ell", attempt to find all propagation constants by
         bisection or other nonlinear root finders. (Circularly
         symmetric modes are obtained with ell=0.  Modes with higher ell
-        have angular variations.) When level=logging.INFO, verbose
+        have angular variations.) When loglevel=logging.INFO, verbose
         outputs are logged.
         """
-        logging.basicConfig(format='%(message)s', level=level)
+        logging.basicConfig(format='%(message)s', level=loglevel)
+        logging.captureWarnings(True)
 
         if v is None:
             ks = self.ks
@@ -515,7 +516,8 @@ class StepIndexExact:
             replace('sqrt', 'np.sqrt')
         return gstr, dgstr
 
-    def leaky_propagation_constants(self, ell, xran=None, yran=None):
+    def leaky_propagation_constants(self, ell, xran=None, yran=None,
+                                    loglevel=logging.WARNING):
         """
         Given a mode index "ell" indicating angular variation (the
         radially symmetric case being ell=0), search the following
@@ -525,13 +527,14 @@ class StepIndexExact:
         (Be warned that the root finder is not as robust as the real
         line root searching algorithm for guided modes.)
         """
+        logging.basicConfig(format='%(message)s', level=loglevel)
 
         if xran is None:
             xran = (0.01, 3 * self.fiberV())
         if yran is None:
             yran = (-2, 0)
-        print('Searching region (%g, %g) x (%g, %g) in complex plane' %
-              (xran[0], xran[1], yran[0], yran[1]))
+        logging.info('Searching region (%g, %g) x (%g, %g) in complex plane' %
+                     (xran[0], xran[1], yran[0], yran[1]))
         gstr, dgstr = self.VJHfuns(ell)
         try:
             rect = Rectangle(xran, yran)
@@ -540,13 +543,14 @@ class StepIndexExact:
                            root_err_tol=1.e-13,
                            newton_step_tol=1.e-15)
         except RuntimeError as err:
-            print('Root search failed:\n', err.__str__())
+            logging.warning('Root search failed:\n', err.__str__())
             dx = xran[1] - xran[0]
             dy = yran[1] - yran[0]
             xran2 = (xran[0] + 0.01 * dx, xran[1] - 0.01 * dx)
             yran2 = (yran[0] + 0.01 * dy, yran[1] - 0.01 * dy)
-            print('Retrying in adjusted search region (%g, %g) x (%g, %g)' %
-                  (xran2[0], xran2[1], yran2[0], yran2[1]))
+            logging.info('Retrying in adjusted search region ' +
+                         '(%g, %g) x (%g, %g)' %
+                         (xran2[0], xran2[1], yran2[0], yran2[1]))
             r = self.leaky_propagation_constants(ell, xran=xran2, yran=yran2)
         return r.roots
 
@@ -715,8 +719,8 @@ class StepIndexExact:
             a0 = jy[i - 1] + delta
             b0 = jy[i] - delta
             aa = np.linspace(a0, b0, num=nrefine)
-            print('\nSEARCHING FOR ROOTS Y in [%6g, %6g]' % (a0, b0) +
-                  '-' * 29)
+            logging.info('\nSEARCHING FOR ROOTS Y in [%6g, %6g]' % (a0, b0) +
+                         '-' * 29)
             ys = []
             for ii in range(nrefine - 1):
                 roots = []
@@ -727,18 +731,20 @@ class StepIndexExact:
                 elif abs(f(b)) < tol:
                     roots += [b]
                 elif np.sign(f(a) * f(b)) < 0:
-                    print(' SEARCH %1d: Sign change in [%g, %g]' % (ii, a, b))
+                    logging.info(' SEARCH %1d: Sign change in [%g, %g]'
+                                 % (ii, a, b))
                     y = bisect(f, a, b, xtol=tol, maxiter=10000)
                     if abs(f(y)) < tol:
-                        print('  Bisection succeeded.')
+                        logging.info('  Bisection succeeded.')
                         roots += [y]
                     else:
                         y = fsolve(f, (a + b) / 2, xtol=tol)[0]
                         if abs(f(y)) < tol:
-                            print('  Nonlinear solve succeeded.')
+                            logging.info('  Nonlinear solve succeeded.')
                             roots += [y]
                         else:
-                            print('  >>>Neither bisection nor fsolve worked!')
+                            logging.info(
+                                '  >>>Neither bisection nor fsolve worked!')
                 if len(roots):
                     ys += [(roots, a, b)]
 
@@ -746,24 +752,26 @@ class StepIndexExact:
                 y = fsolve(f, (a0 + b0) / 2, xtol=tol)[0]
                 if abs(f(y)) < tol and abs(y - b0) > delta and abs(y -
                                                                    a0) > delta:
-                    print('  Nonlinear solve b/w Bessel roots succeeded.')
+                    logging.info(
+                        '  Nonlinear solve b/w Bessel roots succeeded.')
                     ys += [(y, a0, b0)]
                 else:
-                    print('  >>>Could not find root in [%6g, %6g]' % (a0, b0))
+                    logging.info(
+                        '  >>>Could not find root in [%6g, %6g]' % (a0, b0))
 
             Y += ys
 
         # Report
-        print('-' * 64)
+        logging.info('-' * 64)
         if len(Y):
-            print('ROOTS FOR m =', m, ' FOUND:')
+            logging.info('ROOTS FOR m =', m, ' FOUND:')
             for yy in Y:
                 y, a, b = yy
                 for yroot in y:
-                    print('  %12.10f in [%8.6f, %8.6f]' % (yroot, a, b))
+                    logging.info('  %12.10f in [%8.6f, %8.6f]' % (yroot, a, b))
         else:
-            print('NO ROOTS FOUND FOR m =', m)
-        print('-' * 64)
+            logging.info('NO ROOTS FOUND FOR m =', m)
+        logging.info('-' * 64)
 
         return Y
 
@@ -823,7 +831,7 @@ class StepIndexExact:
             y, a, b = yy
             for ctr in y:
                 rad = max(ctr - a, b - ctr, 1e-6)
-                print(' Checking root ', ctr, ' about radius', rad)
+                logging.info(' Checking root ', ctr, ' about radius', rad)
                 rec = Circle(ctr, rad)
                 r = rec.roots(lambda Y: eval(g),
                               lambda Y: eval(dg),
@@ -992,9 +1000,9 @@ class StepIndexExact:
         seeds = np.concatenate((ys, xs), axis=0)
         Intens = U**2 + V**2
         if np.linalg.norm(Intens) < 1e-20:
-            print('**** Refusing to drawing the 0 ' + rep +
-                  ' part of transverse E!')
-            print('(Have you tried to draw the other part?)')
+            logging.info('**** Refusing to drawing the 0 ' + rep +
+                         ' part of transverse E!')
+            logging.info('(Have you tried to draw the other part?)')
         else:
             strm = ax.streamplot(x,
                                  y,
