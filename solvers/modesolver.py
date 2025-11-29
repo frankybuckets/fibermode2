@@ -552,10 +552,10 @@ class ModeSolver:
         """
         if abs(alpha.imag) > 0 or alpha < 0:
             raise ValueError('Expecting PML strength alpha > 0')
-        self.ngspmlset = True
 
         radial = ng.pml.Radial(rad=self.R, alpha=alpha * 1j, origin=(0, 0))
         self.mesh.SetPML(radial, 'Outer')
+        self.ngspmlset = True
         print('Set NGSolve automatic PML with p=', p, ' alpha=', alpha,
               'and thickness=%.3f' % (self.Rout - self.R))
         X = ng.H1(self.mesh, order=p, complex=True)
@@ -574,6 +574,9 @@ class ModeSolver:
                 ng.SetHeapSize(int(1e9))
                 a.Assemble()
                 b.Assemble()
+
+        self.mesh.UnSetPML(definedon='Outer')
+        self.ngspmlset = False
 
         return a, b, X
 

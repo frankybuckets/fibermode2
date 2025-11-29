@@ -1,5 +1,7 @@
 import ngsolve as ng
+from ngsolve import dx
 from .modesolver import ModeSolver
+import logging
 
 
 class BPM():
@@ -51,13 +53,19 @@ class BPM():
 
     def setupCrankNicolson(self, dz, p, kt=None, pml={}):
         """
-        Set up data structures for solving the Crank-Nicolson scheme
+        Sets up data structures for solving the Crank-Nicolson scheme
 
            2i * kt * L² * B (u[n+1] - u[n])/dz = A (u[n+1] + u[n])/2
 
         where B is the mass matrix and A is the stiffness matrix of the
         transverse operator A = -∇² + V + L² (kt² - (k n₀)²)
-        where V, L, k, n₀ are properties of the fiber.
+        where V, L, k, n₀ are properties of the fiber, with or
+        without PML. Internal attributes are set as follows:
+        _X: Lagrange FE space,
+        _Linv: sparse inverse of B - dz/(4i kt L²) A,
+        _R: matrix of B + dz/(4i kt L²) A
+            (so propagation step is u[n+1] = Linv * R * u[n]),
+        _M: mass matrix (without PML wvene when PML is used).
 
         PARAMETERS:
         dz:  The propagation step size in the z direction
@@ -77,15 +85,26 @@ class BPM():
             self._kt = kt
         self._p = p
         self._pml = pml
+        self._M = None  # mass matrix
 
         # Get matrices H of (grad u, grad v) + (V u, v) and B of (u, v):
 
         if len(pml) == 0:
             H, B, X = self._fiber.selfadjsystem(self._p)
+            self._M = B.mat
         elif pml['type'] == 'auto':
             H, B, X = self._fiber.autopmlsystem(self._p, alpha=pml['alpha'])
+            # B is not mass matrix due to PML, so make mass matrix separately,
+            # assuming that PML is unset
+            assert not self._fiber.ngspmlset, \
+                'Computing mass matrix with PML set will give wrong results'
+            u, v = X.TnT()
+            with ng.TaskManager():
+                m = ng.BilinearForm(u*v*dx)
+                m.Assemble()
+                self._M = m.mat
         else:
-            NotImplementedError('Asked for pml type not implemented')
+            NotImplementedError('BPM asks for pml type not yet implemented')
 
         with ng.TaskManager():
             # Make cA = c * A, where A = H + a * B, with numbers c, a below:
@@ -104,14 +123,25 @@ class BPM():
         self._Linv = Linv  # store inverse of B - dz/(4i kt L²) A.
         self._R = R        # store sparse mat B + dz/(4i kt L²) A.
 
-    def propagateCrankNicolson(self, u0, nsteps, save_every=None):
-        """
-        Propagate input field given in GridFunction "u0" for "nsteps"
-        of size "dz" and return the output field as another GridFunction.
+    def propagateCrankNicolson(self, u0, nsteps,
+                               save_every=None, zero_stop=1e-16):
+        """Use
 
-        If save_every=n, then at every n-th step the solution is saved
-        and combined into a multi-dimensional output GridFunction.
-        By default, save_every=None, and only the last step is output.
+          u = bpm.propagateCrankNicolson(u0, nsteps),   or
+
+          u, u_samples, z_samples, p_samples = \
+              bpm.propagateCrankNicolson(u0, nsteps, save_every=10)
+
+        to propagate input field given in GridFunction "u0" for "nsteps"
+        of size "dz" and return the output field as another GridFunction "u".
+
+        If "save_every"=None (the default) and only the last step is output.
+
+        If "save_every"=n, then at every n-th z-step the solution is saved
+        and combined into a multi-dimensional output GridFunction "u_samples",
+        along with lists "z_samples" of corresponding z-values and
+        "p_samples" of power(z) = ∫ |u(z)|² dx dy at each z-value.
+        Additionally, when power(z) < zero_stop, the iterations are stopped.
         """
 
         if self.propagator != 'Crank-Nicolson':
@@ -123,9 +153,13 @@ class BPM():
         work = u.vec.CreateVector()
         u.vec.data = u0.vec
         if save_every is not None:
+            logging.basicConfig(format='%(message)s', level=logging.WARNING)
             u_samples = ng.GridFunction(self._X, multidim=0)
             u_samples.AddMultiDimComponent(u0.vec)
             z_samples = [0.0]
+            Mu = u.vec.CreateVector()
+            Mu.data = self._M * u.vec
+            p_samples = [ng.InnerProduct(Mu, u.vec).real]
 
         with ng.TaskManager():
             for step in range(nsteps):
@@ -136,9 +170,18 @@ class BPM():
                     if (step+1) % save_every == 0:
                         u_samples.AddMultiDimComponent(u.vec)
                         z_samples.append(step*self._dz)
+                        Mu.data = self._M * u.vec
+                        power = ng.InnerProduct(Mu, u.vec).real
+                        p_samples.append(power)
+                        if power < zero_stop:
+                            logging.warning(
+                                f'Stopping at step {step+1}, '
+                                f'z={step*self._dz:.3f}, '
+                                f'power={power:.3e} < {zero_stop:.3e}')
+                            break
 
         if save_every is not None:
-            return u, u_samples, z_samples
+            return u, u_samples, z_samples, p_samples
         else:
             return u
 
