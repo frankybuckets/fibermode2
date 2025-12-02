@@ -13,7 +13,7 @@ import pickle
 
 from warnings import warn
 from pyeigfeast.spectralproj.ngs import NGvecs
-from fiberamp.fiber import ModeSolver
+from fibermode.solvers.modesolver import ModeSolver
 
 
 class Bragg(ModeSolver):
@@ -56,6 +56,7 @@ class Bragg(ModeSolver):
         # Create geometry
         self.create_geometry(fan=fan)
         self.create_mesh(ref=ref, curve=curve)
+        self.curveorder = curve
         self.set_material_properties(beta_sq_plane)
 
         super(Bragg, self).__init__(self.mesh, self.L, self.n0)
