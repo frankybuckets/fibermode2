@@ -4,6 +4,7 @@ modes of various fibers.
 """
 from warnings import warn
 from ngsolve import curl, div, grad, dx, Conj, Integrate, InnerProduct, CF
+from ngsolve import sqrt, sin, cos
 from numpy import conj
 from pyeigfeast import NGvecs, SpectralProjNG
 from pyeigfeast import SpectralProjNGR, SpectralProjNGPoly
@@ -2224,6 +2225,100 @@ class ModeSolver:
 
     # ###################################################################
     # BENT MODES
+
+    def guidedhelicalmodes(self, a, b, center, radius,
+                           p=4, seed=1, npts=4, nspan=6, verbose=True,
+                           **feastkwargs):
+        """
+        Find scalar (Helmholtz) guided modes propagating through a
+        helically coiled fiber following the theory in the paper
+        [Gopalakrishnan & Neunteufel, Guided modes of helical waveguides,
+        Wave Motion, 2025. https://doi.org/10.1016/j.wavemoti.2025.103621]
+
+        PARAMETERS
+        ----------
+        a: radius of the helix (bend radius)
+        b: pitch of the helix (can be 0)
+        center, radius: of circle in complex plane to search for eigenvalues
+        p: Lagrange finite element degree
+        npts, nspan, feastkwargs: number of quadrature points, intial span
+        dimension, and further keyword arguments to pass to feast eigensolver.
+        """
+
+        A, B, C, X = self.guidedhelicalsystem(a, b, p=p)
+        P = SpectralProjNGPoly([A, B, C], X,
+                               radius=radius, center=center, npts=npts,
+                               within=None, rhoinv=0.0,
+                               quadrule="circ_trapez_shift",
+                               verbose=verbose,
+                               checks=False)
+        Y = NGvecs(X**2, nspan)
+        Yl = Y.create()
+        Y.setrandom(seed=seed)
+        Yl.setrandom(seed=seed)
+        ews, Y, hist, Yl = P.feast(Y, Yl=Yl, hermitian=False, **feastkwargs)
+        if not hist[-1]:
+            warn('*** Feast iterations did not converge')
+        y = P.first(Y)
+        yl = P.last(Yl)
+
+        bdrnrm = self.boundarynorm(y)
+        if np.max(bdrnrm) > 1e-6:
+            warn('*** Mode boundary L2 norm > 1e-6!')
+
+        print('Results:\n ews:', ews)
+
+        return ews, y, yl, P
+
+    def guidedhelicalsystem(self, a, b, p=4, **kwargs):
+        """
+        Output the A, B, C matrices and finite element space X so that the
+        guided helical modes are eigenvalues of the quadratic eigenvalue
+        problem (A + λB + λ²C) u = 0  in X.
+        """
+        if self.ngspmlset:
+            raise RuntimeError('Do not use with ngsolve pml.')
+
+        ll = sqrt(a**2 + b**2)
+        T = 1/ll * CF((-a * sin(ng.z / ll),   # tangent of helical centerline
+                       a * cos(ng.z / ll),
+                       b))
+        N = -CF((cos(ng.z / ll),  # normal of helical fiber centerline
+                 sin(ng.z / ll),
+                 0))
+        B = ng.Cross(T, N)  # binormal vector of fiber centerline
+
+        gamma = CF((a * cos(ng.z / ll),   # parameterization of helix curve
+                    a * sin(ng.z / ll),
+                    b*ng.z/ll))
+
+        Phi = gamma + ng.x * N + ng.y * B  # parameterization of helix pipe
+
+        # Jacobian of untwisting map
+        F = CF((N, B, Phi.Diff(ng.z)), dims=(3, 3)).trans
+        C_inv = ng.Inv(F.trans*F)
+        d = C_inv*CF((0, 0, 1))
+        J = ng.Det(F)
+
+        X = ng.H1(self.mesh, order=p, dirichlet='OuterCircle', complex=True)
+        u, v = X.TnT()
+
+        with ng.TaskManager():
+
+            A = ng.BilinearForm(X)
+            A += (J * (C_inv[:2, :2] * grad(u)) * grad(v) -
+                  J * self.k**2 * self.index**2 * u * v) * dx(bonus_intorder=5)
+            A.Assemble()
+            B = ng.BilinearForm(X)
+            B += J * 1j * (u * d[:2] * grad(v) -
+                           v * d[:2] * grad(u)) * dx(bonus_intorder=5)
+            B.Assemble()
+            C = ng.BilinearForm(1/J * u * v * dx(bonus_intorder=5))
+            C.Assemble()
+
+        return A, B, C, X
+
+    # OLD STUFF BELOW: SLATED FOR REMOVAL !
 
     def bentscalarmodes(self,
                         rad,
